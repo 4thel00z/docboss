@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+
+  doc:
+    name: doc
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps
+
+  # The conformance gate: Lean checks the ledger in ledger/ against the source
+  # tree (see ledger/Ledger/Gate.lean). The index, the vectors and the book
+  # chapter are regenerated so a stale committed copy fails the job.
+  ledger:
+    name: ledger gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.elan
+            ledger/.lake
+          key: lean-${{ runner.os }}-${{ hashFiles('ledger/lean-toolchain', 'ledger/lakefile.toml') }}
+      - name: Install Lean through elan
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          "$HOME/.elan/bin/elan" toolchain install "$(cat ledger/lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      # Rescans the sources, lists any offending row before Lean runs, then checks the ledger.
+      - name: Check the ledger
+        run: make ledger-gate
+      - name: Regenerate the vectors and the book chapter
+        run: make ledger-vectors ledger-report
+      - name: Committed copies must match what the tree generates
+        run: |
+          if git diff --exit-code -- ledger/Ledger/Generated.lean crates/docboss-zip/tests/vectors/ledger crates/docboss-model/tests/vectors/ledger docs/src/reference/conformance.md; then
+            exit 0
+          fi
+          echo "::error::The committed ledger does not match what this tree generates. Run 'make ledger-index ledger-vectors ledger-report' and commit the result. Do that after every merge from main, not only when you add a citation: Generated.lean is written in fixed-size chunks, so two branches that each regenerated it merge without a conflict into a file with the same citationsN defined twice."
+          exit 1
