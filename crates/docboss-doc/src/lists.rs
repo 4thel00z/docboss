@@ -1,5 +1,6 @@
 //! List definitions ([MS-DOC] §2.9.201 PlfLst, §2.9.200 PlfLfo) as model
 //! numbering.
+//! [MS-DOC] §2.9.201, §2.9.200, §2.9.147, §2.9.149, §2.9.150, §2.9.131.
 
 use docboss_model::{
     AbstractNumbering, Justification, Level, NumberFormat, Numbering, NumberingInstance,

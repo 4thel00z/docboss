@@ -1,5 +1,5 @@
 //! A ZIP container reader over an in-memory byte slice, following the PKWARE
-//! application note (APPNOTE 6.3.10).
+//! ZIP application note, version 6.3.10.
 //!
 //! The central directory is found through the end of central directory
 //! record, including its ZIP64 forms. When that record or the directory is
@@ -70,7 +70,8 @@ impl Default for Limits {
     }
 }
 
-/// The compression methods of APPNOTE §4.4.5 this reader handles.
+/// The compression methods of APPNOTE §4.4.5 this reader handles: stored,
+/// and deflated (APPNOTE §5.5).
 pub const STORED: u16 = 0;
 pub const DEFLATED: u16 = 8;
 
@@ -95,6 +96,8 @@ impl Entry {
         self.name.ends_with('/')
     }
 
+    /// Whether bit 0 of the general purpose flags marks the entry encrypted
+    /// (APPNOTE §4.4.4).
     pub fn is_encrypted(&self) -> bool {
         self.flags & 1 != 0
     }
@@ -130,6 +133,8 @@ fn u64_at(data: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(bytes.try_into().ok()?))
 }
 
+/// An entry name: UTF-8 when bit 11 of the general purpose flags is set,
+/// else code page 437 (APPNOTE §4.4.4, §4.4.17).
 fn decode_name(raw: &[u8], flags: u16) -> String {
     if flags & 0x0800 != 0 {
         return String::from_utf8_lossy(raw).into_owned();
@@ -519,7 +524,8 @@ fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
 }
 
 /// Recovers entries from local file headers (APPNOTE §4.3.7) when the
-/// central directory cannot be read.
+/// central directory cannot be read, finding the sizes of entries that defer
+/// them to a data descriptor (APPNOTE §4.3.9, §4.4.4).
 fn scan_local_headers(data: &[u8]) -> Vec<Entry> {
     let sig = LOCAL_SIG.to_le_bytes();
     let mut entries: Vec<Entry> = Vec::new();

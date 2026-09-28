@@ -1,5 +1,5 @@
-//! Relationships and content types of the package (ECMA-376 Part 2 §9.3
-//! relationships, §10.1 content types).
+//! Relationships and content types of the package (ECMA-376 Part 2 §6.5
+//! relationships, §7.2.3 content types).
 
 use crate::xml::Xml;
 

@@ -98,6 +98,10 @@ fn bullet_text(text: &str) -> String {
         .collect()
 }
 
+/// `w:lvl` (ECMA-376 Part 1 §17.9.6): start, format, label text,
+/// justification, restart level, legal numbering and the level's paragraph
+/// and run properties.
+/// ECMA-376 Part 1 §17.9.25, §17.9.17, §17.9.11, §17.9.7, §17.9.10, §17.9.4, §17.9.22, §17.9.24.
 fn level(reader: &mut Reader<'_>, index: u8, theme: &Theme) -> Level {
     let mut level = Level {
         level: index,
@@ -130,7 +134,9 @@ fn level_index(e: &docboss_xml::Element<'_>) -> u8 {
 }
 
 /// `w:numbering` (ECMA-376 Part 1 §17.9), with the style links of
-/// abstract definitions that borrow their levels from a numbering style.
+/// abstract definitions that borrow their levels from a numbering style:
+/// abstract definitions, instances, level overrides and start overrides.
+/// ECMA-376 Part 1 §17.9.16, §17.9.1, §17.9.2, §17.9.15, §17.9.8, §17.9.5, §17.9.26.
 pub fn numbering(text: &str, theme: &Theme) -> (Numbering, Vec<(i64, String)>) {
     let mut reader = Reader::new(text);
     let mut numbering = Numbering::default();
@@ -208,7 +214,8 @@ pub fn resolve_style_links(numbering: &mut Numbering, links: &[(i64, String)], s
     }
 }
 
-/// `w:settings` (ECMA-376 Part 1 §17.15).
+/// `w:settings` (ECMA-376 Part 1 §17.15): the default tab stop and whether
+/// even pages use their own headers (ECMA-376 Part 1 §17.10.1).
 pub fn settings(text: &str) -> Settings {
     let mut reader = Reader::new(text);
     let mut settings = Settings::default();

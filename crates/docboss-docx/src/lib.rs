@@ -149,6 +149,7 @@ fn parse_story(
                 out.sections.push(Section::default());
             }
         }
+        // ECMA-376 Part 1 §17.10.4, §17.10.3: header and footer parts.
         StoryKind::HeaderFooter { id, kind } => {
             let blocks = parser.blocks(&mut reader);
             out.header_footer = Some(HeaderFooter {
@@ -157,6 +158,7 @@ fn parse_story(
                 blocks,
             });
         }
+        // ECMA-376 Part 1 §17.11.15, §17.11.8, §17.11.10, §17.11.2, §17.11.23, §17.11.1: note bodies, separators skipped.
         StoryKind::Notes(kind) => children(&mut reader, |reader, e| {
             if !matches!(e.local, "footnote" | "endnote") {
                 return;

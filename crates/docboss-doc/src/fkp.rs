@@ -1,5 +1,6 @@
 //! Formatted disk pages ([MS-DOC] §2.9.33 ChpxFkp, §2.9.174 PapxFkp) and
 //! their bin tables ([MS-DOC] §2.8.5, §2.8.6).
+//! [MS-DOC] §2.9.33, §2.9.174, §2.8.5, §2.8.6, §2.9.206, §2.9.207.
 
 use crate::bytes::{slice, u16_at, u32_at, u8_at};
 

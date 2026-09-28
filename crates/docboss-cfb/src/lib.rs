@@ -69,7 +69,8 @@ pub struct CompoundFile<'a> {
 
 impl<'a> CompoundFile<'a> {
     /// Reads the header, the FAT, the mini FAT and the directory
-    /// ([MS-CFB] §2.2 to §2.6).
+    /// ([MS-CFB] §2.2 to §2.6), the root entry holding the mini stream.
+    /// [MS-CFB] §2.1, §2.2, §2.3, §2.4, §2.5, §2.6, §2.6.2, §2.6.3.
     pub fn parse(data: &'a [u8]) -> Result<Self> {
         if !is_compound_file(data) {
             return Err(Error::NotCompoundFile);

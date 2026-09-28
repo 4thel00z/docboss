@@ -173,7 +173,7 @@ pub fn font_table(document: &Document) -> Vec<u8> {
     xml.finish()
 }
 
-/// ECMA-376 Part 2 §11: the core properties part.
+/// ECMA-376 Part 2 §8: the core properties part.
 pub fn core_properties(metadata: &Metadata) -> Vec<u8> {
     let mut xml = Xml::new();
     xml.open(

@@ -11,7 +11,7 @@ fn output_is_deterministic() {
     assert_eq!(first, second);
 }
 
-/// ECMA-376 Part 2 §10.1.2: every part has a content type, by default
+/// ECMA-376 Part 2 §7.2.3: every part has a content type, by default
 /// extension or override.
 #[test]
 fn every_part_has_a_content_type() {
@@ -28,7 +28,7 @@ fn every_part_has_a_content_type() {
     }
 }
 
-/// ECMA-376 Part 2 §9.3: every internal relationship target exists and
+/// ECMA-376 Part 2 §6.5: every internal relationship target exists and
 /// hyperlinks are external.
 #[test]
 fn relationships_resolve() {

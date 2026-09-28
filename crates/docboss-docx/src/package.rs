@@ -213,7 +213,8 @@ impl<'a> Package<'a> {
         }
     }
 
-    /// The content type of a part, from its override or its extension.
+    /// The content type of a part, from its override or its extension
+    /// (ECMA-376 Part 2 §7.2.3.5, §6.2.3).
     pub fn content_type(&self, part: &str) -> Option<&str> {
         let key = part.trim_start_matches('/').to_ascii_lowercase();
         if let Some(kind) = self.overrides.get(&key) {
@@ -237,7 +238,7 @@ impl<'a> Package<'a> {
     }
 
     /// The relationships of `source` (`""` for the package), empty when it
-    /// has none.
+    /// has none (ECMA-376 Part 2 §6.5.2, §6.5.3).
     pub fn relationships(&self, source: &str, diagnostics: &mut Vec<Diagnostic>) -> Relationships {
         let name = rels_name(source);
         let Some(data) = self.part_into(&name, diagnostics) else {
@@ -278,7 +279,8 @@ impl<'a> Package<'a> {
         }
     }
 
-    /// The archive's spelling of a part name, which may differ in case.
+    /// The archive's spelling of a part name, which may differ in case:
+    /// part names compare case-insensitively (ECMA-376 Part 2 §6.2.2.3, §7.3.5).
     fn existing_name(&self, name: &str) -> String {
         self.archive
             .find(name)

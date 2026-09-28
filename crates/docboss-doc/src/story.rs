@@ -1,6 +1,7 @@
 //! Turns a CP range of the document text into model blocks: paragraph
 //! boundaries ([MS-DOC] §2.4.2), direct formatting ([MS-DOC] §2.4.6),
 //! fields, special characters and tables ([MS-DOC] §2.4.3 to §2.4.5).
+//! [MS-DOC] §2.4.2, §2.4.3, §2.4.4, §2.4.5, §2.4.6, §2.9.88, §2.9.89.
 
 use std::cell::RefCell;
 use std::collections::HashMap;

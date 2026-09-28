@@ -1,4 +1,7 @@
-//! The File Information Block ([MS-DOC] §2.5).
+//! The File Information Block ([MS-DOC] §2.5): FibBase, the FibRgLw97
+//! character counts and the FibRgFcLcb97 offset pairs, sized by the csw,
+//! cslw and cbRgFcLcb counts the FIB itself states.
+//! [MS-DOC] §2.5.1, §2.5.2, §2.5.4, §2.5.5, §2.5.6, §2.5.15.
 
 use crate::bytes::{u16_at, u32_at};
 use crate::{Error, Result};

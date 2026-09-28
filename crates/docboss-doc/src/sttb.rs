@@ -1,4 +1,5 @@
 //! String tables ([MS-DOC] §2.2.4) and the font table ([MS-DOC] §2.9.82).
+//! [MS-DOC] §2.2.4, §2.9.286, §2.9.82, §2.9.353.
 
 use docboss_model::FontEntry;
 

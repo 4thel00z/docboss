@@ -23,12 +23,14 @@ fn check(data: &[u8]) {
 
 /// APPNOTE §4.3.12 and §4.3.16: entries are listed by the central directory
 /// found through the end of central directory record.
+/// APPNOTE §4.3.6, §4.3.8, §4.4.5, §5.5: stored and deflated file data.
 #[test]
 fn reads_stored_and_deflated_entries() {
     check(&sample(ZipOptions::default()));
 }
 
 /// APPNOTE §4.3.9: sizes and CRC deferred to a data descriptor.
+/// APPNOTE §4.4.4: bit 3 of the general purpose flags defers them.
 #[test]
 fn reads_entries_with_data_descriptors() {
     check(&sample(ZipOptions {
@@ -95,6 +97,8 @@ fn check_recovered(archive: &Archive<'_>) {
     );
 }
 
+/// APPNOTE §4.4.7, §4.1.5: a damaged entry fails its CRC-32 check and the
+/// lenient read keeps its bytes.
 #[test]
 fn corrupted_bytes_fail_the_crc_check() {
     let mut data = sample(ZipOptions::default());
@@ -131,6 +135,7 @@ fn size_limits_stop_decompression_bombs() {
 
 /// APPNOTE Appendix D: names without bit 11 are code page 437; with it,
 /// UTF-8.
+/// APPNOTE §4.4.4, §4.4.17.
 #[test]
 fn decodes_name_encodings() {
     let cp437 = ZipWriter::new().raw_name(b"caf\x82.txt", b"x").finish();

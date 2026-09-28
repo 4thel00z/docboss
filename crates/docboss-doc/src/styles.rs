@@ -1,4 +1,5 @@
 //! The stylesheet ([MS-DOC] §2.9.271 STSH) as model styles.
+//! [MS-DOC] §2.9.271, §2.9.272, §2.9.258, §2.9.259, §2.9.260, §2.9.336, §2.9.338.
 
 use docboss_model::{
     ParagraphProperties, RunProperties, Style, StyleKind, Styles, TableProperties,

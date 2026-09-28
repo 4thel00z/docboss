@@ -4,6 +4,7 @@ const TEXT_DOC: &[u8] = include_bytes!("fixtures/text.doc");
 
 /// [MS-CFB] §2.2 header, §2.6 directory: a Word file carries the
 /// WordDocument stream, a table stream and the two summary streams.
+/// [MS-CFB] §2.2, §2.3, §2.4, §2.5, §2.6, §2.6.1, §2.6.2, §2.6.3.
 #[test]
 fn walks_the_directory_of_a_word_file() {
     let file = CompoundFile::parse(TEXT_DOC).unwrap();
@@ -39,6 +40,7 @@ fn lookup_ignores_case() {
 }
 
 /// [MS-OLEPS] §2.21: summary information yields the title and author.
+/// [MS-OLEPS] §2.20, §2.19, §2.15, §2.5, §2.18.2, §2.25.1.
 #[test]
 fn reads_summary_metadata() {
     let file = CompoundFile::parse(TEXT_DOC).unwrap();
