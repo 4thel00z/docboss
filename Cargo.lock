@@ -467,6 +467,7 @@ name = "docboss-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "docboss-aio",
  "docboss-cfb",
  "docboss-core",
  "docboss-font",
@@ -482,6 +483,7 @@ dependencies = [
  "jaq-json",
  "jaq-std",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
