@@ -13,7 +13,9 @@ use crate::package::{Package, Relationships};
 use crate::props::{justification, paragraph_properties, run_properties, table_properties, Theme};
 use crate::xml::{attr, children, int_attr, on_off, root, twips_attr, u32_attr, val};
 
-/// `w:styles` (ECMA-376 Part 1 §17.7).
+/// `w:styles` (ECMA-376 Part 1 §17.7): document defaults and the paragraph,
+/// character, table and numbering styles.
+/// ECMA-376 Part 1 §17.7.5, §17.7.4, §17.7.8, §17.7.9, §17.7.6, §17.7.7.
 pub fn styles(text: &str, theme: &Theme) -> Styles {
     let mut reader = Reader::new(text);
     let mut default_paragraph = ParagraphProperties::default();
@@ -66,6 +68,7 @@ pub fn styles(text: &str, theme: &Theme) -> Styles {
     Styles::new(default_paragraph, default_run, list)
 }
 
+/// An `ST_NumberFormat` value (ECMA-376 Part 1 §17.18.59) as a model format.
 fn number_format(value: &str) -> NumberFormat {
     match value {
         "decimal" => NumberFormat::Decimal,
@@ -270,6 +273,7 @@ pub fn theme(text: &str) -> Theme {
 
 /// Core properties (ECMA-376 Part 2 §8.3) and extended properties
 /// (ECMA-376 Part 1 §22.2) merged into one set.
+/// ECMA-376 Part 2 §8.2, §8.3.3, §8.3.4; ECMA-376 Part 1 §22.2.2, §15.2.12.
 pub fn properties(core: Option<&str>, app: Option<&str>) -> Metadata {
     let mut metadata = Metadata::default();
     if let Some(text) = core {
@@ -338,6 +342,7 @@ pub fn deobfuscate(data: &mut [u8], key: &str) -> bool {
     true
 }
 
+/// ECMA-376 Part 1 §17.8.3, §15.2.13, §11.3.5.
 /// `w:fonts` (ECMA-376 Part 1 §17.8.3) with embedded fonts loaded through
 /// the font table's relationships.
 pub fn fonts(

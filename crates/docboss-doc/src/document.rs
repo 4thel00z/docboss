@@ -62,6 +62,7 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
     }
     let file = CompoundFile::parse(bytes)?;
     let mut diagnostics = Vec::new();
+    // [MS-DOC] §2.1, §2.1.1, §2.1.3, §2.1.6, §2.1.7: the WordDocument, table and Data streams and the summary streams.
     let word_stream = file
         .open_stream("WordDocument")
         .map_err(|_| Error::NotWord("no WordDocument stream"))?;
@@ -274,7 +275,7 @@ fn notes(
 
 /// Comment references ([MS-DOC] §2.8.7 PlcfandRef with ATRDPre10) and the
 /// ranges their bookmarks mark (SttbfAtnBkmk, PlcfAtnBkf, PlcfAtnBkl).
-/// [MS-DOC] §2.8.7, §2.8.8, §2.9.7, §2.9.277, §2.3.4.
+/// [MS-DOC] §2.8.7, §2.8.8, §2.9.7, §2.9.277, §2.3.4, §2.8.1, §2.8.3.
 fn comment_references(
     context: &mut Context<'_>,
     table: &[u8],
@@ -402,6 +403,7 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
     }
     let stories = [
         (slot::PLCFTXBX_TXT, parts.textboxes),
+        // [MS-DOC] §2.8.32, §2.8.23: the text box and header text box stories.
         (slot::PLCF_HDRTXBX_TXT, parts.header_textboxes),
     ];
     for (which, base) in stories {

@@ -6,7 +6,8 @@
 //! missing or damaged, entries are recovered by scanning for local file
 //! headers and each recovery is reported as a [`Diagnostic`]. Stored and
 //! deflated entries are read; stored ones borrow from the input. The
-//! [`ZipWriter`] writes archives deterministically.
+//! [`ZipWriter`] writes archives deterministically. Every entry's data
+//! is checked against its CRC-32 (APPNOTE §4.1.5, §4.3.8, §4.4.7).
 
 mod cp437;
 mod crc;
@@ -464,6 +465,7 @@ fn zip64_extra(extra: &[u8], entry: &mut Entry, raw_usize: u32, raw_csize: u32, 
 
 /// Reads the central directory (APPNOTE §4.3.12) through the end of central
 /// directory record (APPNOTE §4.3.16) and its ZIP64 forms (§4.3.14, §4.3.15).
+/// APPNOTE §4.3.6, §4.3.12, §4.3.14, §4.3.15, §4.3.16.
 fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
     let record = find_end_record(data).ok_or("no end of central directory record")?;
     let mut at =

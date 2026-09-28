@@ -120,6 +120,7 @@ impl Fib {
         Ok(fib)
     }
 
+    /// [MS-DOC] §2.5.14: told from FibBase.nFib alone.
     /// Whether this is a Word 97 or later FIB. Word 6 and 95 files carry
     /// nFib values below 0x00C1 and an older layout.
     pub fn is_word97(&self) -> bool {

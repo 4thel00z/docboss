@@ -10,15 +10,15 @@ open Ledger
 
 def rows0 : List Feature := [
   { standard := .msOdraw, ref := .clause [2, 1], title := "Custom OfficeArt Types", status := .notImplemented,
-    note := "Not read yet." },
-  { standard := .msOdraw, ref := .clause [2, 2], title := "OfficeArt Record Types", status := .notImplemented,
-    note := "Not read yet." },
-  { standard := .msOdraw, ref := .clause [2, 3], title := "Properties", status := .notImplemented,
-    note := "Not read yet." },
+    note := "Not read." },
+  { standard := .msOdraw, ref := .clause [2, 2], title := "OfficeArt Record Types", status := .incomplete,
+    note := "Record headers, containers, BLIP records and the BLIP store are read for pictures, and shape ids for text boxes (picture.rs, tests read.rs inline_picture and floating_picture_and_text_box); shapes other than pictures and text boxes are dropped and reported." },
+  { standard := .msOdraw, ref := .clause [2, 3], title := "Properties", status := .incomplete,
+    note := "Only the pib property of OfficeArtFOPT is read (picture.rs)." },
   { standard := .msOdraw, ref := .clause [2, 4], title := "Enumerations", status := .notImplemented,
-    note := "Not read yet." },
+    note := "Not read." },
   { standard := .msOdraw, ref := .clause [2, 5], title := "Algorithms", status := .notImplemented,
-    note := "Not read yet." }
+    note := "Not read." }
 ]
 
 /-- Every row of the [MS-ODRAW] ledger. -/

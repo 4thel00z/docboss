@@ -37,6 +37,7 @@ pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
 
+    /// [MS-OLEPS] §2.8: FILETIME counts 100 ns intervals since 1601.
     #[test]
     fn filetime_epoch_and_known_dates() {
         assert_eq!(filetime_to_iso8601(0), None);

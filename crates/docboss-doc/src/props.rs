@@ -424,6 +424,7 @@ fn apply_pap_prl(prl: &Prl<'_>, props: &mut ParagraphProperties, extra: &mut Par
             props.indentation.first_line = (value >= 0).then_some(value);
             props.indentation.hanging = (value < 0).then_some(-value);
         }
+        // [MS-DOC] §2.9.146: sprmPDyaLine's LSPD.
         0x6412 => {
             let line = u16_at(prl.operand, 0).unwrap_or(240);
             let multiple = u16_at(prl.operand, 2).unwrap_or(1) == 1;

@@ -64,6 +64,7 @@ const MAIN_TYPES: [&str; 4] = [
     "ms-word.template.macroEnabledTemplate.main+xml",
 ];
 
+/// ECMA-376 Part 1 §11.3.10: the main document part, from the package's officeDocument relationship.
 fn main_part(package: &Package<'_>, root_rels: &Relationships) -> Option<String> {
     let by_rel = root_rels
         .first("officeDocument")
@@ -139,6 +140,7 @@ fn parse_story(
         return out;
     }
     match &part.kind {
+        // ECMA-376 Part 1 §17.2.3, §17.2.2: the document's body.
         StoryKind::Body => {
             children(&mut reader, |reader, e| {
                 if e.is(Ns::W, "body") {
@@ -149,7 +151,7 @@ fn parse_story(
                 out.sections.push(Section::default());
             }
         }
-        // ECMA-376 Part 1 §17.10.4, §17.10.3: header and footer parts.
+        // ECMA-376 Part 1 §17.10.4, §17.10.3, §11.3.9, §11.3.6: header and footer parts.
         StoryKind::HeaderFooter { id, kind } => {
             let blocks = parser.blocks(&mut reader);
             out.header_footer = Some(HeaderFooter {
@@ -158,7 +160,7 @@ fn parse_story(
                 blocks,
             });
         }
-        // ECMA-376 Part 1 §17.11.15, §17.11.8, §17.11.10, §17.11.2, §17.11.23, §17.11.1: note bodies, separators skipped.
+        // ECMA-376 Part 1 §17.11.15, §17.11.8, §17.11.10, §17.11.2, §17.11.23, §17.11.1, §11.3.7, §11.3.4: note bodies, separators skipped.
         StoryKind::Notes(kind) => children(&mut reader, |reader, e| {
             if !matches!(e.local, "footnote" | "endnote") {
                 return;
@@ -178,6 +180,7 @@ fn parse_story(
                 blocks,
             });
         }),
+        // ECMA-376 Part 1 §11.3.2, §17.13.4: the comments part.
         StoryKind::Comments => children(&mut reader, |reader, e| {
             if e.local != "comment" {
                 return;
@@ -252,6 +255,7 @@ fn parse_numbering(
     (numbering, links, diagnostics)
 }
 
+/// ECMA-376 Part 1 §11.3.12, §11.3.11, §11.3.3, §11.3.5: the styles, numbering, settings and font table parts.
 fn parse_misc(
     package: &Package<'_>,
     root_rels: &Relationships,
@@ -290,6 +294,7 @@ fn parse_misc(
     shared
 }
 
+/// The image parts the stories refer to (ECMA-376 Part 1 §15.2.14).
 fn load_media(package: &Package<'_>, names: &[String]) -> (Vec<Media>, Vec<Diagnostic>) {
     let mut diagnostics = Vec::new();
     let media = names

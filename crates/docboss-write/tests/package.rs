@@ -11,6 +11,7 @@ fn output_is_deterministic() {
     assert_eq!(first, second);
 }
 
+/// ECMA-376 Part 2 §7.3.4, §7.3.7.
 /// ECMA-376 Part 2 §7.2.3: every part has a content type, by default
 /// extension or override.
 #[test]

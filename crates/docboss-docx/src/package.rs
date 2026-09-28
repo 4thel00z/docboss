@@ -58,6 +58,7 @@ fn directory(part: &str) -> &str {
     part.rfind('/').map_or("", |i| &part[..i])
 }
 
+/// ECMA-376 Part 2 §6.4, §6.4.2: the source part is the base IRI.
 /// Resolves a relationship target against its source part (ECMA-376 Part 2
 /// §6.4, with the relative reference resolution of RFC 3986 §5.2).
 pub fn resolve_target(source: &str, target: &str) -> String {
@@ -170,7 +171,7 @@ impl<'a> Package<'a> {
         Some(data)
     }
 
-    /// Reads `[Content_Types].xml` (ECMA-376 Part 2 §7.2.3.2).
+    /// Reads `[Content_Types].xml` (ECMA-376 Part 2 §7.2.3.2, §7.3.7).
     fn read_content_types(&mut self) {
         let mut diagnostics = Vec::new();
         let Some(data) = self.part_into("[Content_Types].xml", &mut diagnostics) else {
@@ -281,6 +282,7 @@ impl<'a> Package<'a> {
 
     /// The archive's spelling of a part name, which may differ in case:
     /// part names compare case-insensitively (ECMA-376 Part 2 §6.2.2.3, §7.3.5).
+    /// ECMA-376 Part 2 §7.2.5, §7.3.2, §7.3.3: a part is the ZIP item of the same name.
     fn existing_name(&self, name: &str) -> String {
         self.archive
             .find(name)
@@ -292,7 +294,7 @@ impl<'a> Package<'a> {
 mod tests {
     use super::*;
 
-    /// ECMA-376 Part 2 §6.4.3: targets resolve relative to the source
+    /// ECMA-376 Part 2 §6.4.2, §6.4.3: targets resolve relative to the source
     /// part's directory; `..` climbs and a leading `/` is absolute.
     #[test]
     fn resolves_targets() {

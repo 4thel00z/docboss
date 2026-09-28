@@ -284,6 +284,7 @@ impl DrawingInfo {
     }
 }
 
+/// ECMA-376 Part 3 §7.5, §7.6, §7.7, §9.3.
 /// Picks the branch of `mc:AlternateContent` (ECMA-376 Part 3 §9.3, §7.5) to
 /// read: the first `mc:Choice` whose required namespaces this reader
 /// understands, else `mc:Fallback`. Calls `f` with the chosen branch's start.
@@ -537,7 +538,7 @@ impl<'p> StoryParser<'p> {
     /// Run content (ECMA-376 Part 1 §17.3.3): text, field characters and
     /// codes, tabs, breaks, symbols, hyphens, note and comment references and
     /// marks, DrawingML and VML pictures.
-    /// ECMA-376 Part 1 §17.16.18, §17.16.23, §17.11.14, §17.11.7, §17.11.13, §17.11.6, §17.13.4.
+    /// ECMA-376 Part 1 §17.16.18, §17.16.23, §17.16.13, §17.11.14, §17.11.7, §17.11.13, §17.11.6, §17.13.4.
     fn run_content<'a>(
         &mut self,
         reader: &mut Reader<'a>,
@@ -660,6 +661,7 @@ impl<'p> StoryParser<'p> {
     /// §20.4): inline and anchored objects, their extent, non-visual
     /// properties, position offsets and text box content.
     /// ECMA-376 Part 1 §20.4.2.8, §20.4.2.3, §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38.
+    /// ECMA-376 Part 1 §20.4.2.42, §20.4.2.37: text boxes inside WordprocessingML shapes.
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {

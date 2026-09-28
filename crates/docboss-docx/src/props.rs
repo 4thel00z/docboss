@@ -192,7 +192,8 @@ fn border(e: &Element<'_>) -> Border {
 }
 
 /// Paragraph (`w:pBdr`), table (`w:tblBorders`) and cell (`w:tcBorders`)
-/// borders.
+/// borders, each side and the inside edges.
+/// ECMA-376 Part 1 §17.4.76, §17.4.4, §17.4.36, §17.4.13, §17.4.22, §17.4.24, §17.4.74, §17.4.3, §17.4.33, §17.4.12, §17.4.23, §17.4.25.
 pub fn borders(reader: &mut Reader<'_>) -> Borders {
     let mut borders = Borders::default();
     children(reader, |_, e| {
@@ -318,6 +319,8 @@ fn width(e: &Element<'_>) -> (Option<i32>, Option<i32>) {
     }
 }
 
+/// Cell margins: top, leading, bottom and trailing.
+/// ECMA-376 Part 1 §17.4.75, §17.4.34, §17.4.5, §17.4.11.
 fn margins(reader: &mut Reader<'_>) -> [i32; 4] {
     let mut out = [0, 108, 0, 108];
     children(reader, |_, e| {
