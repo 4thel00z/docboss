@@ -16,6 +16,8 @@ members = [
     "crates/docboss-cli",
     "crates/docboss-py",
     "crates/docboss-testkit",
+    "crates/docboss-crypt",
+    "crates/docboss-aio",
 ]
 
 [workspace.package]
@@ -41,6 +43,8 @@ docboss-font = { path = "crates/docboss-font", version = "0.1.0" } # x-release-p
 docboss-layout = { path = "crates/docboss-layout", version = "0.1.0" } # x-release-please-version
 docboss-render = { path = "crates/docboss-render", version = "0.1.0" } # x-release-please-version
 docboss-write = { path = "crates/docboss-write", version = "0.1.0" } # x-release-please-version
+docboss-crypt = { path = "crates/docboss-crypt", version = "0.1.0" } # x-release-please-version
+docboss-aio = { path = "crates/docboss-aio", version = "0.1.0" } # x-release-please-version
 docboss-testkit = { path = "crates/docboss-testkit" }
 thiserror = "2"
 memchr = "2"

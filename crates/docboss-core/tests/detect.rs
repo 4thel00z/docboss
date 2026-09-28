@@ -34,3 +34,25 @@ fn encrypted_doc_needs_its_password() {
     let bytes = std::fs::read(fixture("docboss-doc", "encrypted-rc4.doc")).unwrap();
     assert!(read(&bytes).is_err());
 }
+
+/// [MS-OFFCRYPTO] §2.3.4.4: a DOCX protected with a password to open is a
+/// compound file; with the password it opens like any other DOCX.
+#[test]
+fn encrypted_docx_opens_with_its_password() {
+    let bytes = std::fs::read(fixture("docboss-crypt", "Encrypted_MSO2013_abc.docx")).unwrap();
+    assert_eq!(detect(&bytes), Format::EncryptedDocx);
+    assert!(matches!(read(&bytes), Err(Error::Encrypted)));
+    let options = docboss_core::Options {
+        password: Some("abc".into()),
+    };
+    let document = docboss_core::read_with(&bytes, &options).unwrap();
+    assert_eq!(document.format, SourceFormat::Docx);
+    assert!(!docboss_core::plain_text(&document).trim().is_empty());
+    let wrong = docboss_core::Options {
+        password: Some("abd".into()),
+    };
+    assert!(matches!(
+        docboss_core::read_with(&bytes, &wrong),
+        Err(Error::Crypt(docboss_crypt::Error::WrongPassword))
+    ));
+}
