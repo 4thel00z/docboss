@@ -292,6 +292,11 @@ enum Command {
         #[command(subcommand)]
         command: skill::SkillCommand,
     },
+    /// Explore the document interactively in the terminal.
+    Tui {
+        #[command(flatten)]
+        source: Source,
+    },
 }
 
 fn main() {
@@ -454,7 +459,19 @@ fn run(command: Command) -> Result<(), Failure> {
             Ok(())
         }
         Command::Skill { command } => skill::cmd_skill(command).map_err(Failure::new),
+        Command::Tui { source } => cmd_tui(&source),
     }
+}
+
+fn cmd_tui(source: &Source) -> Result<(), Failure> {
+    let bytes = read_file(&source.file)?;
+    let options = Options {
+        password: source.password.clone(),
+    };
+    let document = docboss_core::read_with(&bytes, &options)
+        .map_err(|e| Failure::new(format!("{}: {e}", source.file.display())))?;
+    let target = source.file.display().to_string();
+    docboss_tui::run(document, bytes, target).map_err(|e| Failure::new(e.to_string()))
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, Failure> {

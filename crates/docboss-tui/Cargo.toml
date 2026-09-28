@@ -1,0 +1,28 @@
+[package]
+name = "docboss-tui"
+description = "Terminal explorer for DOCX and DOC files: element tree, property inspector, container parts with hex and XML views, Markdown and page previews"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords = ["docx", "doc", "tui", "terminal", "ratatui"]
+categories = ["command-line-interface", "visualization"]
+
+[dependencies]
+docboss-core = { workspace = true }
+docboss-model = { workspace = true }
+docboss-zip = { workspace = true }
+docboss-cfb = { workspace = true }
+docboss-output = { workspace = true }
+docboss-layout = { workspace = true }
+docboss-render = { workspace = true }
+ratatui = "0.29"
+crossterm = "0.28"
+arboard = { version = "3", default-features = false }
+base64 = "0.23"
+
+[dev-dependencies]
+docboss-core = { workspace = true }

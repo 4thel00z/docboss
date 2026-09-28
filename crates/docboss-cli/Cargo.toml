@@ -22,6 +22,7 @@ docboss-font = { workspace = true }
 docboss-layout = { workspace = true }
 docboss-render = { workspace = true }
 docboss-write = { workspace = true }
+docboss-tui = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 serde_json = { workspace = true }
 jaq-core = "3"
