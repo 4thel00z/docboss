@@ -1,12 +1,23 @@
 [package]
 name = "docboss-py"
+description = "Python bindings for docboss (extension module docboss._docboss)"
+# Distributed as wheels on PyPI via maturin, never as a crate.
+publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-readme.workspace = true
-keywords.workspace = true
+
+[lib]
+name = "_docboss"
+crate-type = ["cdylib"]
 
 [dependencies]
+docboss-core = { workspace = true }
+docboss-model = { workspace = true }
+docboss-output = { workspace = true, features = ["serde"] }
+docboss-font = { workspace = true }
+docboss-layout = { workspace = true }
+docboss-render = { workspace = true }
+docboss-write = { workspace = true }
+pyo3 = { version = "0.25", features = ["abi3-py312"] }
