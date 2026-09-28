@@ -876,3 +876,196 @@ fn wide_grids_keep_their_widths() {
     let right = runs.iter().find(|r| r.text == "right").unwrap().glyphs[0].x;
     assert!((right - (72.0 + 288.0 + 5.4)).abs() < 0.01, "{right}");
 }
+
+fn text_box(
+    placement: docboss_model::DrawingPlacement,
+    shape: docboss_model::ShapeFormat,
+    blocks: Vec<Block>,
+) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(docboss_model::Drawing {
+            media: None,
+            width: 2_540_000,
+            height: 1_270_000,
+            placement,
+            name: None,
+            description: None,
+            text_box: blocks,
+            shape,
+        })],
+    })
+}
+
+fn framed() -> docboss_model::ShapeFormat {
+    docboss_model::ShapeFormat {
+        fill: Some(docboss_model::Color(255, 255, 0)),
+        outline: Some(docboss_model::Color::BLACK),
+        outline_width: Some(12_700),
+        insets: Some([127_000, 127_000, 127_000, 127_000]),
+        text_anchor: None,
+        auto_fit: false,
+    }
+}
+
+fn anchored(x: i64, y: i64) -> docboss_model::DrawingPlacement {
+    docboss_model::DrawingPlacement::Anchored {
+        x,
+        y,
+        behind_text: false,
+        relative_to_page: false,
+    }
+}
+
+/// ECMA-376 Part 1 §20.4.2.38, §20.4.2.22, §20.4.2.35: an anchored text box
+/// paints its fill at the anchor offset, its text inside the insets and its
+/// outline on the four edges, and no image placeholder.
+#[test]
+fn anchored_text_boxes_paint_fill_text_and_outline() {
+    let anchor = Block::Paragraph(Paragraph {
+        inlines: vec![
+            run("Anchor"),
+            text_box(anchored(1_270_000, 635_000), framed(), vec![para("Boxed")]),
+        ],
+        ..Paragraph::default()
+    });
+    let layout = laid(&doc(vec![anchor]));
+    let page = &layout.pages[0];
+    let fill = page.items.iter().find_map(|item| match item {
+        Item::Rect { rect, color } if *color == docboss_model::Color(255, 255, 0) => Some(*rect),
+        _ => None,
+    });
+    let fill = fill.expect("the text box fill is painted");
+    assert!(
+        (fill.x - 172.0).abs() < 0.01 && (fill.y - 122.0).abs() < 0.01,
+        "{fill:?}"
+    );
+    assert!((fill.width - 200.0).abs() < 0.01 && (fill.height - 100.0).abs() < 0.01);
+    let boxed = runs(&layout, 0)
+        .into_iter()
+        .find(|run| run.text == "Boxed")
+        .expect("box text");
+    assert!(
+        (boxed.glyphs[0].x - 182.0).abs() < 0.01,
+        "{}",
+        boxed.glyphs[0].x
+    );
+    assert!(
+        boxed.baseline > fill.y + 10.0 && boxed.baseline < fill.y + 30.0,
+        "{}",
+        boxed.baseline
+    );
+    let outline = page
+        .items
+        .iter()
+        .filter(|item| matches!(item, Item::Line { width, .. } if (*width - 1.0).abs() < 0.01))
+        .count();
+    assert_eq!(outline, 4);
+    assert!(!page
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Image { .. })));
+}
+
+/// ECMA-376 Part 1 §20.4.2.22: `a:spAutoFit` grows the shape to its text,
+/// and the `anchor` attribute places the text vertically.
+#[test]
+fn text_boxes_grow_to_fit_and_anchor_their_text() {
+    let lines: Vec<Block> = (0..12).map(|i| para(&format!("line {i}"))).collect();
+    let mut grow = framed();
+    grow.auto_fit = true;
+    let grown = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), grow, lines)],
+        ..Paragraph::default()
+    })]));
+    let fill = grown.pages[0].items.iter().find_map(|item| match item {
+        Item::Rect { rect, .. } => Some(*rect),
+        _ => None,
+    });
+    let fill = fill.expect("fill");
+    let last = runs(&grown, 0)
+        .into_iter()
+        .filter(|r| r.text.starts_with("line"))
+        .map(|r| r.baseline)
+        .fold(0.0, f32::max);
+    assert!(
+        fill.height > 100.0 && fill.bottom() > last,
+        "{fill:?} {last}"
+    );
+
+    let mut centered = framed();
+    centered.text_anchor = Some(docboss_model::VerticalAlign::Center);
+    let middle = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), centered, vec![para("Mid")])],
+        ..Paragraph::default()
+    })]));
+    let top = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), framed(), vec![para("Mid")])],
+        ..Paragraph::default()
+    })]));
+    let baseline = |layout: &Layout| {
+        runs(layout, 0)
+            .into_iter()
+            .find(|r| r.text == "Mid")
+            .map(|r| r.baseline)
+            .unwrap_or(0.0)
+    };
+    let shift = baseline(&middle) - baseline(&top);
+    assert!(shift > 25.0 && shift < 45.0, "{shift}");
+}
+
+/// ECMA-376 Part 1 §20.4.2.38: an inline text box sits on the line like a
+/// picture, its text laid out inside it.
+#[test]
+fn inline_text_boxes_carry_their_text_on_the_line() {
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![
+            run("Before"),
+            text_box(
+                docboss_model::DrawingPlacement::Inline,
+                framed(),
+                vec![para("Inside")],
+            ),
+        ],
+        ..Paragraph::default()
+    })]));
+    let before = runs(&layout, 0)
+        .into_iter()
+        .find(|r| r.text == "Before")
+        .expect("before");
+    let inside = runs(&layout, 0)
+        .into_iter()
+        .find(|r| r.text == "Inside")
+        .expect("inside");
+    assert!(
+        inside.glyphs[0].x > before.glyphs[0].x + 6.0 * ADVANCE,
+        "{}",
+        inside.glyphs[0].x
+    );
+    assert!(
+        inside.baseline < before.baseline,
+        "{} {}",
+        inside.baseline,
+        before.baseline
+    );
+}
+
+/// A text box in a header is painted with the header, not dropped.
+#[test]
+fn header_text_boxes_are_painted() {
+    let mut document = doc(vec![para("Body")]);
+    document.headers_footers.push(HeaderFooter {
+        id: "h1".into(),
+        kind: HeaderFooterKind::Header,
+        blocks: vec![Block::Paragraph(Paragraph {
+            inlines: vec![text_box(anchored(0, 0), framed(), vec![para("Logo")])],
+            ..Paragraph::default()
+        })],
+    });
+    document.sections[0].properties.headers = HeaderFooterRefs {
+        default: Some("h1".into()),
+        ..HeaderFooterRefs::default()
+    };
+    let layout = laid(&document);
+    assert!(runs(&layout, 0).iter().any(|r| r.text == "Logo"));
+}

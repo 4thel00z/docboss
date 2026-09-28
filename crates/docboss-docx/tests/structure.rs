@@ -525,3 +525,48 @@ fn part_names_compare_case_insensitively() {
     let doc = read(&data).unwrap();
     assert_eq!(plain_text(&doc), "found\n");
 }
+
+fn first_drawing(doc: &docboss_model::Document) -> docboss_model::Drawing {
+    paragraphs(doc)[0]
+        .inlines
+        .iter()
+        .find_map(|inline| match inline {
+            Inline::Run(run) => run.content.iter().find_map(|content| match content {
+                RunContent::Drawing(drawing) => Some(drawing.clone()),
+                _ => None,
+            }),
+            _ => None,
+        })
+        .expect("a drawing")
+}
+
+/// ECMA-376 Part 1 §20.4.2.35 and §20.1.2.2.24: a text box shape's fill
+/// and outline; §20.4.2.22: its insets, text anchor and `a:spAutoFit`.
+/// ECMA-376 Part 1 §20.1.8.54, §20.1.2.3.32, §20.1.2.3.29, §20.1.10.48.
+#[test]
+fn text_box_shape_format() {
+    let body = r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:spPr><a:solidFill><a:schemeClr val="lt1"/></a:solidFill><a:ln w="6350"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr lIns="0" tIns="12700" anchor="ctr"><a:spAutoFit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
+    let shape = first_drawing(&read(&Docx::new(body).build()).unwrap()).shape;
+    assert_eq!(shape.fill, Some(docboss_model::Color::WHITE));
+    assert_eq!(shape.outline, Some(docboss_model::Color(255, 0, 0)));
+    assert_eq!(shape.outline_width, Some(6350));
+    assert_eq!(shape.insets, Some([0, 12700, 91440, 45720]));
+    assert_eq!(
+        shape.text_anchor,
+        Some(docboss_model::VerticalAlign::Center)
+    );
+    assert!(shape.auto_fit);
+}
+
+/// ECMA-376 Part 1 §17.3.3.19: a VML text box's fill, stroke, inset and
+/// fit-to-text style.
+#[test]
+fn vml_text_box_shape_format() {
+    let body = r##"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:shape style="position:absolute;width:100pt;height:50pt" fillcolor="#0f0" stroked="f"><v:textbox inset="1pt,2pt,3pt,4pt" style="mso-fit-shape-to-text:t"><w:txbxContent><w:p><w:r><w:t>vml</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>"##;
+    let drawing = first_drawing(&read(&Docx::new(body).build()).unwrap());
+    assert_eq!((drawing.width, drawing.height), (1_270_000, 635_000));
+    assert_eq!(drawing.shape.fill, Some(docboss_model::Color(0, 255, 0)));
+    assert_eq!(drawing.shape.outline, None);
+    assert_eq!(drawing.shape.insets, Some([12_700, 25_400, 38_100, 50_800]));
+    assert!(drawing.shape.auto_fit);
+}

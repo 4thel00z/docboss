@@ -158,6 +158,7 @@ impl Para {
             name: None,
             description: None,
             text_box: Vec::new(),
+            shape: Default::default(),
         };
         self.content(RunContent::Drawing(drawing), RunProperties::default())
     }

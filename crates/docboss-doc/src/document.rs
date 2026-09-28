@@ -11,7 +11,9 @@ use docboss_model::{
 
 use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
 use crate::fib::{slot, Fib};
-use crate::picture::{blip, children, record, shape_blip_index, shape_containers, shape_id};
+use crate::picture::{
+    blip, children, record, shape_blip_index, shape_containers, shape_format, shape_id,
+};
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
 use crate::text::PieceTable;
@@ -470,6 +472,11 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
         at = drawing.body + drawing.length;
     }
     for container in containers {
+        if let Some(id) = shape_id(table, &container) {
+            context
+                .shape_formats
+                .insert(id, shape_format(table, &container));
+        }
         let (Some(id), Some(pib)) = (
             shape_id(table, &container),
             shape_blip_index(table, &container),

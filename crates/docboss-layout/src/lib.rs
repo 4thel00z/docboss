@@ -12,6 +12,7 @@ mod flow;
 mod paragraph;
 mod shape;
 mod table;
+mod textbox;
 mod units;
 
 use std::sync::Arc;

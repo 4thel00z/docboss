@@ -216,6 +216,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         name: None,
         description: None,
         text_box: Vec::new(),
+        shape: Default::default(),
     });
     vec![
         paragraph(

@@ -28,6 +28,27 @@ pub(crate) struct Floating {
     pub rect: Rect,
     pub relative_to_page: bool,
     pub behind: bool,
+    /// A text box's shape and text, relative to `rect`'s top-left corner.
+    pub content: Vec<Item>,
+}
+
+impl Floating {
+    /// The items the float paints, `rect` moved to `origin`: the picture,
+    /// unless the float is a text box without one, then its content.
+    fn items(&self, origin: (f32, f32)) -> Vec<Item> {
+        let rect = Rect::new(origin.0, origin.1, self.rect.width, self.rect.height);
+        let picture = (self.media.is_some() || self.content.is_empty()).then_some(Item::Image {
+            media: self.media,
+            rect,
+        });
+        picture
+            .into_iter()
+            .chain(self.content.iter().cloned().map(|mut item| {
+                item.offset(rect.x, rect.y);
+                item
+            }))
+            .collect()
+    }
 }
 
 /// A vertical unit of content: one line of a paragraph or one table row.
@@ -210,23 +231,48 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
     (out, prev_after)
 }
 
-/// Lays out a header, footer or note body as items stacked from `y = 0`.
-fn layout_story(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (Vec<Item>, f32) {
+/// A header, footer or note body laid out from `y = 0`.
+struct Story {
+    items: Vec<Item>,
+    height: f32,
+    /// Floats positioned relative to the page, in page coordinates.
+    page_items: Vec<Item>,
+}
+
+/// Lays out a header, footer or note body as items stacked from `y = 0`,
+/// its floating drawings and text boxes included.
+fn layout_story(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> Story {
     let fresh = ctx.doc.numbering.counter();
     let saved = std::mem::replace(&mut ctx.counter, fresh);
     let (slabs, _) = layout_blocks(ctx, blocks, width);
     ctx.counter = saved;
-    let mut items = Vec::new();
+    let mut story = Story {
+        items: Vec::new(),
+        height: 0.0,
+        page_items: Vec::new(),
+    };
     let mut y = 0.0;
     for slab in slabs {
         y += slab.gap_before;
-        items.extend(slab.items.into_iter().map(|mut item| {
+        story.items.extend(slab.items.into_iter().map(|mut item| {
             item.offset(0.0, y);
             item
         }));
+        for float in &slab.floats {
+            if float.relative_to_page {
+                story
+                    .page_items
+                    .extend(float.items((float.rect.x, float.rect.y)));
+                continue;
+            }
+            story
+                .items
+                .extend(float.items((float.rect.x, float.rect.y + y)));
+        }
         y += slab.height;
     }
-    (items, y)
+    story.height = y;
+    story
 }
 
 fn merge_refs(base: &HeaderFooterRefs, over: &HeaderFooterRefs) -> HeaderFooterRefs {
@@ -324,7 +370,7 @@ impl Paginator<'_, '_> {
         let Some(part) = id.and_then(|id| self.ctx.doc.header_footer(id)) else {
             return 0.0;
         };
-        layout_story(self.ctx, &part.blocks, width).1
+        layout_story(self.ctx, &part.blocks, width).height
     }
 
     fn new_page(&mut self) {
@@ -430,7 +476,8 @@ impl Paginator<'_, '_> {
             return (Vec::new(), 0.0);
         };
         self.ctx.current_note = Some(self.ctx.note_label(NoteKind::Footnote, id));
-        let laid = layout_story(self.ctx, &note.blocks, width);
+        let story = layout_story(self.ctx, &note.blocks, width);
+        let laid = (story.items, story.height);
         self.ctx.current_note = None;
         self.notes.insert(id, laid.clone());
         laid
@@ -581,15 +628,12 @@ impl Paginator<'_, '_> {
             } else {
                 float.rect.offset(x, y)
             };
-            let item = Item::Image {
-                media: float.media,
-                rect,
-            };
+            let items = float.items((rect.x, rect.y));
             if float.behind {
-                page.back.push(item);
+                page.back.extend(items);
                 continue;
             }
-            page.front.push(item);
+            page.front.extend(items);
         }
         self.cursor.y = y + height;
         self.cursor.empty = false;
@@ -785,18 +829,20 @@ fn finish_page(
     let mut items = state.back;
     let doc = ctx.doc;
     if let Some(part) = state.header.as_deref().and_then(|id| doc.header_footer(id)) {
-        let (header, _) = layout_story(ctx, &part.blocks, state.text_width);
-        items.extend(header.into_iter().map(|mut item| {
+        let header = layout_story(ctx, &part.blocks, state.text_width);
+        items.extend(header.items.into_iter().map(|mut item| {
             item.offset(state.text_left, state.header_top);
             item
         }));
+        items.extend(header.page_items);
     }
     if let Some(part) = state.footer.as_deref().and_then(|id| doc.header_footer(id)) {
-        let (footer, height) = layout_story(ctx, &part.blocks, state.text_width);
-        items.extend(footer.into_iter().map(|mut item| {
-            item.offset(state.text_left, state.footer_bottom - height);
+        let footer = layout_story(ctx, &part.blocks, state.text_width);
+        items.extend(footer.items.into_iter().map(|mut item| {
+            item.offset(state.text_left, state.footer_bottom - footer.height);
             item
         }));
+        items.extend(footer.page_items);
     }
     items.extend(state.body);
     if !state.notes.is_empty() {

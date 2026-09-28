@@ -10,6 +10,7 @@ use docboss_model::{
 use crate::breaks;
 use crate::flow::{Ctx, Floating, Slab};
 use crate::shape::{Glyph, RunStyle};
+use crate::textbox::layout_text_box;
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{GlyphRun, Item, LineStyle, PositionedGlyph, Rect};
 
@@ -628,16 +629,16 @@ fn build_atoms(
                 else {
                     continue;
                 };
+                let text_box = layout_text_box(ctx, drawing);
+                let height = text_box
+                    .as_ref()
+                    .map_or(emu_to_pt(drawing.height), |text_box| text_box.height);
                 floats.push(Floating {
                     media: drawing.media,
-                    rect: Rect::new(
-                        emu_to_pt(x),
-                        emu_to_pt(y),
-                        emu_to_pt(drawing.width),
-                        emu_to_pt(drawing.height),
-                    ),
+                    rect: Rect::new(emu_to_pt(x), emu_to_pt(y), emu_to_pt(drawing.width), height),
                     relative_to_page,
                     behind: behind_text,
+                    content: text_box.map(|text_box| text_box.items).unwrap_or_default(),
                 });
             }
             Elem::Note(id) => match word.as_mut() {
@@ -887,10 +888,19 @@ fn emit_line(
                     continue;
                 };
                 let h = emu_to_pt(drawing.height);
-                glyphs.push(Item::Image {
-                    media: drawing.media,
-                    rect: Rect::new(x0, baseline - h, width, h),
-                });
+                let text_box = layout_text_box(ctx, drawing);
+                if drawing.media.is_some() || text_box.is_none() {
+                    glyphs.push(Item::Image {
+                        media: drawing.media,
+                        rect: Rect::new(x0, baseline - h, width, h),
+                    });
+                }
+                if let Some(text_box) = text_box {
+                    glyphs.extend(text_box.items.into_iter().map(|mut item| {
+                        item.offset(x0, baseline - h);
+                        item
+                    }));
+                }
                 continue;
             }
             Kind::Tab => {

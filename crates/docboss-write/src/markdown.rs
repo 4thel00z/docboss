@@ -326,6 +326,7 @@ impl<'o, 'a> Converter<'o, 'a> {
             name: None,
             description: (!alt.is_empty()).then_some(alt),
             text_box: Vec::new(),
+            shape: Default::default(),
         };
         self.push_inline(Inline::Run(Run {
             properties: RunProperties::default(),

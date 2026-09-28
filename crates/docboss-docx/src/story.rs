@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Break, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, MediaId,
+    Block, Break, Color, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, MediaId,
     Paragraph, Revision, RevisionKind, Run, RunContent, RunProperties, Section, SectionProperties,
-    Table, TableCell, TableRow,
+    ShapeFormat, Table, TableCell, TableRow, VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -242,6 +242,85 @@ fn css_property<'s>(style: &'s str, name: &str) -> Option<&'s str> {
     })
 }
 
+const DEFAULT_INSETS: [i64; 4] = [91_440, 45_720, 91_440, 45_720];
+
+/// A named color: DrawingML preset names (ECMA-376 Part 1 §20.1.10.48) and
+/// VML names, with the light and dark theme slots read as white and black.
+fn named_color(name: &str) -> Option<Color> {
+    match name.trim() {
+        "white" | "lt1" | "bg1" => Some(Color::WHITE),
+        "black" | "dk1" | "tx1" => Some(Color::BLACK),
+        "red" => Some(Color(255, 0, 0)),
+        "green" => Some(Color(0, 128, 0)),
+        "blue" => Some(Color(0, 0, 255)),
+        "yellow" => Some(Color(255, 255, 0)),
+        "gray" | "grey" => Some(Color(128, 128, 128)),
+        _ => None,
+    }
+}
+
+/// The color of an `a:solidFill` (ECMA-376 Part 1 §20.1.8.54): an sRGB
+/// value, a system color's last value, a preset or a theme slot.
+/// ECMA-376 Part 1 §20.1.2.3.32, §20.1.2.3.33, §20.1.2.3.22, §20.1.2.3.29.
+fn solid_fill(reader: &mut Reader<'_>) -> Option<Color> {
+    let mut color = None;
+    children(reader, |_, e| {
+        if e.ns != Ns::A || color.is_some() {
+            return;
+        }
+        color = match e.local {
+            "srgbClr" => e.attr_raw(Ns::NONE, "val").and_then(Color::from_hex),
+            "sysClr" => e.attr_raw(Ns::NONE, "lastClr").and_then(Color::from_hex),
+            "prstClr" | "schemeClr" => e.attr_raw(Ns::NONE, "val").and_then(named_color),
+            _ => None,
+        };
+    });
+    color
+}
+
+/// A shape's fill and outline from `wps:spPr` (ECMA-376 Part 1 §20.4.2.35,
+/// §20.1.2.2.24 `a:ln`).
+fn shape_properties(reader: &mut Reader<'_>, shape: &mut ShapeFormat) {
+    children(reader, |reader, e| {
+        if e.ns != Ns::A {
+            return;
+        }
+        match e.local {
+            "solidFill" => shape.fill = solid_fill(reader),
+            "noFill" => shape.fill = None,
+            "ln" => {
+                shape.outline_width = e.attr_raw(Ns::NONE, "w").and_then(int);
+                let mut outline = None;
+                children(reader, |reader, fill| {
+                    if fill.ns == Ns::A && fill.local == "solidFill" {
+                        outline = solid_fill(reader);
+                    }
+                });
+                shape.outline = outline;
+            }
+            _ => {}
+        }
+    });
+}
+
+/// A VML color: `#RRGGBB`, `#RGB` or a name, ignoring a trailing
+/// `[index]` hint.
+fn vml_color(value: &str) -> Option<Color> {
+    let value = value.split_whitespace().next()?;
+    let Some(hex) = value.strip_prefix('#') else {
+        return named_color(value);
+    };
+    if hex.len() == 3 {
+        let doubled: String = hex.chars().flat_map(|c| [c, c]).collect();
+        return Color::from_hex(&doubled);
+    }
+    Color::from_hex(hex)
+}
+
+fn vml_true(value: Option<&str>, default: bool) -> bool {
+    value.map_or(default, |v| !matches!(v.trim(), "f" | "false" | "0"))
+}
+
 struct DrawingInfo {
     drawing: Drawing,
     anchored: bool,
@@ -262,6 +341,7 @@ impl DrawingInfo {
                 name: None,
                 description: None,
                 text_box: Vec::new(),
+                shape: Default::default(),
             },
             anchored: false,
             x: 0,
@@ -662,6 +742,7 @@ impl<'p> StoryParser<'p> {
     /// properties, position offsets and text box content.
     /// ECMA-376 Part 1 §20.4.2.8, §20.4.2.3, §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38.
     /// ECMA-376 Part 1 §20.4.2.42, §20.4.2.37: text boxes inside WordprocessingML shapes.
+    /// ECMA-376 Part 1 §20.4.2.22: `wps:bodyPr` insets, text anchor and `a:spAutoFit`.
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
@@ -718,6 +799,34 @@ impl<'p> StoryParser<'p> {
                     self.text_box(reader, info);
                     return;
                 }
+                (Ns::WPS, "spPr") => {
+                    shape_properties(reader, &mut info.drawing.shape);
+                    return;
+                }
+                (Ns::WPS, "bodyPr") => {
+                    let inset = |name: &str, default: i64| {
+                        e.attr_raw(Ns::NONE, name).and_then(int).unwrap_or(default)
+                    };
+                    let shape = &mut info.drawing.shape;
+                    shape.insets = Some([
+                        inset("lIns", DEFAULT_INSETS[0]),
+                        inset("tIns", DEFAULT_INSETS[1]),
+                        inset("rIns", DEFAULT_INSETS[2]),
+                        inset("bIns", DEFAULT_INSETS[3]),
+                    ]);
+                    shape.text_anchor = match e.attr_raw(Ns::NONE, "anchor") {
+                        Some("ctr") => Some(VerticalAlign::Center),
+                        Some("b") => Some(VerticalAlign::Bottom),
+                        Some("t") => Some(VerticalAlign::Top),
+                        _ => None,
+                    };
+                    children(reader, |_, fit| {
+                        if fit.ns == Ns::A && fit.local == "spAutoFit" {
+                            shape.auto_fit = true;
+                        }
+                    });
+                    return;
+                }
                 (Ns::MC, "AlternateContent") => {
                     alternate_content(reader, |reader| self.drawing_children(reader, info));
                     return;
@@ -763,6 +872,49 @@ impl<'p> StoryParser<'p> {
                             .map(Into::into)
                             .filter(|d: &String| !d.is_empty());
                     }
+                    let shape = &mut info.drawing.shape;
+                    let filled = vml_true(e.attr_raw(Ns::NONE, "filled"), true);
+                    let stroked = vml_true(e.attr_raw(Ns::NONE, "stroked"), true);
+                    shape.fill = filled
+                        .then(|| {
+                            e.attr_raw(Ns::NONE, "fillcolor")
+                                .map_or(Some(Color::WHITE), vml_color)
+                        })
+                        .flatten();
+                    shape.outline = stroked
+                        .then(|| {
+                            e.attr_raw(Ns::NONE, "strokecolor")
+                                .map_or(Some(Color::BLACK), vml_color)
+                        })
+                        .flatten();
+                    shape.outline_width = Some(
+                        e.attr_raw(Ns::NONE, "strokeweight")
+                            .and_then(css_length)
+                            .unwrap_or(9_525),
+                    );
+                }
+                (Ns::V, "textbox") => {
+                    let shape = &mut info.drawing.shape;
+                    let insets: Vec<i64> = e
+                        .attr_raw(Ns::NONE, "inset")
+                        .map(|inset| {
+                            inset
+                                .split(',')
+                                .map(|v| css_length(v).unwrap_or(-1))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    shape.insets = Some(std::array::from_fn(|i| {
+                        insets
+                            .get(i)
+                            .copied()
+                            .filter(|v| *v >= 0)
+                            .unwrap_or(DEFAULT_INSETS[i])
+                    }));
+                    shape.auto_fit = e.attr(Ns::NONE, "style").is_some_and(|style| {
+                        css_property(&style, "mso-fit-shape-to-text")
+                            .is_some_and(|v| v == "t" || v == "true")
+                    });
                 }
                 (Ns::V, "imagedata") => {
                     let id = e.attr(Ns::R, "id").or_else(|| e.attr(Ns::O, "relid"));

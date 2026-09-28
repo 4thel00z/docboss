@@ -168,6 +168,7 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             name: None,
             description: None,
             text_box: Vec::new(),
+            shape: Default::default(),
         })
     };
     let mut doc = document(vec![
