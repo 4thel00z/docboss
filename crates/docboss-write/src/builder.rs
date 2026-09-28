@@ -797,6 +797,12 @@ impl TableBuilder {
         self
     }
 
+    /// A header row whose cells hold arbitrary blocks.
+    pub fn header_blocks(mut self, cells: Vec<Vec<Block>>) -> Self {
+        self.push_row(cells, true);
+        self
+    }
+
     /// A row whose cells hold arbitrary blocks.
     pub fn row_blocks(mut self, cells: Vec<Vec<Block>>) -> Self {
         self.push_row(cells, false);

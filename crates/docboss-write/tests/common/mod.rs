@@ -268,3 +268,16 @@ pub fn part(bytes: &[u8], name: &str) -> String {
         .unwrap_or_else(|| panic!("no part {name}"));
     String::from_utf8(data.clone()).unwrap()
 }
+
+/// The text of a PDF through the pdfboss CLI, when it is installed.
+pub fn pdf_text(path: &Path) -> Option<String> {
+    let output = Command::new("pdfboss")
+        .arg("text")
+        .arg(path)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
