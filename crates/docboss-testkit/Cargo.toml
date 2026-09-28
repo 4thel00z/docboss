@@ -1,6 +1,6 @@
 [package]
 name = "docboss-testkit"
-description = "Test helpers for docboss: a small ZIP writer and DOCX package builders"
+description = "Test helpers for docboss: a chaining ZIP writer front end and DOCX package builders"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -8,4 +8,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-flate2 = { workspace = true }
+docboss-zip = { workspace = true }

@@ -1,5 +1,6 @@
 //! The piece table ([MS-DOC] §2.9.38 Clx, §2.8.35 PlcPcd) and text
 //! retrieval ([MS-DOC] §2.4.1).
+//! [MS-DOC] §2.9.38, §2.8.35, §2.9.177, §2.9.178, §2.9.209, §2.4.1.
 
 use docboss_cfb::codepage::cp1252_char;
 

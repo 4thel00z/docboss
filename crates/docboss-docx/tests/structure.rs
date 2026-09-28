@@ -1,7 +1,8 @@
 use docboss_docx::read;
 use docboss_model::{
-    plain_text, Block, Break, DrawingPlacement, Inline, Justification, NumberFormat, NumberingRef,
-    RevisionKind, RunContent, SectionBreak, VerticalMerge,
+    plain_text, Block, BorderStyle, Break, Color, DrawingPlacement, HeaderFooterKind, Inline,
+    Justification, NumberFormat, NumberingRef, RevisionKind, RunContent, SectionBreak,
+    VerticalAlign, VerticalMerge,
 };
 use docboss_testkit::Docx;
 
@@ -17,6 +18,7 @@ fn paragraphs(document: &docboss_model::Document) -> Vec<&docboss_model::Paragra
 
 /// ECMA-376 Part 1 §17.3.1.22 and §17.3.2.25: paragraphs of runs with
 /// text, tabs and breaks.
+/// ECMA-376 Part 1 §17.2.3, §17.2.2, §17.3.1, §17.3.2, §17.3.3.
 #[test]
 fn paragraphs_runs_and_breaks() {
     let body = r#"<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>Hello</w:t></w:r><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t xml:space="preserve"> world</w:t><w:tab/><w:t>x</w:t><w:br/><w:t>y</w:t><w:br w:type="page"/></w:r></w:p><w:p/>"#;
@@ -34,6 +36,8 @@ fn paragraphs_runs_and_breaks() {
 }
 
 /// ECMA-376 Part 1 §17.7.4 and §17.7.5: styles and document defaults.
+/// ECMA-376 Part 1 §17.7.8, §17.7.2, §17.7.1: a paragraph style inherits from the style it is based on.
+/// ECMA-376 Part 1 §11.3.12.
 #[test]
 fn styles_and_defaults() {
     let styles = r#"<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/></w:rPr></w:style>"#;
@@ -53,6 +57,9 @@ fn styles_and_defaults() {
 }
 
 /// ECMA-376 Part 1 §17.9: abstract numbering, instances and overrides.
+/// ECMA-376 Part 1 §17.9.16, §17.9.1, §17.9.2, §17.9.15, §17.9.8, §17.9.26, §17.9.6, §17.9.25, §17.9.17, §17.9.11.
+/// ECMA-376 Part 1 §17.9.3, §17.9.18: the paragraph's `w:ilvl` and `w:numId`.
+/// ECMA-376 Part 1 §11.3.11.
 #[test]
 fn numbering_definitions() {
     let numbering = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xF0B7;"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>"#;
@@ -82,6 +89,7 @@ fn numbering_definitions() {
 }
 
 /// ECMA-376 Part 1 §17.4: tables with grid spans and vertical merges.
+/// ECMA-376 Part 1 §17.4.37, §17.4.48, §17.4.16, §17.4.59, §17.4.63, §17.4.78, §17.4.81, §17.4.49, §17.4.65, §17.4.69, §17.4.17, §17.4.84.
 #[test]
 fn tables() {
     let body = r#"<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>wide</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>b</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc><w:tc><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#;
@@ -106,6 +114,7 @@ fn tables() {
 
 /// ECMA-376 Part 1 §17.6.17: a `w:sectPr` in a paragraph ends a section;
 /// the body's own `w:sectPr` describes the last one.
+/// ECMA-376 Part 1 §17.6.18, §17.6.13, §17.6.22, §17.6.11, §17.6.4, §17.6.12, §17.10.6, §17.10.5, §17.10.4, §11.3.9.
 #[test]
 fn sections_split_at_paragraph_section_properties() {
     let body = r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:type w:val="continuous"/></w:sectPr></w:pPr><w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/><w:cols w:num="2" w:space="360"/><w:titlePg/><w:pgNumType w:start="3"/></w:sectPr>"#;
@@ -135,6 +144,7 @@ fn sections_split_at_paragraph_section_properties() {
 
 /// ECMA-376 Part 1 §17.16.18 and §17.16.5.25: complex fields, nested and
 /// spanning runs; HYPERLINK fields become hyperlinks.
+/// ECMA-376 Part 1 §17.16.23: the instruction comes from `w:instrText`.
 #[test]
 fn complex_fields() {
     let body = r#"<w:p><w:r><w:t>Page </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>7</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>HYPERLINK "https://example.com"</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>link</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p>"#;
@@ -207,6 +217,7 @@ fn revisions() {
 
 /// ECMA-376 Part 3 §9.3: `mc:AlternateContent` reads the first understood
 /// choice, else the fallback; `w:sdt` content is unwrapped.
+/// ECMA-376 Part 3 §7.5, §7.6, §7.7; ECMA-376 Part 1 §17.5.2.
 #[test]
 fn markup_compatibility_and_content_controls() {
     let body = r#"<w:p><mc:AlternateContent><mc:Choice Requires="w14"><w:r><w:t>choice</w:t></w:r></mc:Choice><mc:Fallback><w:r><w:t>fallback</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p><w:p xmlns:x="urn:unknown"><mc:AlternateContent><mc:Choice Requires="x"><w:r><w:t>unknown</w:t></w:r></mc:Choice><mc:Fallback><w:r><w:t>used</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p><w:sdt><w:sdtPr/><w:sdtContent><w:p><w:sdt><w:sdtContent><w:r><w:t>control</w:t></w:r></w:sdtContent></w:sdt></w:p></w:sdtContent></w:sdt>"#;
@@ -218,6 +229,7 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x01\0\0\0\x01\x08\x06\0
 
 /// ECMA-376 Part 1 §20.4.2.8 and §20.4.2.3: inline and anchored drawings
 /// with their images.
+/// ECMA-376 Part 1 §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38, §20.4.2.42, §20.4.2.37, §15.2.14.
 #[test]
 fn drawings_and_media() {
     let body = r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="457200"/><wp:docPr id="1" name="Pic" descr="A dot"/><a:graphic><a:graphicData><pic:pic><pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r><w:r><w:drawing><wp:anchor behindDoc="1"><wp:positionH relativeFrom="page"><wp:posOffset>100</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>200</wp:posOffset></wp:positionV><wp:extent cx="10" cy="20"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
@@ -263,6 +275,7 @@ fn drawings_and_media() {
 
 /// ECMA-376 Part 1 §17.11 and §17.13.4: footnotes, endnotes and comments,
 /// separator notes skipped.
+/// ECMA-376 Part 1 §17.11.15, §17.11.10, §17.11.23, §17.11.13, §17.11.14, §17.11.7, §17.11.8, §17.11.2, §11.3.7, §11.3.4, §11.3.2.
 #[test]
 fn notes_and_comments() {
     let body = r#"<w:p><w:commentRangeStart w:id="0"/><w:r><w:t>text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r><w:r><w:footnoteReference w:id="1"/></w:r><w:r><w:endnoteReference w:id="2"/></w:r></w:p>"#;
@@ -293,6 +306,7 @@ fn notes_and_comments() {
 }
 
 /// ECMA-376 Part 2 §8.3: core properties, and extended properties.
+/// ECMA-376 Part 2 §8.2, §8.3.3, §8.3.4; ECMA-376 Part 1 §22.2, §22.2.2, §15.2.12.
 #[test]
 fn document_properties() {
     let core = r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><dc:title>Report</dc:title><dc:creator>Me</dc:creator><dcterms:created>2024-05-01T10:00:00Z</dcterms:created></cp:coreProperties>"#;
@@ -389,4 +403,121 @@ fn alternative_format_chunks_are_reported() {
         .diagnostics
         .iter()
         .any(|d| d.message.contains("altChunk")));
+}
+
+/// ECMA-376 Part 1 §17.4.62, §17.4.28, §17.4.50, §17.4.38, §17.4.31, §17.4.42, §17.4.52: table-level properties.
+/// ECMA-376 Part 1 §17.4.80, §17.4.6: row height and rows that cannot split.
+/// ECMA-376 Part 1 §17.4.76, §17.4.3, §17.4.34: a table top border, a cell bottom border and a leading default margin.
+/// ECMA-376 Part 1 §17.4.71, §17.4.66, §17.4.32, §17.4.83, §17.4.68: cell width, borders, shading, alignment and margins.
+/// ECMA-376 Part 1 §17.3.4: each border's style, width and color.
+/// ECMA-376 Part 1 §17.3.5: shading fills.
+#[test]
+fn table_row_and_cell_properties() {
+    let body = r#"<w:tbl><w:tblPr><w:tblStyle w:val="Grid"/><w:jc w:val="center"/><w:tblInd w:w="144" w:type="dxa"/><w:tblBorders><w:top w:val="double" w:sz="8" w:space="0" w:color="FF0000"/></w:tblBorders><w:shd w:val="clear" w:fill="EEEEEE"/><w:tblCellMar><w:left w:w="72" w:type="dxa"/></w:tblCellMar><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:val="500" w:hRule="exact"/><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:tcBorders><w:bottom w:val="single" w:sz="4" w:color="00FF00"/></w:tcBorders><w:shd w:val="clear" w:fill="112233"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="40" w:type="dxa"/></w:tcMar></w:tcPr><w:p/></w:tc></w:tr></w:tbl>"#;
+    let doc = read(&Docx::new(body).build()).unwrap();
+    let Some(Block::Table(table)) = doc.blocks().next() else {
+        panic!()
+    };
+    let p = &table.properties;
+    assert_eq!(p.style_id.as_deref(), Some("Grid"));
+    assert_eq!(p.justification, Some(Justification::Center));
+    assert_eq!(p.indent, Some(144));
+    let top = p.borders.unwrap().top.unwrap();
+    assert_eq!(top.style, BorderStyle::Double);
+    assert_eq!(top.size, 8);
+    assert_eq!(top.color, Some(Color(255, 0, 0)));
+    assert_eq!(p.shading.unwrap().fill, Some(Color(0xEE, 0xEE, 0xEE)));
+    assert_eq!(p.cell_margins.unwrap()[1], 72);
+    assert!(p.fixed_layout);
+    let row = &table.rows[0].properties;
+    assert_eq!(
+        (row.height, row.height_exact, row.cant_split),
+        (Some(500), true, true)
+    );
+    let cell = &table.rows[0].cells[0].properties;
+    assert_eq!(cell.width, Some(4000));
+    assert_eq!(
+        cell.borders.unwrap().bottom.unwrap().color,
+        Some(Color(0, 255, 0))
+    );
+    assert_eq!(cell.shading.unwrap().fill, Some(Color(0x11, 0x22, 0x33)));
+    assert_eq!(cell.vertical_align, Some(VerticalAlign::Center));
+    assert_eq!(cell.margins.unwrap()[0], 40);
+}
+
+/// ECMA-376 Part 1 §17.6.3: explicit column widths; §17.10.2 and §17.10.3:
+/// footer references resolve to footer parts; §17.10.1: even and odd
+/// headers come from the settings part.
+/// ECMA-376 Part 1 §17.6.3, §17.10.2, §17.10.3, §17.10.1, §17.15.1, §11.3.6, §11.3.3.
+#[test]
+fn columns_footers_and_even_odd_settings() {
+    let body = r#"<w:p/><w:sectPr><w:footerReference w:type="even" r:id="rIdF"/><w:cols w:num="2" w:equalWidth="0"><w:col w:w="3000" w:space="400"/><w:col w:w="5000"/></w:cols></w:sectPr>"#;
+    let settings = Docx::wrap(
+        "w:settings",
+        r#"<w:evenAndOddHeaders/><w:defaultTabStop w:val="360"/>"#,
+    );
+    let doc = read(
+        &Docx::new(body)
+            .footer(
+                "rIdF",
+                "footer1.xml",
+                r#"<w:p><w:r><w:t>foot</w:t></w:r></w:p>"#,
+            )
+            .part(
+                "rIdS",
+                "settings",
+                "settings.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
+                settings.as_bytes(),
+            )
+            .build(),
+    )
+    .unwrap();
+    let section = &doc.sections[0].properties;
+    assert_eq!(section.columns.widths, [(3000, 400), (5000, 0)]);
+    assert_eq!(section.footers.even.as_deref(), Some("rIdF"));
+    let footer = doc.header_footer("rIdF").unwrap();
+    assert_eq!(footer.kind, HeaderFooterKind::Footer);
+    assert!(doc.settings.even_and_odd_headers);
+    assert_eq!(doc.settings.default_tab_stop, 360);
+}
+
+/// ECMA-376 Part 1 §17.13.6: bookmark starts and ends keep their ids and
+/// names.
+#[test]
+fn bookmarks() {
+    let body = r#"<w:p><w:bookmarkStart w:id="3" w:name="intro"/><w:r><w:t>x</w:t></w:r><w:bookmarkEnd w:id="3"/></w:p>"#;
+    let doc = read(&Docx::new(body).build()).unwrap();
+    let p = paragraphs(&doc)[0];
+    assert_eq!(
+        p.inlines[0],
+        Inline::BookmarkStart {
+            id: 3,
+            name: "intro".into()
+        }
+    );
+    assert_eq!(p.inlines[2], Inline::BookmarkEnd { id: 3 });
+}
+
+/// ECMA-376 Part 2 §6.2.2.3 and §7.3.5: part names compare
+/// case-insensitively, so a relationship to `/word/document.xml` finds the
+/// ZIP item `WORD/Document.XML`; §7.2.3.5 and §6.2.3: its media type comes
+/// from the `Default` element for its extension; §6.5.3: the package
+/// relationship names it.
+/// ECMA-376 Part 2 §6.2.2, §6.2.3, §6.5.3, §7.2.3, §7.3.5, §7.2.5, §7.3.2, §7.3.3, §7.3.7; ECMA-376 Part 1 §11.3.10.
+#[test]
+fn part_names_compare_case_insensitively() {
+    let types = r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
+    let rels = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="/word/document.xml"/></Relationships>"#;
+    let document = Docx::wrap(
+        "w:document",
+        r#"<w:body><w:p><w:r><w:t>found</w:t></w:r></w:p></w:body>"#,
+    );
+    let data = docboss_testkit::ZipWriter::new()
+        .stored("[Content_Types].xml", types.as_bytes())
+        .stored("_rels/.rels", rels.as_bytes())
+        .deflated("WORD/Document.XML", document.as_bytes())
+        .finish();
+    let doc = read(&data).unwrap();
+    assert_eq!(plain_text(&doc), "found\n");
 }

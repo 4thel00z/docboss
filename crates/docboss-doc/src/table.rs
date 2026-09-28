@@ -1,5 +1,6 @@
 //! Table row properties from a table terminating paragraph's grpprl
 //! ([MS-DOC] §2.6.3, §2.4.3 Overview of Tables).
+//! [MS-DOC] §2.6.3, §2.9.321, §2.9.313, §2.9.317.
 
 use docboss_model::{
     Borders, Justification, Shading, TableCellProperties, TableProperties, TableRowProperties,

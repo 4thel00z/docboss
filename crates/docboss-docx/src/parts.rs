@@ -13,7 +13,9 @@ use crate::package::{Package, Relationships};
 use crate::props::{justification, paragraph_properties, run_properties, table_properties, Theme};
 use crate::xml::{attr, children, int_attr, on_off, root, twips_attr, u32_attr, val};
 
-/// `w:styles` (ECMA-376 Part 1 §17.7).
+/// `w:styles` (ECMA-376 Part 1 §17.7): document defaults and the paragraph,
+/// character, table and numbering styles.
+/// ECMA-376 Part 1 §17.7.5, §17.7.4, §17.7.8, §17.7.9, §17.7.6, §17.7.7.
 pub fn styles(text: &str, theme: &Theme) -> Styles {
     let mut reader = Reader::new(text);
     let mut default_paragraph = ParagraphProperties::default();
@@ -66,6 +68,7 @@ pub fn styles(text: &str, theme: &Theme) -> Styles {
     Styles::new(default_paragraph, default_run, list)
 }
 
+/// An `ST_NumberFormat` value (ECMA-376 Part 1 §17.18.59) as a model format.
 fn number_format(value: &str) -> NumberFormat {
     match value {
         "decimal" => NumberFormat::Decimal,
@@ -98,6 +101,10 @@ fn bullet_text(text: &str) -> String {
         .collect()
 }
 
+/// `w:lvl` (ECMA-376 Part 1 §17.9.6): start, format, label text,
+/// justification, restart level, legal numbering and the level's paragraph
+/// and run properties.
+/// ECMA-376 Part 1 §17.9.25, §17.9.17, §17.9.11, §17.9.7, §17.9.10, §17.9.4, §17.9.22, §17.9.24.
 fn level(reader: &mut Reader<'_>, index: u8, theme: &Theme) -> Level {
     let mut level = Level {
         level: index,
@@ -130,7 +137,9 @@ fn level_index(e: &docboss_xml::Element<'_>) -> u8 {
 }
 
 /// `w:numbering` (ECMA-376 Part 1 §17.9), with the style links of
-/// abstract definitions that borrow their levels from a numbering style.
+/// abstract definitions that borrow their levels from a numbering style:
+/// abstract definitions, instances, level overrides and start overrides.
+/// ECMA-376 Part 1 §17.9.16, §17.9.1, §17.9.2, §17.9.15, §17.9.8, §17.9.5, §17.9.26.
 pub fn numbering(text: &str, theme: &Theme) -> (Numbering, Vec<(i64, String)>) {
     let mut reader = Reader::new(text);
     let mut numbering = Numbering::default();
@@ -208,7 +217,8 @@ pub fn resolve_style_links(numbering: &mut Numbering, links: &[(i64, String)], s
     }
 }
 
-/// `w:settings` (ECMA-376 Part 1 §17.15).
+/// `w:settings` (ECMA-376 Part 1 §17.15): the default tab stop and whether
+/// even pages use their own headers (ECMA-376 Part 1 §17.10.1).
 pub fn settings(text: &str) -> Settings {
     let mut reader = Reader::new(text);
     let mut settings = Settings::default();
@@ -263,6 +273,7 @@ pub fn theme(text: &str) -> Theme {
 
 /// Core properties (ECMA-376 Part 2 §8.3) and extended properties
 /// (ECMA-376 Part 1 §22.2) merged into one set.
+/// ECMA-376 Part 2 §8.2, §8.3.3, §8.3.4; ECMA-376 Part 1 §22.2.2, §15.2.12.
 pub fn properties(core: Option<&str>, app: Option<&str>) -> Metadata {
     let mut metadata = Metadata::default();
     if let Some(text) = core {
@@ -331,6 +342,7 @@ pub fn deobfuscate(data: &mut [u8], key: &str) -> bool {
     true
 }
 
+/// ECMA-376 Part 1 §17.8.3, §15.2.13, §11.3.5.
 /// `w:fonts` (ECMA-376 Part 1 §17.8.3) with embedded fonts loaded through
 /// the font table's relationships.
 pub fn fonts(

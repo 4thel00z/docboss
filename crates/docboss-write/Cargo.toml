@@ -12,6 +12,7 @@ keywords.workspace = true
 
 [dependencies]
 docboss-model = { workspace = true }
+docboss-zip = { workspace = true }
 flate2 = { workspace = true }
 thiserror = { workspace = true }
 pulldown-cmark = { version = "0.13", default-features = false }

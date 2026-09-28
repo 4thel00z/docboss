@@ -19,6 +19,7 @@ use crate::{crypt, fkp, lists, sttb, styles, Error, Result};
 
 /// The start CP of each document part ([MS-DOC] §2.3): main text, then
 /// footnotes, headers, comments, endnotes, text boxes, header text boxes.
+/// [MS-DOC] §2.3.1, §2.3.2, §2.3.3, §2.3.4, §2.3.5, §2.3.6, §2.3.7, §2.2.1.
 struct Parts {
     main: u32,
     footnotes: u32,
@@ -61,6 +62,7 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
     }
     let file = CompoundFile::parse(bytes)?;
     let mut diagnostics = Vec::new();
+    // [MS-DOC] §2.1, §2.1.1, §2.1.3, §2.1.6, §2.1.7: the WordDocument, table and Data streams and the summary streams.
     let word_stream = file
         .open_stream("WordDocument")
         .map_err(|_| Error::NotWord("no WordDocument stream"))?;
@@ -243,6 +245,7 @@ fn assemble(
 /// Footnote or endnote references and text ranges ([MS-DOC] §2.8.19,
 /// §2.8.20, §2.8.16, §2.8.17). Registers each reference CP and returns
 /// `(id, start, end)` for each note body.
+/// [MS-DOC] §2.8.19, §2.8.20, §2.8.16, §2.8.17, §2.3.2, §2.3.5.
 fn notes(
     context: &mut Context<'_>,
     table: &[u8],
@@ -272,6 +275,7 @@ fn notes(
 
 /// Comment references ([MS-DOC] §2.8.7 PlcfandRef with ATRDPre10) and the
 /// ranges their bookmarks mark (SttbfAtnBkmk, PlcfAtnBkf, PlcfAtnBkl).
+/// [MS-DOC] §2.8.7, §2.8.8, §2.9.7, §2.9.277, §2.3.4, §2.8.1, §2.8.3.
 fn comment_references(
     context: &mut Context<'_>,
     table: &[u8],
@@ -340,6 +344,7 @@ fn comments(context: &Context<'_>, table: &[u8], fib: &Fib, base: u32) -> Vec<Co
 }
 
 /// Bookmarks ([MS-DOC] §2.8.10 Plcfbkf, §2.8.12 Plcfbkl, SttbfBkmk).
+/// [MS-DOC] §2.8.10, §2.8.12, §2.9.279, §2.9.9, §2.9.11.
 fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
     let names = sttb::read(table_range(table, fib, slot::STTBF_BKMK));
     let (starts, bkfs) = plc(table_range(table, fib, slot::PLCF_BKF), 4);
@@ -366,6 +371,7 @@ fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
 /// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent: the
 /// drawing group, then one OfficeArtWordDrawing per story, each a dgglbl
 /// byte and a drawing container, §2.9.172).
+/// [MS-DOC] §2.8.27, §2.9.253, §2.9.171, §2.9.172.
 fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts: &Parts) {
     let main = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
     let headers = plc(table_range(table, fib, slot::PLC_SPA_HDR), 26);
@@ -397,6 +403,7 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
     }
     let stories = [
         (slot::PLCFTXBX_TXT, parts.textboxes),
+        // [MS-DOC] §2.8.32, §2.8.23: the text box and header text box stories.
         (slot::PLCF_HDRTXBX_TXT, parts.header_textboxes),
     ];
     for (which, base) in stories {
@@ -477,6 +484,7 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
 
 /// Sections ([MS-DOC] §2.8.26 PlcfSed, §2.9.243 Sed) and the headers and
 /// footers of each ([MS-DOC] §2.8.22 Plcfhdd).
+/// [MS-DOC] §2.8.26, §2.9.243, §2.9.245, §2.8.22.
 fn sections(
     context: &Context<'_>,
     word: &[u8],

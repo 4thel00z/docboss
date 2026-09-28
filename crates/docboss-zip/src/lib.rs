@@ -1,14 +1,17 @@
 //! A ZIP container reader over an in-memory byte slice, following the PKWARE
-//! application note (APPNOTE 6.3.10).
+//! ZIP application note, version 6.3.10.
 //!
 //! The central directory is found through the end of central directory
 //! record, including its ZIP64 forms. When that record or the directory is
 //! missing or damaged, entries are recovered by scanning for local file
 //! headers and each recovery is reported as a [`Diagnostic`]. Stored and
-//! deflated entries are read; stored ones borrow from the input.
+//! deflated entries are read; stored ones borrow from the input. The
+//! [`ZipWriter`] writes archives deterministically. Every entry's data
+//! is checked against its CRC-32 (APPNOTE §4.1.5, §4.3.8, §4.4.7).
 
 mod cp437;
 mod crc;
+pub mod write;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -17,6 +20,7 @@ use docboss_model::Diagnostic;
 use memchr::memmem;
 
 pub use crc::{crc32, crc32_update};
+pub use write::{Method, WriteOptions, ZipWriter};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -40,6 +44,10 @@ pub enum Error {
     Bomb { name: String, ratio: u64 },
     #[error("entry {0:?} fails its CRC-32 check")]
     CrcMismatch(String),
+    #[error("{0} does not fit the classic format; write with ZIP64")]
+    NeedsZip64(&'static str),
+    #[error("deflate failed: {0}")]
+    Deflate(String),
 }
 
 /// Bounds on what reading one entry may allocate.
@@ -63,7 +71,8 @@ impl Default for Limits {
     }
 }
 
-/// The compression methods of APPNOTE §4.4.5 this reader handles.
+/// The compression methods of APPNOTE §4.4.5 this reader handles: stored,
+/// and deflated (APPNOTE §5.5).
 pub const STORED: u16 = 0;
 pub const DEFLATED: u16 = 8;
 
@@ -88,6 +97,8 @@ impl Entry {
         self.name.ends_with('/')
     }
 
+    /// Whether bit 0 of the general purpose flags marks the entry encrypted
+    /// (APPNOTE §4.4.4).
     pub fn is_encrypted(&self) -> bool {
         self.flags & 1 != 0
     }
@@ -123,6 +134,8 @@ fn u64_at(data: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(bytes.try_into().ok()?))
 }
 
+/// An entry name: UTF-8 when bit 11 of the general purpose flags is set,
+/// else code page 437 (APPNOTE §4.4.4, §4.4.17).
 fn decode_name(raw: &[u8], flags: u16) -> String {
     if flags & 0x0800 != 0 {
         return String::from_utf8_lossy(raw).into_owned();
@@ -452,6 +465,7 @@ fn zip64_extra(extra: &[u8], entry: &mut Entry, raw_usize: u32, raw_csize: u32, 
 
 /// Reads the central directory (APPNOTE §4.3.12) through the end of central
 /// directory record (APPNOTE §4.3.16) and its ZIP64 forms (§4.3.14, §4.3.15).
+/// APPNOTE §4.3.6, §4.3.12, §4.3.14, §4.3.15, §4.3.16.
 fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
     let record = find_end_record(data).ok_or("no end of central directory record")?;
     let mut at =
@@ -512,7 +526,8 @@ fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
 }
 
 /// Recovers entries from local file headers (APPNOTE §4.3.7) when the
-/// central directory cannot be read.
+/// central directory cannot be read, finding the sizes of entries that defer
+/// them to a data descriptor (APPNOTE §4.3.9, §4.4.4).
 fn scan_local_headers(data: &[u8]) -> Vec<Entry> {
     let sig = LOCAL_SIG.to_le_bytes();
     let mut entries: Vec<Entry> = Vec::new();

@@ -1,5 +1,6 @@
 //! OLE property sets ([MS-OLEPS]): the `\u{5}SummaryInformation` and
 //! `\u{5}DocumentSummaryInformation` streams that carry document metadata.
+//! [MS-OLEPS] §2.21, §2.20, §2.19, §2.15, §2.5, §2.7, §2.8, §2.18.2, §2.25.1, §2.1, §2.2, §2.23.
 
 use docboss_model::{Diagnostic, Metadata};
 

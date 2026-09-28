@@ -1,4 +1,7 @@
-//! The File Information Block ([MS-DOC] §2.5).
+//! The File Information Block ([MS-DOC] §2.5): FibBase, the FibRgLw97
+//! character counts and the FibRgFcLcb97 offset pairs, sized by the csw,
+//! cslw and cbRgFcLcb counts the FIB itself states.
+//! [MS-DOC] §2.5.1, §2.5.2, §2.5.4, §2.5.5, §2.5.6, §2.5.15.
 
 use crate::bytes::{u16_at, u32_at};
 use crate::{Error, Result};
@@ -117,6 +120,7 @@ impl Fib {
         Ok(fib)
     }
 
+    /// [MS-DOC] §2.5.14: told from FibBase.nFib alone.
     /// Whether this is a Word 97 or later FIB. Word 6 and 95 files carry
     /// nFib values below 0x00C1 and an older layout.
     pub fn is_word97(&self) -> bool {

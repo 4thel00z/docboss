@@ -124,7 +124,8 @@ fn spacing(e: &Element<'_>) -> Spacing {
     }
 }
 
-/// `w:numPr` (ECMA-376 Part 1 §17.3.1.19).
+/// `w:numPr` (ECMA-376 Part 1 §17.3.1.19): the numbering instance and level
+/// (ECMA-376 Part 1 §17.9.18, §17.9.3).
 fn numbering_reference(reader: &mut Reader<'_>) -> Option<NumberingRef> {
     let mut num_id = None;
     let mut level = 0u8;
@@ -171,6 +172,7 @@ fn tabs(reader: &mut Reader<'_>) -> Vec<TabStop> {
     stops
 }
 
+/// One border (ECMA-376 Part 1 §17.3.4): style, width, spacing and color.
 fn border(e: &Element<'_>) -> Border {
     let style = match val(e).as_deref() {
         Some("nil" | "none") => BorderStyle::None,
@@ -190,7 +192,8 @@ fn border(e: &Element<'_>) -> Border {
 }
 
 /// Paragraph (`w:pBdr`), table (`w:tblBorders`) and cell (`w:tcBorders`)
-/// borders.
+/// borders, each side and the inside edges.
+/// ECMA-376 Part 1 §17.4.76, §17.4.4, §17.4.36, §17.4.13, §17.4.22, §17.4.24, §17.4.74, §17.4.3, §17.4.33, §17.4.12, §17.4.23, §17.4.25.
 pub fn borders(reader: &mut Reader<'_>) -> Borders {
     let mut borders = Borders::default();
     children(reader, |_, e| {
@@ -316,6 +319,8 @@ fn width(e: &Element<'_>) -> (Option<i32>, Option<i32>) {
     }
 }
 
+/// Cell margins: top, leading, bottom and trailing.
+/// ECMA-376 Part 1 §17.4.75, §17.4.34, §17.4.5, §17.4.11.
 fn margins(reader: &mut Reader<'_>) -> [i32; 4] {
     let mut out = [0, 108, 0, 108];
     children(reader, |_, e| {
@@ -334,7 +339,9 @@ fn margins(reader: &mut Reader<'_>) -> [i32; 4] {
     out
 }
 
-/// `w:tblPr` (ECMA-376 Part 1 §17.4.59).
+/// `w:tblPr` (ECMA-376 Part 1 §17.4.59): style, width, alignment, indent,
+/// borders, shading, default cell margins and layout.
+/// ECMA-376 Part 1 §17.4.62, §17.4.63, §17.4.28, §17.4.50, §17.4.38, §17.4.31, §17.4.42, §17.4.52.
 pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
     let mut p = TableProperties::default();
     children(reader, |reader, e| match e.local {
@@ -351,7 +358,8 @@ pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
     p
 }
 
-/// `w:trPr` (ECMA-376 Part 1 §17.4.81).
+/// `w:trPr` (ECMA-376 Part 1 §17.4.81): height, repeated header rows and
+/// rows that cannot split (ECMA-376 Part 1 §17.4.80, §17.4.49, §17.4.6).
 pub fn row_properties(reader: &mut Reader<'_>) -> TableRowProperties {
     let mut p = TableRowProperties::default();
     children(reader, |_, e| match e.local {
@@ -366,7 +374,9 @@ pub fn row_properties(reader: &mut Reader<'_>) -> TableRowProperties {
     p
 }
 
-/// `w:tcPr` (ECMA-376 Part 1 §17.4.69).
+/// `w:tcPr` (ECMA-376 Part 1 §17.4.69): width, grid span, vertical merge,
+/// borders, shading, vertical alignment and margins.
+/// ECMA-376 Part 1 §17.4.71, §17.4.17, §17.4.84, §17.4.66, §17.4.32, §17.4.83, §17.4.68.
 pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
     let mut p = TableCellProperties {
         grid_span: 1,
@@ -397,7 +407,10 @@ pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
     p
 }
 
-/// `w:sectPr` (ECMA-376 Part 1 §17.6.18).
+/// `w:sectPr` (ECMA-376 Part 1 §17.6.18): page size and margins, columns,
+/// section type, page numbering, the first-page switch and the header and
+/// footer references.
+/// ECMA-376 Part 1 §17.6.13, §17.6.11, §17.6.4, §17.6.3, §17.6.22, §17.6.12, §17.10.6, §17.10.5, §17.10.2.
 pub fn section_properties(reader: &mut Reader<'_>) -> SectionProperties {
     let mut p = SectionProperties::default();
     children(reader, |reader, e| {

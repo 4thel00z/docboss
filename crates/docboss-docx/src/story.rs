@@ -284,6 +284,7 @@ impl DrawingInfo {
     }
 }
 
+/// ECMA-376 Part 3 §7.5, §7.6, §7.7, §9.3.
 /// Picks the branch of `mc:AlternateContent` (ECMA-376 Part 3 §9.3, §7.5) to
 /// read: the first `mc:Choice` whose required namespaces this reader
 /// understands, else `mc:Fallback`. Calls `f` with the chosen branch's start.
@@ -435,6 +436,10 @@ impl<'p> StoryParser<'p> {
         })
     }
 
+    /// Paragraph content: runs, hyperlinks, simple fields, tracked changes,
+    /// bookmarks, comment ranges, and the content of structured document
+    /// tags, smart tags and custom XML elements with their properties dropped.
+    /// ECMA-376 Part 1 §17.16.22, §17.16.19, §17.13.5, §17.13.6, §17.13.4, §17.5.2, §17.5.1.
     fn inline<'a>(&mut self, reader: &mut Reader<'a>, e: &Element<'a>, pieces: &mut Vec<Piece>) {
         if e.ns == Ns::MC && e.local == "AlternateContent" {
             alternate_content(reader, |reader| {
@@ -530,6 +535,10 @@ impl<'p> StoryParser<'p> {
         })));
     }
 
+    /// Run content (ECMA-376 Part 1 §17.3.3): text, field characters and
+    /// codes, tabs, breaks, symbols, hyphens, note and comment references and
+    /// marks, DrawingML and VML pictures.
+    /// ECMA-376 Part 1 §17.16.18, §17.16.23, §17.16.13, §17.11.14, §17.11.7, §17.11.13, §17.11.6, §17.13.4.
     fn run_content<'a>(
         &mut self,
         reader: &mut Reader<'a>,
@@ -649,7 +658,10 @@ impl<'p> StoryParser<'p> {
     }
 
     /// The DrawingML picture inside `w:drawing` (ECMA-376 Part 1 §17.3.3.9,
-    /// §20.4).
+    /// §20.4): inline and anchored objects, their extent, non-visual
+    /// properties, position offsets and text box content.
+    /// ECMA-376 Part 1 §20.4.2.8, §20.4.2.3, §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38.
+    /// ECMA-376 Part 1 §20.4.2.42, §20.4.2.37: text boxes inside WordprocessingML shapes.
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
@@ -769,7 +781,8 @@ impl<'p> StoryParser<'p> {
         });
     }
 
-    /// `w:tbl` (ECMA-376 Part 1 §17.4.37).
+    /// `w:tbl` (ECMA-376 Part 1 §17.4.37) with its grid of column widths
+    /// (ECMA-376 Part 1 §17.4.48, §17.4.16).
     fn table(&mut self, reader: &mut Reader<'_>) -> Table {
         let mut table = Table::default();
         children(reader, |reader, e| {
@@ -809,6 +822,7 @@ impl<'p> StoryParser<'p> {
         row
     }
 
+    /// `w:tc` (ECMA-376 Part 1 §17.4.65) cells of a row.
     fn cells<'a>(&mut self, reader: &mut Reader<'a>, e: &Element<'a>, cells: &mut Vec<TableCell>) {
         match e.local {
             "tc" => {

@@ -1,5 +1,6 @@
-//! Relationships and content types of the package (ECMA-376 Part 2 §9.3
-//! relationships, §10.1 content types).
+//! ECMA-376 Part 2 §7.3.4, §7.3.7: part names map to ZIP item names without the leading slash, and the content types to `[Content_Types].xml`.
+//! Relationships and content types of the package (ECMA-376 Part 2 §6.5
+//! relationships, §7.2.3 content types).
 
 use crate::xml::Xml;
 

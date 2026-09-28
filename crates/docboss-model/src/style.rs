@@ -92,7 +92,7 @@ impl Styles {
     }
 
     /// A style and its `based_on` ancestors, root first. Cycles and chains
-    /// longer than 32 styles are cut.
+    /// longer than 32 styles are cut (ECMA-376 Part 1 §17.7.1).
     pub fn chain(&self, id: &str) -> Vec<&Style> {
         let mut chain: Vec<&Style> = Vec::new();
         let mut next = self.get(id);
@@ -118,7 +118,8 @@ impl Styles {
     }
 
     /// The effective paragraph properties: document defaults, the paragraph
-    /// style chain, the list level's properties, then direct formatting.
+    /// style chain, the list level's properties, then direct formatting
+    /// (ECMA-376 Part 1 §17.7.2).
     pub fn resolve_paragraph(
         &self,
         paragraph: &Paragraph,

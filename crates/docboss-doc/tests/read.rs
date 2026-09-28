@@ -49,6 +49,7 @@ fn runs(paragraph: &Paragraph) -> Vec<&docboss_model::Run> {
 
 /// [MS-DOC] §2.4.1 retrieving text and §2.4.2 paragraph boundaries: the
 /// text of paragraphs outside tables matches LibreOffice's own export.
+/// [MS-DOC] §2.1.1, §2.5.14, §2.2.2, §2.9.214, §2.4.1, §2.4.2, §2.9.38, §2.8.35, §2.9.177, §2.9.178, §2.9.73, §2.5.1, §2.5.2, §2.5.4, §2.5.5, §2.5.6, §2.5.15, §2.3.1, §2.2.1.
 #[test]
 fn text_matches_libreoffice() {
     for name in ["text", "image", "sections"] {
@@ -57,6 +58,7 @@ fn text_matches_libreoffice() {
 }
 
 /// [MS-OLEPS] §2.21 and [MS-DOC] §2.5.1: metadata and format.
+/// [MS-OLEPS] §2.20, §2.15; [MS-DOC] §2.1.6.
 #[test]
 fn metadata_and_format() {
     let document = fixture("text");
@@ -72,6 +74,7 @@ fn metadata_and_format() {
 
 /// [MS-DOC] §2.4.6.2 direct character formatting through CHPX FKPs and
 /// §2.6.1 character sprms; §2.4.6.5 style formatting through the STSH.
+/// [MS-DOC] §2.4.6, §2.8.5, §2.8.6, §2.9.33, §2.9.174, §2.9.206, §2.9.207, §2.6.1, §2.6.2, §2.2.5, §2.9.271, §2.9.272, §2.9.258, §2.9.260, §2.9.259, §2.9.336, §2.9.338.
 #[test]
 fn character_and_paragraph_formatting() {
     let document = fixture("text");
@@ -124,6 +127,7 @@ fn character_and_paragraph_formatting() {
 
 /// [MS-DOC] §2.4.6.3 list formatting: PlfLst levels and PlfLfo instances
 /// give the labels LibreOffice shows.
+/// [MS-DOC] §2.9.201, §2.9.200, §2.9.147, §2.9.149, §2.9.150, §2.9.131; [MS-OSHARED] §2.2.1.3.
 #[test]
 fn list_labels() {
     let document = fixture("lists");
@@ -138,6 +142,7 @@ fn list_labels() {
 /// [MS-DOC] §2.4.3 to §2.4.5 tables, §2.9.321 TDefTableOperand and
 /// §2.9.317 TCGRF merges: horizontal spans, vertical merges and a nested
 /// table.
+/// [MS-DOC] §2.4.3, §2.4.4, §2.4.5, §2.6.3, §2.9.321, §2.9.313, §2.9.317.
 #[test]
 fn tables_with_merges_and_nesting() {
     let document = fixture("tables");
@@ -168,6 +173,7 @@ fn tables_with_merges_and_nesting() {
 /// [MS-DOC] §2.3.2, §2.3.4, §2.3.5: footnote, endnote and comment
 /// references in the main text and their bodies; §2.9.90 HYPERLINK fields;
 /// §2.8.10 bookmarks.
+/// [MS-DOC] §2.3.2, §2.3.4, §2.3.5, §2.8.19, §2.8.20, §2.8.16, §2.8.17, §2.8.7, §2.8.8, §2.9.7, §2.9.353, §2.9.88, §2.9.89, §2.9.90, §2.8.10, §2.8.12, §2.9.279, §2.9.9, §2.9.11, §2.9.277.
 #[test]
 fn notes_comments_fields_bookmarks() {
     let document = fixture("notes");
@@ -214,6 +220,7 @@ fn notes_comments_fields_bookmarks() {
 
 /// [MS-DOC] §2.9.192 PICFAndOfficeArtData and [MS-ODRAW] §2.2.24 PNG BLIP:
 /// the inline picture's bytes and displayed size.
+/// [MS-DOC] §2.9.192, §2.9.190, §2.1.3.
 #[test]
 fn inline_picture() {
     let document = fixture("image");
@@ -234,6 +241,7 @@ fn inline_picture() {
 }
 
 /// [MS-DOC] §2.8.26 PlcfSed and §2.6.4 section sprms; §2.3.3 headers.
+/// [MS-DOC] §2.8.26, §2.9.243, §2.9.245, §2.6.4, §2.8.22, §2.3.3.
 #[test]
 fn sections_and_headers() {
     let document = fixture("sections");
@@ -306,6 +314,7 @@ fn encrypted_documents() {
 
 /// [MS-DOC] §2.8.27 PlcfSpa anchors, [MS-ODRAW] §2.2.32 BLIP store and
 /// [MS-DOC] §2.8.32 PlcftxbxTxt: a floating picture and a text box.
+/// [MS-DOC] §2.8.27, §2.9.253, §2.9.171, §2.9.172, §2.8.32, §2.3.6.
 #[test]
 fn floating_picture_and_text_box() {
     let document = fixture("floating");
@@ -339,5 +348,26 @@ fn floating_picture_and_text_box() {
         document.diagnostics.is_empty(),
         "{:?}",
         document.diagnostics
+    );
+}
+
+/// [MS-DOC] §2.9.286, §2.9.82, §2.2.4: the font table names the faces the
+/// document uses.
+#[test]
+fn font_table() {
+    let document = fixture("text");
+    assert!(!document.fonts.is_empty());
+    assert!(
+        document.fonts.iter().all(|font| !font.name.is_empty()),
+        "{:?}",
+        document.fonts
+    );
+    assert!(
+        document
+            .fonts
+            .iter()
+            .any(|font| font.name == "Times New Roman"),
+        "{:?}",
+        document.fonts.iter().map(|f| &f.name).collect::<Vec<_>>()
     );
 }
