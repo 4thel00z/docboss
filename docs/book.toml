@@ -1,0 +1,15 @@
+[book]
+title = "docboss"
+description = "docboss documentation: extract text, Markdown and HTML from DOCX and DOC files, render pages to PNG, write DOCX, from the CLI, Python and Rust."
+authors = ["4thel00z"]
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "light"
+git-repository-url = "https://github.com/4thel00z/docboss"
+edit-url-template = "https://github.com/4thel00z/docboss/edit/main/docs/{path}"
+
+[output.html.playground]
+runnable = false

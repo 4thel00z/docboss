@@ -1,0 +1,1418 @@
+{
+  "summary": {
+    "files": 90,
+    "scored": 88,
+    "mean_ssim": 0.9185277522145934,
+    "page_count_matches": 83
+  },
+  "results": [
+    {
+      "file": "000-090716_Studentische_Arbeit_VWS.docx",
+      "reference_pages": 6,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.9667833507139211,
+      "mad": 1.2490814636885008,
+      "per_page": [
+        {
+          "ssim": 0.9435243501620596,
+          "mad": 1.7177766091263778
+        },
+        {
+          "ssim": 0.9542494105071393,
+          "mad": 1.7786309722626907
+        },
+        {
+          "ssim": 0.97506214693655,
+          "mad": 1.3103480133321015
+        },
+        {
+          "ssim": 0.9764824187061681,
+          "mad": 0.9091946017780873
+        },
+        {
+          "ssim": 0.9845984272576883,
+          "mad": 0.5294571219432462
+        }
+      ]
+    },
+    {
+      "file": "001-61787.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.6828690114947139,
+      "mad": 16.27961715924679,
+      "per_page": [
+        {
+          "ssim": 0.5503952988691098,
+          "mad": 22.857944000645524
+        },
+        {
+          "ssim": 0.815342724120318,
+          "mad": 9.701290317848052
+        }
+      ]
+    },
+    {
+      "file": "002-EmbeddedExcelChart.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9920516985073404,
+      "mad": 0.2380449373913426,
+      "per_page": [
+        {
+          "ssim": 0.9920516985073404,
+          "mad": 0.2380449373913426
+        }
+      ]
+    },
+    {
+      "file": "003-HeaderFooterUnicode.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9487333280234719,
+      "mad": 1.895479852996193,
+      "per_page": [
+        {
+          "ssim": 0.9253159643993625,
+          "mad": 2.867883629321538
+        },
+        {
+          "ssim": 0.9721506916475813,
+          "mad": 0.9230760766708479
+        }
+      ]
+    },
+    {
+      "file": "004-TCTagMisMatch.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9860119329572805,
+      "mad": 0.36698812476459175,
+      "per_page": [
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        },
+        {
+          "ssim": 0.9720238659145611,
+          "mad": 0.7339762495291835
+        }
+      ]
+    },
+    {
+      "file": "005-Unsupportedtextfields.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.8965095208212472,
+      "mad": 4.037421915530193,
+      "per_page": [
+        {
+          "ssim": 0.8640841114805174,
+          "mad": 5.565253388102024
+        },
+        {
+          "ssim": 0.9289349301619769,
+          "mad": 2.509590442958362
+        }
+      ]
+    },
+    {
+      "file": "006-blk-paras-and-tables.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8822821137574179,
+      "mad": 3.4779934420457295,
+      "per_page": [
+        {
+          "ssim": 0.8822821137574179,
+          "mad": 3.4779934420457295
+        }
+      ]
+    },
+    {
+      "file": "007-calendar5.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8566978186072772,
+      "mad": 3.4134956224642323,
+      "per_page": [
+        {
+          "ssim": 0.8566978186072772,
+          "mad": 3.4134956224642323
+        }
+      ]
+    },
+    {
+      "file": "008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx",
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpmpgt9q35', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/docs-fid/008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx']' returned non-zero exit status 1."
+    },
+    {
+      "file": "009-default-sect-break-cols.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.97769701151958,
+      "mad": 0.6751868723546284,
+      "per_page": [
+        {
+          "ssim": 0.97769701151958,
+          "mad": 0.6751868723546284
+        }
+      ]
+    },
+    {
+      "file": "010-doc-coreprops.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 1.0,
+      "mad": 0.0,
+      "per_page": [
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        }
+      ]
+    },
+    {
+      "file": "011-fdo38244.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9704797691007095,
+      "mad": 1.250133873227555,
+      "per_page": [
+        {
+          "ssim": 0.9704797691007095,
+          "mad": 1.250133873227555
+        }
+      ]
+    },
+    {
+      "file": "012-fdo65718.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8859950277102729,
+      "mad": 5.695297198565172,
+      "per_page": [
+        {
+          "ssim": 0.8859950277102729,
+          "mad": 5.695297198565172
+        }
+      ]
+    },
+    {
+      "file": "013-fdo72560c.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9677381942444131,
+      "mad": 0.8180938145063705,
+      "per_page": [
+        {
+          "ssim": 0.9677381942444131,
+          "mad": 0.8180938145063705
+        }
+      ]
+    },
+    {
+      "file": "014-fdo76316.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8339806350171625,
+      "mad": 6.04605239027897,
+      "per_page": [
+        {
+          "ssim": 0.8339806350171625,
+          "mad": 6.04605239027897
+        }
+      ]
+    },
+    {
+      "file": "015-fdo78474.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9383700766696838,
+      "mad": 3.6940208182038248,
+      "per_page": [
+        {
+          "ssim": 0.9383700766696838,
+          "mad": 3.6940208182038248
+        }
+      ]
+    },
+    {
+      "file": "016-fdo79969_xlsb.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9217306875400347,
+      "mad": 1.922767984859488,
+      "per_page": [
+        {
+          "ssim": 0.9217306875400347,
+          "mad": 1.922767984859488
+        }
+      ]
+    },
+    {
+      "file": "017-fdo85542.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9998892629702029,
+      "mad": 0.019009998312830557,
+      "per_page": [
+        {
+          "ssim": 0.9998892629702029,
+          "mad": 0.019009998312830557
+        }
+      ]
+    },
+    {
+      "file": "018-groupshape-fontname.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9023837136410133,
+      "mad": 2.202298295111326,
+      "per_page": [
+        {
+          "ssim": 0.9023837136410133,
+          "mad": 2.202298295111326
+        }
+      ]
+    },
+    {
+      "file": "019-image_data.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9982504388705385,
+      "mad": 0.09904912836767037,
+      "per_page": [
+        {
+          "ssim": 0.9982504388705385,
+          "mad": 0.09904912836767037
+        }
+      ]
+    },
+    {
+      "file": "020-math-color.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9951691726844059,
+      "mad": 0.12772973012624428,
+      "per_page": [
+        {
+          "ssim": 0.9951691726844059,
+          "mad": 0.12772973012624428
+        }
+      ]
+    },
+    {
+      "file": "021-n592908-picture.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8113875742307004,
+      "mad": 10.6214468578303,
+      "per_page": [
+        {
+          "ssim": 0.8113875742307004,
+          "mad": 10.6214468578303
+        }
+      ]
+    },
+    {
+      "file": "022-n779630.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9888817926039896,
+      "mad": 0.43490460157126826,
+      "per_page": [
+        {
+          "ssim": 0.9888817926039896,
+          "mad": 0.43490460157126826
+        }
+      ]
+    },
+    {
+      "file": "023-num-having-numbering-part.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9998899351069204,
+      "mad": 0.029866566903603942,
+      "per_page": [
+        {
+          "ssim": 0.9998899351069204,
+          "mad": 0.029866566903603942
+        }
+      ]
+    },
+    {
+      "file": "024-paragraph-mark.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9838944906250096,
+      "mad": 0.6183659397167023,
+      "per_page": [
+        {
+          "ssim": 0.9838944906250096,
+          "mad": 0.6183659397167023
+        }
+      ]
+    },
+    {
+      "file": "025-rtl.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8693184246016704,
+      "mad": 5.946316260757713,
+      "per_page": [
+        {
+          "ssim": 0.8693184246016704,
+          "mad": 5.946316260757713
+        }
+      ]
+    },
+    {
+      "file": "026-shapes-with-text.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8716482666736645,
+      "mad": 13.371338658920358,
+      "per_page": [
+        {
+          "ssim": 0.8716482666736645,
+          "mad": 13.371338658920358
+        }
+      ]
+    },
+    {
+      "file": "027-table-floating-margins.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9030991137844778,
+      "mad": 3.120994506548791,
+      "per_page": [
+        {
+          "ssim": 0.9030991137844778,
+          "mad": 3.120994506548791
+        }
+      ]
+    },
+    {
+      "file": "028-tbl-col-props.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9951395873006921,
+      "mad": 0.12639833337001094,
+      "per_page": [
+        {
+          "ssim": 0.9951395873006921,
+          "mad": 0.12639833337001094
+        }
+      ]
+    },
+    {
+      "file": "029-tdf104061_tableSectionColumns.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.3261900279706435,
+      "mad": 33.76384022798178,
+      "per_page": [
+        {
+          "ssim": 0.291346515438785,
+          "mad": 38.490679610270554
+        },
+        {
+          "ssim": 0.361033540502502,
+          "mad": 29.037000845693008
+        }
+      ]
+    },
+    {
+      "file": "030-tdf106132.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9167615954907922,
+      "mad": 23.05550304520549,
+      "per_page": [
+        {
+          "ssim": 0.9167615954907922,
+          "mad": 23.05550304520549
+        }
+      ]
+    },
+    {
+      "file": "031-tdf108714.docx",
+      "reference_pages": 4,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9913044213609061,
+      "mad": 0.2806496335908101,
+      "per_page": [
+        {
+          "ssim": 0.9913044213609061,
+          "mad": 0.2806496335908101
+        }
+      ]
+    },
+    {
+      "file": "032-tdf113946.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9996947407264479,
+      "mad": 0.002114232515830094,
+      "per_page": [
+        {
+          "ssim": 0.9996947407264479,
+          "mad": 0.002114232515830094
+        }
+      ]
+    },
+    {
+      "file": "033-tdf117504_numberingIndent.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.984934321590518,
+      "mad": 0.519860918553729,
+      "per_page": [
+        {
+          "ssim": 0.984934321590518,
+          "mad": 0.519860918553729
+        }
+      ]
+    },
+    {
+      "file": "034-tdf120412_400PercentSubscript.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.986414507771062,
+      "mad": 0.5506868816285857,
+      "per_page": [
+        {
+          "ssim": 0.986414507771062,
+          "mad": 0.5506868816285857
+        }
+      ]
+    },
+    {
+      "file": "035-tdf122594.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.990999720964576,
+      "mad": 0.2522012891488349,
+      "per_page": [
+        {
+          "ssim": 0.990999720964576,
+          "mad": 0.2522012891488349
+        }
+      ]
+    },
+    {
+      "file": "036-tdf123757.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9680112958128773,
+      "mad": 3.622959499122327,
+      "per_page": [
+        {
+          "ssim": 0.9680112958128773,
+          "mad": 3.622959499122327
+        }
+      ]
+    },
+    {
+      "file": "037-tdf125894.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9777298863956003,
+      "mad": 0.6700091675964552,
+      "per_page": [
+        {
+          "ssim": 0.9777298863956003,
+          "mad": 0.6700091675964552
+        }
+      ]
+    },
+    {
+      "file": "038-tdf128752.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.953197011311193,
+      "mad": 0.9529133014971795,
+      "per_page": [
+        {
+          "ssim": 0.953197011311193,
+          "mad": 0.9529133014971795
+        }
+      ]
+    },
+    {
+      "file": "039-tdf131288.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8986960610998743,
+      "mad": 6.208989219190835,
+      "per_page": [
+        {
+          "ssim": 0.8986960610998743,
+          "mad": 6.208989219190835
+        }
+      ]
+    },
+    {
+      "file": "040-tdf133035.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9930595542876055,
+      "mad": 0.20870495263408498,
+      "per_page": [
+        {
+          "ssim": 0.9930595542876055,
+          "mad": 0.20870495263408498
+        }
+      ]
+    },
+    {
+      "file": "041-tdf134902.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9747304904408153,
+      "mad": 0.5947620333586805,
+      "per_page": [
+        {
+          "ssim": 0.9852929033198432,
+          "mad": 0.3463503727445225
+        },
+        {
+          "ssim": 0.9641680775617874,
+          "mad": 0.8431736939728384
+        }
+      ]
+    },
+    {
+      "file": "042-tdf137641_RelativeFromTopMargin.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9806692892511949,
+      "mad": 0.7787162522297159,
+      "per_page": [
+        {
+          "ssim": 0.9806692892511949,
+          "mad": 0.7787162522297159
+        }
+      ]
+    },
+    {
+      "file": "043-tdf140668.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9636498377584298,
+      "mad": 1.6823712094831322,
+      "per_page": [
+        {
+          "ssim": 0.9636498377584298,
+          "mad": 1.6823712094831322
+        }
+      ]
+    },
+    {
+      "file": "044-tdf143476_lockedCanvas_position.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8786658995217517,
+      "mad": 6.901014831607599,
+      "per_page": [
+        {
+          "ssim": 0.8786658995217517,
+          "mad": 6.901014831607599
+        }
+      ]
+    },
+    {
+      "file": "045-tdf148380_modifiedField.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9805148598285099,
+      "mad": 1.642479891807246,
+      "per_page": [
+        {
+          "ssim": 0.9805148598285099,
+          "mad": 1.642479891807246
+        }
+      ]
+    },
+    {
+      "file": "046-tdf152506.docx",
+      "reference_pages": 6,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.9953631063854713,
+      "mad": 0.12822837975169316,
+      "per_page": [
+        {
+          "ssim": 0.9982427636013663,
+          "mad": 0.058214237490494834
+        },
+        {
+          "ssim": 0.9954457999312243,
+          "mad": 0.11579953522417971
+        },
+        {
+          "ssim": 0.9973703273144416,
+          "mad": 0.062403615870601864
+        },
+        {
+          "ssim": 0.9960530211261169,
+          "mad": 0.10255626701157676
+        },
+        {
+          "ssim": 0.9897036199542072,
+          "mad": 0.30216824316161267
+        }
+      ]
+    },
+    {
+      "file": "047-tdf154370.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9744111036054334,
+      "mad": 1.1803067236147335,
+      "per_page": [
+        {
+          "ssim": 0.9744111036054334,
+          "mad": 1.1803067236147335
+        }
+      ]
+    },
+    {
+      "file": "048-tdf159158_zOrder_1and0equalA.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8445319219194685,
+      "mad": 7.820926756352765,
+      "per_page": [
+        {
+          "ssim": 0.8445319219194685,
+          "mad": 7.820926756352765
+        }
+      ]
+    },
+    {
+      "file": "049-tdf162070_export.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9962826441274728,
+      "mad": 0.09081739691761478,
+      "per_page": [
+        {
+          "ssim": 0.9962826441274728,
+          "mad": 0.09081739691761478
+        }
+      ]
+    },
+    {
+      "file": "050-tdf165642_glossaryFootnote.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9953738005892737,
+      "mad": 0.17115808954373976,
+      "per_page": [
+        {
+          "ssim": 0.9953738005892737,
+          "mad": 0.17115808954373976
+        }
+      ]
+    },
+    {
+      "file": "051-tdf169072_illegalDates.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9985348666483469,
+      "mad": 0.32157448928749377,
+      "per_page": [
+        {
+          "ssim": 0.9985348666483469,
+          "mad": 0.32157448928749377
+        }
+      ]
+    },
+    {
+      "file": "052-tdf43017.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9902834988862069,
+      "mad": 0.25482860559113285,
+      "per_page": [
+        {
+          "ssim": 0.9902834988862069,
+          "mad": 0.25482860559113285
+        }
+      ]
+    },
+    {
+      "file": "053-tdf75573_lostTable.docx",
+      "reference_pages": 3,
+      "docboss_pages": 3,
+      "pages_scored": 3,
+      "ssim": 0.9993654269561971,
+      "mad": 0.04471039160087081,
+      "per_page": [
+        {
+          "ssim": 0.9996397185243928,
+          "mad": 0.055709138459133126
+        },
+        {
+          "ssim": 0.9984565623441987,
+          "mad": 0.07842203634347929
+        },
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        }
+      ]
+    },
+    {
+      "file": "054-tdf82824.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9438019506514881,
+      "mad": 4.650114067325396,
+      "per_page": [
+        {
+          "ssim": 0.9438019506514881,
+          "mad": 4.650114067325396
+        }
+      ]
+    },
+    {
+      "file": "055-tdf90789.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9962649295032111,
+      "mad": 0.07423798796131133,
+      "per_page": [
+        {
+          "ssim": 0.9953085776546724,
+          "mad": 0.09005209184652449
+        },
+        {
+          "ssim": 0.9972212813517497,
+          "mad": 0.05842388407609816
+        }
+      ]
+    },
+    {
+      "file": "056-tdf95367_inheritFollowStyle.docx",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9935933197796194,
+      "mad": 0.2834132904939005,
+      "per_page": [
+        {
+          "ssim": 0.9877043176460698,
+          "mad": 0.5065652897896906
+        },
+        {
+          "ssim": 0.9994823219131691,
+          "mad": 0.06026129119811037
+        }
+      ]
+    },
+    {
+      "file": "057-tdf99631.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.953748852443253,
+      "mad": 3.7663328903512823,
+      "per_page": [
+        {
+          "ssim": 0.953748852443253,
+          "mad": 3.7663328903512823
+        }
+      ]
+    },
+    {
+      "file": "058-testTrackChangesParagraphProperties.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.996447888362289,
+      "mad": 0.10072630105249693,
+      "per_page": [
+        {
+          "ssim": 0.996447888362289,
+          "mad": 0.10072630105249693
+        }
+      ]
+    },
+    {
+      "file": "059-theme-preservation.docx",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9266817237498098,
+      "mad": 2.9289811697219106,
+      "per_page": [
+        {
+          "ssim": 0.9266817237498098,
+          "mad": 2.9289811697219106
+        }
+      ]
+    },
+    {
+      "file": "060-47304.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9999572409838329,
+      "mad": 0.00849246338291416,
+      "per_page": [
+        {
+          "ssim": 0.9999572409838329,
+          "mad": 0.00849246338291416
+        }
+      ]
+    },
+    {
+      "file": "061-52420.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.584907119557587,
+      "mad": 9.697323630368196,
+      "per_page": [
+        {
+          "ssim": 0.584907119557587,
+          "mad": 9.697323630368196
+        }
+      ]
+    },
+    {
+      "file": "062-58804.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.6977681961738474,
+      "mad": 13.931008506676712,
+      "per_page": [
+        {
+          "ssim": 0.6977681961738474,
+          "mad": 13.931008506676712
+        }
+      ]
+    },
+    {
+      "file": "063-61911.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.99520525207679,
+      "mad": 0.3901771691314946,
+      "per_page": [
+        {
+          "ssim": 0.99520525207679,
+          "mad": 0.3901771691314946
+        }
+      ]
+    },
+    {
+      "file": "064-Bug41898.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9483764526656702,
+      "mad": 3.484041986170432,
+      "per_page": [
+        {
+          "ssim": 0.9483764526656702,
+          "mad": 3.484041986170432
+        }
+      ]
+    },
+    {
+      "file": "065-Bug45877.doc",
+      "reference_pages": 5,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.993186336327408,
+      "mad": 0.4630425049568981,
+      "per_page": [
+        {
+          "ssim": 0.992256199322014,
+          "mad": 0.7757350067157974
+        },
+        {
+          "ssim": 0.9858012185427769,
+          "mad": 0.6534115540141991
+        },
+        {
+          "ssim": 0.9994537305503582,
+          "mad": 0.10359383994371522
+        },
+        {
+          "ssim": 0.9884205332218909,
+          "mad": 0.7824721241107787
+        },
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        }
+      ]
+    },
+    {
+      "file": "066-Bug47286.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.6832318980023584,
+      "mad": 12.515005720864455,
+      "per_page": [
+        {
+          "ssim": 0.6832318980023584,
+          "mad": 12.515005720864455
+        }
+      ]
+    },
+    {
+      "file": "067-Bug48075.doc",
+      "reference_pages": 6,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.6343305290197986,
+      "mad": 12.381722134178553,
+      "per_page": [
+        {
+          "ssim": 0.7358908602385117,
+          "mad": 10.447305863708399
+        },
+        {
+          "ssim": 0.6889347845726711,
+          "mad": 11.672543581616482
+        },
+        {
+          "ssim": 0.5653175215138927,
+          "mad": 15.004226096143688
+        },
+        {
+          "ssim": 0.5755665127998556,
+          "mad": 13.184416270470154
+        },
+        {
+          "ssim": 0.6059429659740612,
+          "mad": 11.60011885895404
+        }
+      ]
+    },
+    {
+      "file": "068-Bug50936_1.doc",
+      "reference_pages": 15,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.9350926370216215,
+      "mad": 6.403918634419723,
+      "per_page": [
+        {
+          "ssim": 0.9771486761047321,
+          "mad": 4.552412285527754
+        },
+        {
+          "ssim": 0.7950903313961828,
+          "mad": 14.488149468541625
+        },
+        {
+          "ssim": 0.9669912894360018,
+          "mad": 5.10554711970834
+        },
+        {
+          "ssim": 0.9706277840970807,
+          "mad": 4.568124967907103
+        },
+        {
+          "ssim": 0.9656051040741094,
+          "mad": 3.3053593304137965
+        }
+      ]
+    },
+    {
+      "file": "069-Bug51834.doc",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.4371336224950605,
+      "mad": 33.24712264254748,
+      "per_page": [
+        {
+          "ssim": 0.42979624493303487,
+          "mad": 32.249253610909385
+        },
+        {
+          "ssim": 0.4444710000570862,
+          "mad": 34.24499167418558
+        }
+      ]
+    },
+    {
+      "file": "070-Bug52311.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9291530454558764,
+      "mad": 1.8574332151258235,
+      "per_page": [
+        {
+          "ssim": 0.9291530454558764,
+          "mad": 1.8574332151258235
+        }
+      ]
+    },
+    {
+      "file": "071-Bug53380_4.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 1.0,
+      "mad": 0.0,
+      "per_page": [
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        }
+      ]
+    },
+    {
+      "file": "072-DiffFirstPageHeadFoot.doc",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9527059455156304,
+      "mad": 1.7171203685364906,
+      "per_page": [
+        {
+          "ssim": 0.9412515094853457,
+          "mad": 2.135123933598879
+        },
+        {
+          "ssim": 0.9641603815459149,
+          "mad": 1.2991168034741019
+        }
+      ]
+    },
+    {
+      "file": "073-HeaderFooterUnicode.doc",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9521638011371509,
+      "mad": 1.8296380654768454,
+      "per_page": [
+        {
+          "ssim": 0.9253159643993625,
+          "mad": 2.867883629321538
+        },
+        {
+          "ssim": 0.9790116378749394,
+          "mad": 0.791392501632153
+        }
+      ]
+    },
+    {
+      "file": "074-PageSpecificHeadFoot.doc",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9375870357624215,
+      "mad": 2.243401700373378,
+      "per_page": [
+        {
+          "ssim": 0.9406486057515504,
+          "mad": 2.319465534062484
+        },
+        {
+          "ssim": 0.9345254657732927,
+          "mad": 2.1673378666842718
+        }
+      ]
+    },
+    {
+      "file": "075-SimpleHeadThreeColFoot.doc",
+      "reference_pages": 2,
+      "docboss_pages": 2,
+      "pages_scored": 2,
+      "ssim": 0.9565493262337428,
+      "mad": 1.5827336546290796,
+      "per_page": [
+        {
+          "ssim": 0.9485214829301146,
+          "mad": 1.890693426641139
+        },
+        {
+          "ssim": 0.9645771695373708,
+          "mad": 1.2747738826170198
+        }
+      ]
+    },
+    {
+      "file": "076-Word6.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9935064966476564,
+      "mad": 0.23859876909985842,
+      "per_page": [
+        {
+          "ssim": 0.9935064966476564,
+          "mad": 0.23859876909985842
+        }
+      ]
+    },
+    {
+      "file": "077-bug65255.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.968976366739149,
+      "mad": 0.7317092237391002,
+      "per_page": [
+        {
+          "ssim": 0.968976366739149,
+          "mad": 0.7317092237391002
+        }
+      ]
+    },
+    {
+      "file": "078-clusterfuzz-testcase-minimized-POIHWPFFuzzer-4947285593948160.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 1.0,
+      "mad": 0.0,
+      "per_page": [
+        {
+          "ssim": 1.0,
+          "mad": 0.0
+        }
+      ]
+    },
+    {
+      "file": "079-clusterfuzz-testcase-minimized-POIHWPFFuzzer-5440721166139392.doc",
+      "reference_pages": 28,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.7611322013356606,
+      "mad": 8.563297398499191,
+      "per_page": [
+        {
+          "ssim": 0.7611322013356606,
+          "mad": 8.563297398499191
+        }
+      ]
+    },
+    {
+      "file": "080-equation.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9957870669628732,
+      "mad": 0.09440847682872229,
+      "per_page": [
+        {
+          "ssim": 0.9957870669628732,
+          "mad": 0.09440847682872229
+        }
+      ]
+    },
+    {
+      "file": "081-hyperlink.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9997900638462623,
+      "mad": 0.036780539111524874,
+      "per_page": [
+        {
+          "ssim": 0.9997900638462623,
+          "mad": 0.036780539111524874
+        }
+      ]
+    },
+    {
+      "file": "082-o_kurs.doc",
+      "reference_pages": 6,
+      "docboss_pages": 5,
+      "pages_scored": 5,
+      "ssim": 0.6488013680065121,
+      "mad": 16.152122405179334,
+      "per_page": [
+        {
+          "ssim": 0.855100335814049,
+          "mad": 7.415558619317334
+        },
+        {
+          "ssim": 0.8507879943526867,
+          "mad": 4.494691322052689
+        },
+        {
+          "ssim": 0.3522146272596539,
+          "mad": 30.387270543588723
+        },
+        {
+          "ssim": 0.3972162328630465,
+          "mad": 27.814580031695723
+        },
+        {
+          "ssim": 0.7886876497431243,
+          "mad": 10.648511509242216
+        }
+      ]
+    },
+    {
+      "file": "083-password_password_cryptoapi.doc",
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpmpgt9q35', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/docs-fid/083-password_password_cryptoapi.doc']' returned non-zero exit status 1."
+    },
+    {
+      "file": "084-sections.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9915001927748719,
+      "mad": 0.37456027517002694,
+      "per_page": [
+        {
+          "ssim": 0.9915001927748719,
+          "mad": 0.37456027517002694
+        }
+      ]
+    },
+    {
+      "file": "085-tables.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9964476251823706,
+      "mad": 0.16481064293988473,
+      "per_page": [
+        {
+          "ssim": 0.9964476251823706,
+          "mad": 0.16481064293988473
+        }
+      ]
+    },
+    {
+      "file": "086-tdf134618.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.9150502818092728,
+      "mad": 4.405371800796638,
+      "per_page": [
+        {
+          "ssim": 0.9150502818092728,
+          "mad": 4.405371800796638
+        }
+      ]
+    },
+    {
+      "file": "087-tdf79435_legacyInputFields.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.7488447357496651,
+      "mad": 9.496917930101787,
+      "per_page": [
+        {
+          "ssim": 0.7488447357496651,
+          "mad": 9.496917930101787
+        }
+      ]
+    },
+    {
+      "file": "088-testPictures.doc",
+      "reference_pages": 4,
+      "docboss_pages": 4,
+      "pages_scored": 4,
+      "ssim": 0.9502594658856727,
+      "mad": 5.748764328811127,
+      "per_page": [
+        {
+          "ssim": 0.9816512754436859,
+          "mad": 1.5487126278311172
+        },
+        {
+          "ssim": 0.9550349968715935,
+          "mad": 4.871607456311784
+        },
+        {
+          "ssim": 0.904680005028164,
+          "mad": 12.929324227327966
+        },
+        {
+          "ssim": 0.9596715861992471,
+          "mad": 3.6454130037736387
+        }
+      ]
+    },
+    {
+      "file": "089-vector_image.doc",
+      "reference_pages": 1,
+      "docboss_pages": 1,
+      "pages_scored": 1,
+      "ssim": 0.8262073865472943,
+      "mad": 13.753196452542857,
+      "per_page": [
+        {
+          "ssim": 0.8262073865472943,
+          "mad": 13.753196452542857
+        }
+      ]
+    }
+  ]
+}
