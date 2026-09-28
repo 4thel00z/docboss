@@ -37,7 +37,6 @@ mod package;
 mod parts;
 mod props;
 mod xml;
-pub mod zip;
 
 use std::path::Path;
 
@@ -49,9 +48,8 @@ pub use image::image_dimensions;
 pub enum Error {
     #[error("i/o: {0}")]
     Io(#[from] std::io::Error),
-    /// A part or the archive exceeds the 4 GiB limit of a non-ZIP64 archive.
-    #[error("the package exceeds the ZIP size limits")]
-    TooLarge,
+    #[error("zip: {0}")]
+    Zip(#[from] docboss_zip::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

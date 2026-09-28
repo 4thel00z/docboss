@@ -297,7 +297,7 @@ dependencies = [
 name = "docboss-testkit"
 version = "0.1.0"
 dependencies = [
- "flate2",
+ "docboss-zip",
 ]
 
 [[package]]
@@ -305,6 +305,7 @@ name = "docboss-write"
 version = "0.1.0"
 dependencies = [
  "docboss-model",
+ "docboss-zip",
  "flate2",
  "pulldown-cmark",
  "thiserror",

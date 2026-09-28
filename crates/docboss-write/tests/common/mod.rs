@@ -18,7 +18,7 @@ pub fn tiny_png() -> Vec<u8> {
         let mut body = kind.to_vec();
         body.extend_from_slice(data);
         out.extend_from_slice(&body);
-        out.extend_from_slice(&docboss_write::zip::crc32(&body).to_be_bytes());
+        out.extend_from_slice(&docboss_zip::crc32(&body).to_be_bytes());
     }
     let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
     let mut header = Vec::new();

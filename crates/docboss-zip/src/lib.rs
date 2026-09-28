@@ -5,10 +5,12 @@
 //! record, including its ZIP64 forms. When that record or the directory is
 //! missing or damaged, entries are recovered by scanning for local file
 //! headers and each recovery is reported as a [`Diagnostic`]. Stored and
-//! deflated entries are read; stored ones borrow from the input.
+//! deflated entries are read; stored ones borrow from the input. The
+//! [`write`](crate::write) module writes archives deterministically.
 
 mod cp437;
 mod crc;
+pub mod write;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -17,6 +19,7 @@ use docboss_model::Diagnostic;
 use memchr::memmem;
 
 pub use crc::{crc32, crc32_update};
+pub use write::{Method, WriteOptions, ZipWriter};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -40,6 +43,10 @@ pub enum Error {
     Bomb { name: String, ratio: u64 },
     #[error("entry {0:?} fails its CRC-32 check")]
     CrcMismatch(String),
+    #[error("{0} does not fit the classic format; write with ZIP64")]
+    NeedsZip64(&'static str),
+    #[error("deflate failed: {0}")]
+    Deflate(String),
 }
 
 /// Bounds on what reading one entry may allocate.

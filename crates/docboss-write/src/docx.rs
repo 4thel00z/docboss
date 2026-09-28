@@ -12,8 +12,8 @@ use crate::package::{
 };
 use crate::parts;
 use crate::props;
-use crate::zip::{Method, ZipWriter};
 use crate::Result;
+use docboss_zip::{Method, ZipWriter};
 
 const REVISION_ID_BASE: i64 = 1 << 20;
 
@@ -285,7 +285,7 @@ pub fn to_bytes(document: &Document) -> Result<Vec<u8>> {
             zip.add(&rels_name(&part.name), &rels.to_xml(), Method::Deflated)?;
         }
     }
-    zip.finish()
+    Ok(zip.finish()?)
 }
 
 /// ECMA-376 Part 1 §17.2.2 and §17.6.17: the body, where every section but
