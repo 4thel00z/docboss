@@ -1,5 +1,6 @@
 [package]
 name = "docboss-font"
+description = "TrueType and OpenType font parsing, glyph outlines, metrics and font discovery for docboss"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,4 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
