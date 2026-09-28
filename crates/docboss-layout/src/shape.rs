@@ -194,7 +194,7 @@ impl<'a> Shaper<'a> {
         let k = size / f32::from(m.units_per_em);
         LineMetrics {
             ascent: m.ascent * k,
-            descent: m.descent * k,
+            descent: (m.descent + m.line_gap) * k,
             underline_position: m.underline_position * k,
             underline_thickness: (m.underline_thickness * k).max(0.25),
             strikeout_position: m.strikeout_position * k,
