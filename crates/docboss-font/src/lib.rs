@@ -16,10 +16,12 @@ mod font;
 mod glyf;
 mod kern;
 mod outline;
+mod symbol;
 
 pub use database::{FaceInfo, FontDatabase, FontId};
 pub use font::{face_count, FaceNames, FaceStyle, Font, Metrics};
 pub use outline::{bounds, Seg};
+pub use symbol::symbol_to_unicode;
 
 /// Why a font could not be read.
 #[derive(Debug, Clone, PartialEq, Eq)]

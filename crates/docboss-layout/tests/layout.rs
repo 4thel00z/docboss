@@ -566,3 +566,313 @@ fn hostile_values_lay_out_without_panicking() {
         .iter()
         .any(|d| d.message.contains("nested")));
 }
+
+fn one_cell_table(
+    style_id: Option<&str>,
+    fill: Option<docboss_model::Color>,
+    texts: &[&str],
+) -> Block {
+    Block::Table(Table {
+        properties: TableProperties {
+            style_id: style_id.map(str::to_string),
+            ..TableProperties::default()
+        },
+        grid: vec![4320],
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                properties: docboss_model::TableCellProperties {
+                    shading: fill.map(|fill| docboss_model::Shading { fill: Some(fill) }),
+                    ..docboss_model::TableCellProperties::default()
+                },
+                blocks: texts.iter().map(|t| para(t)).collect(),
+            }],
+            ..TableRow::default()
+        }],
+    })
+}
+
+/// ECMA-376 Part 1 §17.7.2: a table style's paragraph properties apply to
+/// the paragraphs in its cells, above the document defaults.
+#[test]
+fn table_style_paragraph_spacing_applies_inside_cells() {
+    let mut document = doc(vec![one_cell_table(Some("Grid"), None, &["one", "two"])]);
+    document.styles.default_paragraph.spacing.after = Some(400);
+    let mut grid = Style::new("Grid", StyleKind::Table);
+    grid.paragraph.spacing.after = Some(0);
+    document.styles.push(grid);
+    let layout = laid(&document);
+    let styled_runs = runs(&layout, 0);
+    let baseline = |text: &str| {
+        styled_runs
+            .iter()
+            .find(|r| r.text == text)
+            .unwrap()
+            .baseline
+    };
+    let pitch = baseline("two") - baseline("one");
+    assert!(
+        pitch < 15.0,
+        "20 pt of spacing after leaked into the cell: {pitch}"
+    );
+
+    let mut unstyled = doc(vec![one_cell_table(None, None, &["one", "two"])]);
+    unstyled.styles.default_paragraph.spacing.after = Some(400);
+    let layout = laid(&unstyled);
+    let unstyled_runs = runs(&layout, 0);
+    let baseline = |text: &str| {
+        unstyled_runs
+            .iter()
+            .find(|r| r.text == text)
+            .unwrap()
+            .baseline
+    };
+    assert!(baseline("two") - baseline("one") > 30.0);
+}
+
+/// ECMA-376 Part 1 §17.3.2.6: `auto` text is drawn white over a dark cell
+/// fill and black over a light one.
+#[test]
+fn automatic_text_color_follows_the_cell_fill() {
+    let dark = docboss_model::Color(0xC0, 0, 0);
+    let light = docboss_model::Color(0x9C, 0xC2, 0xE5);
+    let document = doc(vec![
+        one_cell_table(None, Some(dark), &["dark"]),
+        one_cell_table(None, Some(light), &["light"]),
+    ]);
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let color = |text: &str| runs.iter().find(|r| r.text == text).unwrap().color;
+    assert_eq!(color("dark"), docboss_model::Color::WHITE);
+    assert_eq!(color("light"), docboss_model::Color::BLACK);
+}
+
+/// A list label in a dark cell turns white with its text.
+#[test]
+fn list_labels_in_dark_cells_turn_white_too() {
+    let dark = docboss_model::Color(0xC0, 0, 0);
+    let mut document = doc(vec![one_cell_table(None, Some(dark), &["item"])]);
+    document.numbering = Numbering {
+        abstracts: vec![AbstractNumbering {
+            id: 0,
+            levels: vec![Level::default()],
+        }],
+        instances: vec![NumberingInstance {
+            num_id: 1,
+            abstract_id: 0,
+            ..NumberingInstance::default()
+        }],
+    };
+    let Block::Table(table) = &mut document.sections[0].blocks[0] else {
+        unreachable!()
+    };
+    let Block::Paragraph(paragraph) = &mut table.rows[0].cells[0].blocks[0] else {
+        unreachable!()
+    };
+    paragraph.properties.numbering = Some(NumberingRef {
+        num_id: 1,
+        level: 0,
+    });
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let label = runs.iter().find(|r| r.text.starts_with("1.")).unwrap();
+    assert_eq!(label.color, docboss_model::Color::WHITE);
+}
+
+/// ECMA-376 Part 1 §17.3.3.30: a bullet stored as a symbol font's code in
+/// the U+F000 range draws its Unicode form when that font is missing,
+/// instead of the missing-glyph box.
+#[test]
+fn symbol_font_bullets_draw_their_unicode_form() {
+    for (font, code) in [("starbats", '\u{F095}'), ("Symbol", '\u{F0B7}')] {
+        let mut level = Level {
+            format: NumberFormat::Bullet,
+            text: code.to_string(),
+            ..Level::default()
+        };
+        level.run.fonts.ascii = Some(font.into());
+        level.run.fonts.high_ansi = Some(font.into());
+        let mut document = doc(vec![para_with(
+            ParagraphProperties {
+                numbering: Some(NumberingRef {
+                    num_id: 1,
+                    level: 0,
+                }),
+                ..ParagraphProperties::default()
+            },
+            vec![run("item")],
+        )]);
+        document.numbering = Numbering {
+            abstracts: vec![AbstractNumbering {
+                id: 0,
+                levels: vec![level],
+            }],
+            instances: vec![NumberingInstance {
+                num_id: 1,
+                abstract_id: 0,
+                ..NumberingInstance::default()
+            }],
+        };
+        let layout = laid(&document);
+        let runs = runs(&layout, 0);
+        let label = runs.iter().find(|r| r.text.contains(code)).unwrap();
+        assert_ne!(
+            label.glyphs[0].id, 0,
+            "{font} bullet drew the missing glyph"
+        );
+    }
+}
+
+fn bordered(text: &str) -> Block {
+    para_with(
+        ParagraphProperties {
+            borders: Some(Borders {
+                bottom: Some(border()),
+                ..Borders::default()
+            }),
+            ..ParagraphProperties::default()
+        },
+        vec![run(text)],
+    )
+}
+
+/// ECMA-376 Part 1 §17.3.1.24: three paragraphs with the same bottom border
+/// draw it once, under the last of them.
+#[test]
+fn paragraphs_with_equal_borders_share_one_bottom_border() {
+    let layout = laid(&doc(vec![
+        bordered("a"),
+        bordered("b"),
+        bordered("c"),
+        para("after"),
+    ]));
+    let horizontals: Vec<f32> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Line { from, to, .. } if from.1 == to.1 => Some(from.1),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(horizontals.len(), 1, "{horizontals:?}");
+    let runs = runs(&layout, 0);
+    let c = runs.iter().find(|r| r.text == "c").unwrap().baseline;
+    assert!(horizontals[0] > c);
+}
+
+/// ECMA-376 Part 1 §17.6.12 and §17.16.4.3: `PAGE` shows the section's
+/// page number format, and a `\*` switch overrides it.
+#[test]
+fn page_fields_follow_the_section_number_format() {
+    let field = |instruction: &str| {
+        Inline::Field(Field {
+            instruction: instruction.into(),
+            result: vec![run("1")],
+        })
+    };
+    let header = HeaderFooter {
+        id: "rId1".into(),
+        kind: HeaderFooterKind::Header,
+        blocks: vec![para_with(
+            ParagraphProperties::default(),
+            vec![field(" PAGE "), run("/"), field(" PAGE \\* ALPHABETIC ")],
+        )],
+    };
+    let mut document = doc((0..120).map(|i| para(&format!("body {i}"))).collect());
+    document.sections[0].properties.headers = HeaderFooterRefs {
+        default: Some("rId1".into()),
+        ..HeaderFooterRefs::default()
+    };
+    document.sections[0].properties.page_number_format = Some(NumberFormat::LowerRoman);
+    document.headers_footers.push(header);
+    let layout = laid(&document);
+    let tops: Vec<String> = layout
+        .pages
+        .iter()
+        .take(2)
+        .map(|page| {
+            page.glyph_runs()
+                .filter(|r| r.baseline < 72.0)
+                .map(|r| r.text.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(tops, ["i/A", "ii/B"]);
+}
+
+/// ECMA-376 Part 1 §17.4.84: no border is drawn between the rows of a
+/// vertically merged cell, while the unmerged column keeps its rule.
+#[test]
+fn vertically_merged_cells_have_no_inner_border() {
+    let all = Borders {
+        top: Some(border()),
+        left: Some(border()),
+        bottom: Some(border()),
+        right: Some(border()),
+        inside_horizontal: Some(border()),
+        inside_vertical: Some(border()),
+    };
+    let cell = |text: &str, merge: Option<docboss_model::VerticalMerge>| TableCell {
+        properties: docboss_model::TableCellProperties {
+            vertical_merge: merge,
+            ..docboss_model::TableCellProperties::default()
+        },
+        blocks: vec![para(text)],
+    };
+    use docboss_model::VerticalMerge::{Continue, Restart};
+    let table = Table {
+        properties: TableProperties {
+            borders: Some(all),
+            ..TableProperties::default()
+        },
+        grid: vec![2880, 2880],
+        rows: vec![
+            TableRow {
+                cells: vec![cell("merged", Some(Restart)), cell("b1", None)],
+                ..TableRow::default()
+            },
+            TableRow {
+                cells: vec![cell("", Some(Continue)), cell("b2", None)],
+                ..TableRow::default()
+            },
+        ],
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let b2 = runs.iter().find(|r| r.text == "b2").unwrap().baseline;
+    let b1 = runs.iter().find(|r| r.text == "b1").unwrap().baseline;
+    let inner: Vec<(f32, f32)> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Line { from, to, .. } if from.1 == to.1 && from.1 > b1 && from.1 < b2 => {
+                Some((from.0.min(to.0), from.0.max(to.0)))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(inner.iter().all(|(x0, _)| *x0 >= 216.0 - 0.01), "{inner:?}");
+    assert!(inner.iter().any(|(_, x1)| *x1 > 300.0), "{inner:?}");
+}
+
+/// ECMA-376 Part 1 §17.4.48: a table whose grid is wider than the text
+/// keeps its grid widths and extends past the right margin, as Word and
+/// LibreOffice draw it; only a percentage width scales the grid.
+#[test]
+fn wide_grids_keep_their_widths() {
+    let cell = |text: &str| TableCell {
+        blocks: vec![para(text)],
+        ..TableCell::default()
+    };
+    let table = Table {
+        grid: vec![5760, 5760],
+        rows: vec![TableRow {
+            cells: vec![cell("left"), cell("right")],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let right = runs.iter().find(|r| r.text == "right").unwrap().glyphs[0].x;
+    assert!((right - (72.0 + 288.0 + 5.4)).abs() < 0.01, "{right}");
+}

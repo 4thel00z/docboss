@@ -253,18 +253,49 @@ fn grid_columns(table: &Table, props: &TableProperties, available: f32) -> Vec<f
         (Some(pct), _) if pct > 0 => Some(available * pct as f32 / 5000.0),
         _ => None,
     };
-    let target = wanted.or((!props.fixed_layout && total > available * 1.001).then_some(available));
+    let target = wanted;
     if let Some(target) = target.filter(|t| *t > 0.0 && total > 0.0) {
         grid.iter_mut().for_each(|w| *w *= target / total);
     }
     grid
 }
 
+/// The cell of a row whose first grid column is `column`.
+fn cell_starting_at(
+    row: &docboss_model::TableRow,
+    column: usize,
+) -> Option<&docboss_model::TableCell> {
+    let mut at = 0usize;
+    for cell in &row.cells {
+        if at == column {
+            return Some(cell);
+        }
+        at += span(cell);
+        if at > column {
+            return None;
+        }
+    }
+    None
+}
+
 /// ECMA-376 Part 1 §17.4: lays out a table at `width` points as one slab
-/// per row.
+/// per row. Borders inside a vertically merged cell (§17.4.84) are not
+/// drawn.
 pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<Slab> {
     let props = effective_properties(ctx, table);
-    let grid = grid_columns(table, &props, width);
+    let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
+    let slabs = layout_table_rows(ctx, table, &props, width);
+    ctx.table_style = outer_style;
+    slabs
+}
+
+fn layout_table_rows(
+    ctx: &mut Ctx<'_>,
+    table: &Table,
+    props: &TableProperties,
+    width: f32,
+) -> Vec<Slab> {
+    let grid = grid_columns(table, props, width);
     let total: f32 = grid.iter().sum();
     let offsets: Vec<f32> = grid
         .iter()
@@ -310,10 +341,19 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 .unwrap_or(default_margins)
                 .map(twips_to_pt);
             let continues = cell.properties.vertical_merge == Some(VerticalMerge::Continue);
+            let fill = cell
+                .properties
+                .shading
+                .and_then(|s| s.fill)
+                .or(props.shading.and_then(|s| s.fill));
             let (content, trailing) = if continues {
                 (Vec::new(), 0.0)
             } else {
-                layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0))
+                let behind = fill.or(ctx.background);
+                let outer = std::mem::replace(&mut ctx.background, behind);
+                let laid = layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0));
+                ctx.background = outer;
+                laid
             };
             let own = cell.properties.borders.unwrap_or_default();
             let edge_h = |outer: bool| {
@@ -323,13 +363,22 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                     borders.inside_horizontal
                 }
             };
+            let merged_below = table
+                .rows
+                .get(r + 1)
+                .and_then(|next| cell_starting_at(next, column - span))
+                .is_some_and(|below| {
+                    below.properties.vertical_merge == Some(VerticalMerge::Continue)
+                });
+            let top = own.top.or(if r == 0 { borders.top } else { edge_h(false) });
+            let bottom = own.bottom.or(if r + 1 == row_count {
+                borders.bottom
+            } else {
+                edge_h(false)
+            });
             let sides = Sides {
-                top: own.top.or(if r == 0 { borders.top } else { edge_h(false) }),
-                bottom: own.bottom.or(if r + 1 == row_count {
-                    borders.bottom
-                } else {
-                    edge_h(false)
-                }),
+                top: top.filter(|_| !continues),
+                bottom: bottom.filter(|_| !merged_below),
                 left: own.left.or(if c == 0 {
                     borders.left
                 } else {
@@ -347,11 +396,7 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 margins: m,
                 content,
                 trailing,
-                shading: cell
-                    .properties
-                    .shading
-                    .and_then(|s| s.fill)
-                    .or(props.shading.and_then(|s| s.fill)),
+                shading: fill,
                 borders: sides,
                 align: cell.properties.vertical_align,
                 continues,

@@ -31,9 +31,17 @@ pub struct RowInfo {
     pub table: TableProperties,
 }
 
+/// A TC80 ([MS-DOC] §2.9.313). A zeroed border states nothing, so the
+/// cell keeps the table's border on that side (`sprmTTableBorders`), as
+/// Word draws it.
 fn tc80(bytes: &[u8]) -> CellFormat {
     let grf = u16_at(bytes, 0).unwrap_or(0);
-    let side = |at: usize| bytes.get(at..at + 4).and_then(brc80);
+    let side = |at: usize| {
+        bytes
+            .get(at..at + 4)
+            .filter(|b| *b != [0u8; 4])
+            .and_then(brc80)
+    };
     let borders = Borders {
         top: side(4),
         left: side(8),
@@ -61,9 +69,13 @@ fn cells_in(row: &mut RowInfo, operand: &[u8], apply: impl Fn(&mut CellFormat)) 
 }
 
 impl RowInfo {
-    /// Reads the table sprms of a TTP paragraph.
+    /// Reads the table sprms of a TTP paragraph. `sprmTDxaGapHalf` is each
+    /// cell's left and right margin unless `sprmTCellPadding` states one
+    /// ([MS-DOC] §2.6.3).
     pub fn parse(grpprl: &[u8]) -> RowInfo {
         let mut row = RowInfo::default();
+        let mut gap_half: Option<i32> = None;
+        let mut padded = [false; 4];
         for prl in prls(grpprl) {
             match prl.sprm {
                 0xD608 => {
@@ -97,6 +109,7 @@ impl RowInfo {
                     })
                 }
                 0x9601 => row.table.indent = Some(i32::from(prl.i16())),
+                0x9602 => gap_half = Some(i32::from(prl.i16()).max(0)),
                 0xF614 => {
                     let unit = u8_at(prl.operand, 0).unwrap_or(0);
                     let width = i32::from(i16_at(prl.operand, 1).unwrap_or(0));
@@ -167,10 +180,19 @@ impl RowInfo {
                     for (bit, slot) in [(1u8, 0usize), (2, 1), (4, 2), (8, 3)] {
                         if sides & bit != 0 {
                             margins[slot] = value;
+                            padded[slot] = true;
                         }
                     }
                 }
                 _ => {}
+            }
+        }
+        if let Some(gap) = gap_half {
+            let margins = row.table.cell_margins.get_or_insert([0, gap, 0, gap]);
+            for slot in [1usize, 3] {
+                if !padded[slot] {
+                    margins[slot] = gap;
+                }
             }
         }
         row
@@ -200,5 +222,46 @@ impl RowInfo {
             },
             margins: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RowInfo;
+
+    fn prl(sprm: u16, operand: &[u8]) -> Vec<u8> {
+        let mut out = sprm.to_le_bytes().to_vec();
+        out.extend_from_slice(operand);
+        out
+    }
+
+    /// [MS-DOC] §2.6.3: sprmTDxaGapHalf sets the cells' left and right
+    /// margins; sprmTCellPadding overrides the sides it names.
+    #[test]
+    fn gap_half_is_the_cell_margin_unless_padding_names_the_side() {
+        let gap = prl(0x9602, &70i16.to_le_bytes());
+        assert_eq!(
+            RowInfo::parse(&gap).table.cell_margins,
+            Some([0, 70, 0, 70])
+        );
+
+        let mut both = prl(0xD634, &[6, 0, 1, 2, 3, 20, 0]);
+        both.extend(gap);
+        assert_eq!(
+            RowInfo::parse(&both).table.cell_margins,
+            Some([0, 20, 0, 70])
+        );
+    }
+
+    /// [MS-DOC] §2.9.313: a zeroed border in a TC80 leaves the side to the
+    /// table's borders; a set one is the cell's own.
+    #[test]
+    fn zeroed_tc80_borders_are_unstated() {
+        let mut tc = [0u8; 20];
+        assert_eq!(super::tc80(&tc).borders, None);
+        tc[12..16].copy_from_slice(&[4, 1, 1, 0]);
+        let borders = super::tc80(&tc).borders.unwrap();
+        assert!(borders.top.is_none());
+        assert_eq!(borders.bottom.unwrap().size, 4);
     }
 }

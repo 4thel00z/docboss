@@ -452,7 +452,12 @@ pub fn section_properties(reader: &mut Reader<'_>) -> SectionProperties {
                 }
             }
             "titlePg" => p.title_page = on_off(&e),
-            "pgNumType" => p.page_number_start = u32_attr(&e, "start"),
+            "pgNumType" => {
+                p.page_number_start = u32_attr(&e, "start");
+                p.page_number_format = e
+                    .attr(Ns::W, "fmt")
+                    .map(|f| crate::parts::number_format(&f));
+            }
             "headerReference" | "footerReference" => {
                 let Some(id) = e.attr(Ns::R, "id") else {
                     return;

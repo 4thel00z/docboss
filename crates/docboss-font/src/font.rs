@@ -22,6 +22,9 @@ pub struct Metrics {
     pub units_per_em: u16,
     pub ascent: f32,
     pub descent: f32,
+    /// Leading added below `descent` for single line spacing, as Word
+    /// computes it: the part of the `hhea` line gap the Windows metrics do
+    /// not already cover.
     pub line_gap: f32,
     pub cap_height: f32,
     pub x_height: f32,
@@ -439,6 +442,14 @@ fn read_metrics(
         .and_then(|o| i16_at(data, o + 10))
         .map(f32::from)
         .filter(|&v| v > 0.0);
+    let line_gap = external_leading(
+        win_ascent.zip(win_descent),
+        (
+            hhea_ascent.unwrap_or(0.0),
+            hhea_descent.unwrap_or(0.0).abs(),
+            hhea_gap,
+        ),
+    );
     let ascent = win_ascent.or(hhea_ascent).unwrap_or(em * 0.8);
     let descent = win_descent.or(hhea_descent).unwrap_or(em * 0.2).abs();
     let x_height = x_height.unwrap_or(em * 0.5);
@@ -446,7 +457,7 @@ fn read_metrics(
         units_per_em: upem,
         ascent,
         descent,
-        line_gap: hhea_gap.max(0.0),
+        line_gap,
         cap_height: cap_height.unwrap_or(em * 0.7),
         x_height,
         underline_position: underline_position.unwrap_or(em * 0.1),
@@ -454,6 +465,20 @@ fn read_metrics(
         strikeout_position: strike_pos.unwrap_or(x_height * 0.5),
         strikeout_thickness: strike_size.or(underline_thickness).unwrap_or(em * 0.05),
     }
+}
+
+/// The leading Word adds below a line set in the Windows metrics: the part
+/// of the `hhea` line gap that `usWinAscent + usWinDescent` does not already
+/// cover beyond the `hhea` ascender and descender. Arial gains 67 units of
+/// 2048 this way (12 pt lines are 13.8 pt, not 13.4 pt); Calibri, whose
+/// Windows metrics absorb its line gap, gains none.
+pub(crate) fn external_leading(win: Option<(f32, f32)>, hhea: (f32, f32, f32)) -> f32 {
+    let (hhea_ascent, hhea_descent, hhea_gap) = hhea;
+    let Some((win_ascent, win_descent)) = win else {
+        return hhea_gap.max(0.0);
+    };
+    let covered = (win_ascent + win_descent) - (hhea_ascent + hhea_descent);
+    (hhea_gap - covered.max(0.0)).max(0.0)
 }
 
 fn read_advances(
@@ -503,4 +528,30 @@ fn read_loca(
         return Vec::new();
     }
     offsets
+}
+
+#[cfg(test)]
+mod leading_tests {
+    use super::external_leading;
+
+    #[test]
+    fn arial_keeps_the_uncovered_part_of_its_line_gap() {
+        assert_eq!(
+            external_leading(Some((1854.0, 434.0)), (1854.0, 434.0, 67.0)),
+            67.0
+        );
+    }
+
+    #[test]
+    fn calibri_windows_metrics_absorb_its_line_gap() {
+        assert_eq!(
+            external_leading(Some((1950.0, 550.0)), (1536.0, 512.0, 452.0)),
+            0.0
+        );
+    }
+
+    #[test]
+    fn without_windows_metrics_the_hhea_gap_counts() {
+        assert_eq!(external_leading(None, (800.0, 200.0, 90.0)), 90.0);
+    }
 }

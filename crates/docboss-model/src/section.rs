@@ -113,6 +113,10 @@ pub struct SectionProperties {
     pub title_page: bool,
     /// The page number the section starts at, when restarted.
     pub page_number_start: Option<u32>,
+    /// The format `PAGE` fields show the section's page numbers in, such as
+    /// lower-case Roman for front matter; decimal when absent (ECMA-376
+    /// Part 1 §17.6.12).
+    pub page_number_format: Option<crate::NumberFormat>,
 }
 
 /// A section: its page setup and the blocks laid out with it.

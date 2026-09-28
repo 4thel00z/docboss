@@ -145,9 +145,33 @@ fn field_kind(instruction: &str) -> String {
         .to_ascii_uppercase()
 }
 
+/// The number format a field's `\*` switch names: `ROMAN`, `roman`,
+/// `ALPHABETIC`, `alphabetic`, `Arabic` or `Ordinal`.
+fn field_format(instruction: &str) -> Option<docboss_model::NumberFormat> {
+    use docboss_model::NumberFormat;
+    let mut words = instruction.split_whitespace();
+    while let Some(word) = words.next() {
+        if word != "\\*" {
+            continue;
+        }
+        let format = match words.next()? {
+            "ROMAN" => NumberFormat::UpperRoman,
+            "roman" => NumberFormat::LowerRoman,
+            "ALPHABETIC" => NumberFormat::UpperLetter,
+            "alphabetic" => NumberFormat::LowerLetter,
+            "Arabic" => NumberFormat::Decimal,
+            "Ordinal" | "ordinal" => NumberFormat::Ordinal,
+            _ => continue,
+        };
+        return Some(format);
+    }
+    None
+}
+
 struct Flattener<'c, 'd> {
     ctx: &'c mut Ctx<'d>,
     paragraph_style: Option<String>,
+    background: Option<docboss_model::Color>,
     styles: Vec<RunStyle>,
     elems: Vec<Elem>,
 }
@@ -162,12 +186,12 @@ impl Flattener<'_, '_> {
     }
 
     fn resolve(&mut self, props: &docboss_model::RunProperties) -> RunStyle {
-        let resolved = self
-            .ctx
-            .doc
-            .styles
-            .resolve_run(self.paragraph_style.as_deref(), props);
-        RunStyle::from_properties(&resolved)
+        let resolved = self.ctx.doc.styles.resolve_run_in(
+            self.paragraph_style.as_deref(),
+            props,
+            self.ctx.table_style.as_deref(),
+        );
+        RunStyle::from_properties(&resolved).with_background(&resolved, self.background)
     }
 
     fn push_text(&mut self, text: &str, style: usize) {
@@ -191,6 +215,8 @@ impl Flattener<'_, '_> {
 
     /// ECMA-376 Part 1 §17.16: `PAGE`, `NUMPAGES` and `SECTIONPAGES` are
     /// evaluated at layout time; every other field shows its cached result.
+    /// `PAGE` shows the section's page number format (§17.6.12) unless a
+    /// `\*` format switch names another (§17.16.4.3).
     fn field(&mut self, field: &docboss_model::Field) {
         let kind = field_kind(&field.instruction);
         let value = match kind.as_str() {
@@ -198,6 +224,11 @@ impl Flattener<'_, '_> {
             "NUMPAGES" | "SECTIONPAGES" => self.ctx.total_pages,
             _ => None,
         };
+        let format = field_format(&field.instruction).or_else(|| {
+            (kind == "PAGE")
+                .then(|| self.ctx.page_format.clone())
+                .flatten()
+        });
         let Some(value) = value else {
             self.inlines(&field.result);
             return;
@@ -211,7 +242,11 @@ impl Flattener<'_, '_> {
             return;
         }
         let index = self.style_index(style);
-        self.push_text(&value.to_string(), index);
+        let shown = match format {
+            Some(format) => docboss_model::number_label(&format, value),
+            None => value.to_string(),
+        };
+        self.push_text(&shown, index);
     }
 
     fn note_style(&mut self, props: &docboss_model::RunProperties) -> usize {
@@ -284,15 +319,23 @@ impl Flattener<'_, '_> {
 /// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points.
 pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: f32) -> Laid {
     let doc = ctx.doc;
-    let props = doc.styles.resolve_paragraph(paragraph, &doc.numbering);
-    let paragraph_style = paragraph.style_id.clone();
-    let mark_resolved = doc
+    let table_style = ctx.table_style.clone();
+    let props = doc
         .styles
-        .resolve_run(paragraph_style.as_deref(), &paragraph.mark);
-    let mark_style = RunStyle::from_properties(&mark_resolved);
+        .resolve_paragraph_in(paragraph, &doc.numbering, table_style.as_deref());
+    let paragraph_style = paragraph.style_id.clone();
+    let mark_resolved = doc.styles.resolve_run_in(
+        paragraph_style.as_deref(),
+        &paragraph.mark,
+        table_style.as_deref(),
+    );
+    let background = props.shading.and_then(|s| s.fill).or(ctx.background);
+    let mark_style =
+        RunStyle::from_properties(&mark_resolved).with_background(&mark_resolved, background);
     let mut flat = Flattener {
         ctx,
         paragraph_style,
+        background,
         styles: vec![mark_style],
         elems: Vec::new(),
     };
@@ -308,7 +351,8 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         if let Some(label) = label.filter(|l| !l.is_empty()) {
             let mut label_props = mark_resolved.clone();
             label_props.apply(&level_run);
-            let label_style = RunStyle::from_properties(&label_props);
+            let label_style =
+                RunStyle::from_properties(&label_props).with_background(&label_props, background);
             let index = flat.style_index(label_style);
             flat.push_text(&label, index);
             flat.elems.push(Elem::Tab(index));
@@ -394,7 +438,16 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
             &mut items,
         );
         if let Some(borders) = borders {
-            paragraph_borders(&borders, &geometry, height, index == 0, is_last, &mut items);
+            let (joins_previous, joins_next) = ctx.border_group;
+            paragraph_borders(
+                &borders,
+                &geometry,
+                height,
+                index == 0 && !joins_previous,
+                is_last && !joins_next,
+                is_last && joins_next,
+                &mut items,
+            );
         }
         let mut slab = Slab::new(height, items);
         slab.break_before = pending_break.take().filter(|b| *b != Break::Line);
@@ -432,12 +485,17 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     }
 }
 
+/// ECMA-376 Part 1 §17.3.1.24: paragraphs with identical borders form one
+/// group, with the top border above its first line, the bottom border
+/// below its last and the between border (§17.3.1.5) separating its
+/// paragraphs.
 fn paragraph_borders(
     borders: &docboss_model::Borders,
     g: &Geometry,
     height: f32,
     first: bool,
     last: bool,
+    between: bool,
     items: &mut Vec<Item>,
 ) {
     let (x0, x1) = (g.left, g.max_x());
@@ -452,6 +510,9 @@ fn paragraph_borders(
     }
     if last {
         edge(borders.bottom, (x0, height), (x1, height));
+    }
+    if between {
+        edge(borders.inside_horizontal, (x0, height), (x1, height));
     }
     edge(borders.left, (x0, 0.0), (x0, height));
     edge(borders.right, (x1, 0.0), (x1, height));

@@ -73,8 +73,17 @@ pub(crate) struct Ctx<'a> {
     pub shaper: Shaper<'a>,
     pub counter: NumberingCounter<'a>,
     pub page_number: u32,
+    /// The format of the current section's page numbers.
+    pub page_format: Option<docboss_model::NumberFormat>,
     pub total_pages: Option<u32>,
     pub current_note: Option<String>,
+    /// The style of the table whose cell is being laid out.
+    pub table_style: Option<String>,
+    /// The fill behind the blocks being laid out, such as a cell's shading.
+    pub background: Option<docboss_model::Color>,
+    /// Whether the paragraph being laid out shares its borders with the
+    /// paragraph before it and the one after it.
+    pub border_group: (bool, bool),
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -145,10 +154,28 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
     let mut prev_after = 0.0;
     let mut prev_style: Option<Option<String>> = None;
     let mut prev_contextual = false;
-    for block in blocks {
+    let borders: Vec<Option<docboss_model::Borders>> = blocks
+        .iter()
+        .map(|block| match block {
+            Block::Paragraph(p) => ctx
+                .doc
+                .styles
+                .resolve_paragraph_in(p, &ctx.doc.numbering, ctx.table_style.as_deref())
+                .borders
+                .filter(|b| *b != docboss_model::Borders::default()),
+            Block::Table(_) => None,
+        })
+        .collect();
+    let joins = |a: usize, b: usize| borders[a].is_some() && borders[a] == borders[b];
+    for (index, block) in blocks.iter().enumerate() {
         match block {
             Block::Paragraph(p) => {
+                ctx.border_group = (
+                    index > 0 && joins(index, index - 1),
+                    index + 1 < blocks.len() && joins(index, index + 1),
+                );
                 let mut laid = layout_paragraph(ctx, p, width);
+                ctx.border_group = (false, false);
                 let same = prev_style.as_ref() == Some(&p.style_id);
                 let before = if laid.contextual && same {
                     0.0
@@ -214,6 +241,7 @@ struct PageState {
     width: f32,
     height: f32,
     number: u32,
+    number_format: Option<docboss_model::NumberFormat>,
     text_left: f32,
     text_width: f32,
     header_top: f32,
@@ -321,6 +349,7 @@ impl Paginator<'_, '_> {
         let header = self.choose(&headers, number);
         let footer = self.choose(&footers, number);
         self.ctx.page_number = number;
+        self.ctx.page_format = props.page_number_format.clone();
         let header_h = self.story_height(header.as_deref(), text_width);
         let footer_h = self.story_height(footer.as_deref(), text_width);
         let header_top = twips_to_pt(m.header);
@@ -340,6 +369,7 @@ impl Paginator<'_, '_> {
             width,
             height,
             number,
+            number_format: props.page_number_format.clone(),
             text_left,
             text_width,
             header_top,
@@ -665,10 +695,14 @@ pub(crate) fn run(
         ),
         counter: document.numbering.counter(),
         page_number: 1,
+        page_format: None,
         total_pages: None,
         current_note: None,
         depth: 0,
         note_labels: labels,
+        table_style: None,
+        background: None,
+        border_group: (false, false),
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {
@@ -747,6 +781,7 @@ fn finish_page(
     notes: &HashMap<i64, (Vec<Item>, f32)>,
 ) -> Page {
     ctx.page_number = state.number;
+    ctx.page_format = state.number_format.clone();
     let mut items = state.back;
     let doc = ctx.doc;
     if let Some(part) = state.header.as_deref().and_then(|id| doc.header_footer(id)) {

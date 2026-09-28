@@ -125,7 +125,24 @@ impl Styles {
         paragraph: &Paragraph,
         numbering: &Numbering,
     ) -> ParagraphProperties {
+        self.resolve_paragraph_in(paragraph, numbering, None)
+    }
+
+    /// [`Styles::resolve_paragraph`] for a paragraph inside a table with
+    /// the given table style, whose paragraph properties sit between the
+    /// document defaults and the paragraph style (ECMA-376 Part 1 §17.7.2).
+    pub fn resolve_paragraph_in(
+        &self,
+        paragraph: &Paragraph,
+        numbering: &Numbering,
+        table_style: Option<&str>,
+    ) -> ParagraphProperties {
         let mut resolved = self.default_paragraph.clone();
+        if let Some(id) = table_style {
+            self.chain(id)
+                .iter()
+                .for_each(|style| resolved.apply(&style.paragraph));
+        }
         let chain = self
             .paragraph_style_id(paragraph)
             .map(|id| self.chain(id))
@@ -152,11 +169,30 @@ impl Styles {
         paragraph_style: Option<&str>,
         direct: &RunProperties,
     ) -> RunProperties {
+        self.resolve_run_in(paragraph_style, direct, None)
+    }
+
+    /// [`Styles::resolve_run`] for a run inside a table with the given
+    /// table style, whose run properties sit between the document defaults
+    /// and the paragraph style (ECMA-376 Part 1 §17.7.2). Its toggle
+    /// properties take part in the cancellation of §17.7.3.
+    pub fn resolve_run_in(
+        &self,
+        paragraph_style: Option<&str>,
+        direct: &RunProperties,
+        table_style: Option<&str>,
+    ) -> RunProperties {
         let mut resolved = self.default_run.clone();
         let paragraph_style = paragraph_style.or_else(|| {
             self.default_of(StyleKind::Paragraph)
                 .map(|style| style.id.as_str())
         });
+        let mut from_table = RunProperties::default();
+        if let Some(id) = table_style {
+            self.chain(id)
+                .iter()
+                .for_each(|style| from_table.apply(&style.run));
+        }
         let mut from_paragraph = RunProperties::default();
         if let Some(id) = paragraph_style {
             self.chain(id)
@@ -169,7 +205,10 @@ impl Styles {
                 .iter()
                 .for_each(|style| from_character.apply(&style.run));
         }
-        let toggles = from_paragraph.toggles_xor(&from_character);
+        let mut styled = from_table.clone();
+        styled.set_toggles(from_table.toggles_xor(&from_paragraph));
+        let toggles = styled.toggles_xor(&from_character);
+        resolved.apply(&from_table);
         resolved.apply(&from_paragraph);
         resolved.apply(&from_character);
         resolved.set_toggles(toggles);

@@ -69,7 +69,7 @@ pub fn styles(text: &str, theme: &Theme) -> Styles {
 }
 
 /// An `ST_NumberFormat` value (ECMA-376 Part 1 §17.18.59) as a model format.
-fn number_format(value: &str) -> NumberFormat {
+pub(crate) fn number_format(value: &str) -> NumberFormat {
     match value {
         "decimal" => NumberFormat::Decimal,
         "decimalZero" => NumberFormat::DecimalZero,

@@ -148,6 +148,14 @@ fn tables_with_merges_and_nesting() {
     let document = fixture("tables");
     let table = first_table(&document);
     assert_eq!(table.grid.len(), 3);
+    assert!(
+        table.properties.indent.is_some(),
+        "the leftmost cell edge places the table"
+    );
+    assert!(
+        table.properties.cell_margins.is_some(),
+        "sprmTDxaGapHalf gives the cell margins"
+    );
     assert_eq!(table.rows.len(), 3);
     let first = &table.rows[0].cells;
     assert_eq!(first.len(), 2);

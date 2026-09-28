@@ -35,7 +35,36 @@ pub(crate) struct RunStyle {
     pub hidden: bool,
 }
 
+/// The color `auto` text takes over a background: white over a dark fill,
+/// black otherwise, as Word and LibreOffice draw it (ECMA-376 Part 1
+/// §17.3.2.6 leaves the choice to the consumer).
+pub(crate) fn automatic_color(background: Option<Color>) -> Color {
+    let Some(Color(r, g, b)) = background else {
+        return Color::BLACK;
+    };
+    let luminance = 0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b);
+    if luminance < 128.0 {
+        return Color::WHITE;
+    }
+    Color::BLACK
+}
+
 impl RunStyle {
+    /// Replaces an `auto` text color with the one that reads over the run's
+    /// own shading or highlight, else over `background`.
+    pub(crate) fn with_background(
+        mut self,
+        p: &RunProperties,
+        background: Option<Color>,
+    ) -> RunStyle {
+        if p.color.flatten().is_some() {
+            return self;
+        }
+        let behind = self.shading.or(self.highlight).or(background);
+        self.color = automatic_color(behind);
+        self
+    }
+
     /// ECMA-376 Part 1 §17.3.2: run properties to drawing parameters;
     /// superscript and subscript draw at two thirds of the size, raised by
     /// a third or lowered by a seventh of the em.
@@ -194,7 +223,7 @@ impl<'a> Shaper<'a> {
         let k = size / f32::from(m.units_per_em);
         LineMetrics {
             ascent: m.ascent * k,
-            descent: m.descent * k,
+            descent: (m.descent + m.line_gap) * k,
             underline_position: m.underline_position * k,
             underline_thickness: (m.underline_thickness * k).max(0.25),
             strikeout_position: m.strikeout_position * k,
@@ -213,11 +242,17 @@ impl<'a> Shaper<'a> {
             c
         };
         let primary = self.select(style.slot(shown), style.bold, style.italic);
-        let hit = primary.and_then(|f| self.lookup(f, shown).map(|g| (f, g)));
-        let hit = hit.or_else(|| {
-            let fallback = self.db.fallback(shown, style.bold, style.italic)?;
-            self.lookup(fallback, shown).map(|g| (fallback, g))
-        });
+        let mapped = style
+            .slot(shown)
+            .filter(|_| ('\u{F020}'..='\u{F0FF}').contains(&shown))
+            .and_then(|family| docboss_font::symbol_to_unicode(family, shown));
+        let hit = match mapped {
+            Some(mapped) => primary
+                .and_then(|f| self.lookup(f, shown).map(|g| (f, g)))
+                .or_else(|| self.find(primary, mapped, style))
+                .or_else(|| self.find(None, shown, style)),
+            None => self.find(primary, shown, style),
+        };
         let Some((font, (id, units))) = hit else {
             let font = primary.unwrap_or(FontId(u32::MAX));
             let upem = self
@@ -242,6 +277,21 @@ impl<'a> Shaper<'a> {
             advance: f32::from(units) * size / upem + style.spacing,
             size,
         }
+    }
+
+    /// A face and glyph for `c`: the selected face, else a fallback face
+    /// that has the character.
+    fn find(
+        &mut self,
+        primary: Option<FontId>,
+        c: char,
+        style: &RunStyle,
+    ) -> Option<(FontId, (u16, u16))> {
+        let hit = primary.and_then(|f| self.lookup(f, c).map(|g| (f, g)));
+        hit.or_else(|| {
+            let fallback = self.db.fallback(c, style.bold, style.italic)?;
+            self.lookup(fallback, c).map(|g| (fallback, g))
+        })
     }
 
     /// Pair kerning between two glyphs of one face, in points.
