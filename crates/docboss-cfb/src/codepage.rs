@@ -180,15 +180,73 @@ fn high_table(code_page: u32) -> Option<&'static [u16; 128]> {
     })
 }
 
+/// Double-byte code pages: 128 single-byte values for 0x80 to 0xFF (0xFFFF
+/// marks a lead byte), then 192 trail values (0x40 to 0xFF) for each lead
+/// byte 0x81 to 0xFE, little-endian, 0 where unmapped. Generated from the
+/// Python codec tables.
+fn double_byte_table(code_page: u32) -> Option<&'static [u8]> {
+    Some(match code_page {
+        932 => include_bytes!("dbcs/cp932.bin"),
+        936 => include_bytes!("dbcs/cp936.bin"),
+        949 => include_bytes!("dbcs/cp949.bin"),
+        950 => include_bytes!("dbcs/cp950.bin"),
+        _ => return None,
+    })
+}
+
+fn table_unit(table: &[u8], index: usize) -> u16 {
+    table
+        .get(index * 2..index * 2 + 2)
+        .map_or(0, |pair| u16::from_le_bytes([pair[0], pair[1]]))
+}
+
+/// Decodes Shift JIS (932), GBK (936), Unified Hangul (949) or Big5 (950).
+fn decode_double_byte(table: &[u8], bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let byte = bytes[at];
+        at += 1;
+        if byte < 0x80 {
+            out.push(char::from(byte));
+            continue;
+        }
+        let single = table_unit(table, usize::from(byte - 0x80));
+        if single != 0xFFFF {
+            out.push(char::from_u32(u32::from(single)).unwrap_or('\u{FFFD}'));
+            continue;
+        }
+        let Some(&trail) = bytes
+            .get(at)
+            .filter(|&&t| t >= 0x40 && (0x81..=0xFE).contains(&byte))
+        else {
+            out.push('\u{FFFD}');
+            continue;
+        };
+        at += 1;
+        let index = 128 + usize::from(byte - 0x81) * 192 + usize::from(trail - 0x40);
+        let unit = table_unit(table, index);
+        out.push(if unit == 0 {
+            '\u{FFFD}'
+        } else {
+            char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}')
+        });
+    }
+    out
+}
+
 /// Whether docboss can decode this code page exactly.
 pub fn is_supported(code_page: u32) -> bool {
-    matches!(code_page, 1200 | 1201 | 65001 | 20127 | 28591) || high_table(code_page).is_some()
+    matches!(code_page, 1200 | 1201 | 65001 | 20127 | 28591)
+        || high_table(code_page).is_some()
+        || double_byte_table(code_page).is_some()
 }
 
 /// Decodes bytes in a Windows code page. UTF-16LE (1200), UTF-16BE (1201),
 /// UTF-8 (65001), US-ASCII (20127), ISO 8859-1 (28591), the single-byte
-/// Windows pages 874 and 1250-1258, and Mac Roman (10000) decode exactly;
-/// anything else is read as ISO 8859-1 and flagged.
+/// Windows pages 874 and 1250-1258, Mac Roman (10000) and the double-byte
+/// pages 932, 936, 949 and 950 decode exactly; anything else is read as
+/// ISO 8859-1 and flagged.
 pub fn decode(code_page: u32, bytes: &[u8]) -> (String, Fidelity) {
     match code_page {
         1200 => return (utf16le(bytes), Fidelity::Exact),
@@ -204,6 +262,9 @@ pub fn decode(code_page: u32, bytes: &[u8]) -> (String, Fidelity) {
         65001 => return (String::from_utf8_lossy(bytes).into_owned(), Fidelity::Exact),
         20127 | 28591 => return (latin1(bytes), Fidelity::Exact),
         _ => {}
+    }
+    if let Some(table) = double_byte_table(code_page) {
+        return (decode_double_byte(table, bytes), Fidelity::Exact);
     }
     let Some(table) = high_table(code_page) else {
         return (latin1(bytes), Fidelity::Approximated);
@@ -254,6 +315,13 @@ mod tests {
         );
         assert_eq!(decode(1251, b"\xcf\xf0\xe8").0, "\u{41F}\u{440}\u{438}");
         assert_eq!(decode(9999, b"\xe9").1, Fidelity::Approximated);
+        assert_eq!(decode(936, b"\xd6\xd0\xce\xc4a").0, "\u{4E2D}\u{6587}a");
+        assert_eq!(decode(950, b"\xa4\xa4\xa4\xe5").0, "\u{4E2D}\u{6587}");
+        assert_eq!(
+            decode(932, b"\x93\xfa\x96\x7b\xb1").0,
+            "\u{65E5}\u{672C}\u{FF71}"
+        );
+        assert_eq!(decode(949, b"\xc7\xd1").0, "\u{D55C}");
         assert_eq!(utf16le(&[0x41, 0, 0x3D, 0xD8, 0x00, 0xDE]), "A\u{1F600}");
     }
 }

@@ -667,7 +667,9 @@ impl<'a> Context<'a> {
     }
 
     fn paragraph(&self, start: u32, mark: u32, kind: StoryKind) -> ParagraphInfo {
-        let mut info = self.paragraph_info(mark.min(self.text.len().saturating_sub(1) as u32));
+        let mark_cp = mark.min(self.text.len().saturating_sub(1) as u32);
+        let mut info = self.paragraph_info(mark_cp);
+        info.paragraph.mark = self.run_formatting(mark_cp, info.extra.istd).0;
         info.paragraph.inlines = self.inlines(start, mark, info.extra.istd, kind);
         info
     }
