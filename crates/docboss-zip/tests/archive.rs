@@ -162,3 +162,21 @@ fn truncated_archives_never_panic() {
         }
     }
 }
+
+/// A deflate stream cut short keeps what it inflated, flagged as failing
+/// its CRC check.
+#[test]
+fn truncated_deflate_keeps_the_readable_prefix() {
+    let text: Vec<u8> = (0..20000u32)
+        .flat_map(|i| i.to_string().into_bytes())
+        .collect();
+    let data = ZipWriter::new().deflated("t", &text).finish();
+    let archive = Archive::new(&data).unwrap();
+    let entry = archive.entries()[0].clone();
+    let mut short = entry.clone();
+    short.compressed_size /= 2;
+    let contents = archive.read_entry(&short).unwrap();
+    assert!(!contents.crc_ok);
+    assert!(!contents.data.is_empty());
+    assert!(text.starts_with(&contents.data));
+}

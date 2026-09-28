@@ -84,7 +84,7 @@ pub fn unescape(raw: &str, attribute: bool) -> Cow<'_, str> {
             rest = &tail[skip..];
             continue;
         }
-        let Some(end) = tail[..tail.len().min(12)].find(';') else {
+        let Some(end) = memchr::memchr(b';', &tail.as_bytes()[..tail.len().min(12)]) else {
             out.push('&');
             rest = &tail[1..];
             continue;
@@ -136,6 +136,7 @@ mod tests {
         assert_eq!(unescape("a\r\nb\rc", false), "a\nb\nc");
         assert_eq!(unescape("a\tb\nc", true), "a b c");
         assert_eq!(unescape("&#xD800;", false), "&#xD800;");
+        assert_eq!(unescape("&“”ab;", false), "&“”ab;");
     }
 
     #[test]

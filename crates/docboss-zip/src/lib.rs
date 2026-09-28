@@ -255,7 +255,18 @@ impl<'a> Archive<'a> {
         let start = self.data_start(entry)?;
         let data = match entry.method {
             STORED => self.stored(entry, start)?,
-            DEFLATED => Cow::Owned(self.inflate(entry, start)?),
+            DEFLATED => match self.inflate(entry, start) {
+                Ok(data) => Cow::Owned(data),
+                Err((Error::Inflate { .. } | Error::Truncated(_), partial))
+                    if !partial.is_empty() =>
+                {
+                    return Ok(Contents {
+                        data: Cow::Owned(partial),
+                        crc_ok: false,
+                    });
+                }
+                Err((error, _)) => return Err(error),
+            },
             method => {
                 return Err(Error::UnsupportedMethod {
                     name: entry.name.clone(),
@@ -302,7 +313,14 @@ impl<'a> Archive<'a> {
             .ok_or_else(|| Error::Truncated(entry.name.clone()))
     }
 
-    fn inflate(&self, entry: &Entry, start: usize) -> Result<Vec<u8>> {
+    /// Inflates an entry. A damaged or truncated stream fails with the bytes
+    /// inflated before the damage, which [`Archive::read_entry`] keeps as a
+    /// failed CRC check.
+    fn inflate(
+        &self,
+        entry: &Entry,
+        start: usize,
+    ) -> std::result::Result<Vec<u8>, (Error, Vec<u8>)> {
         let input = match entry.sizes_known {
             true => {
                 let size = usize::try_from(entry.compressed_size).unwrap_or(usize::MAX);
@@ -320,38 +338,43 @@ impl<'a> Archive<'a> {
                 out.reserve(out.capacity().clamp(64 << 10, 64 << 20));
             }
             let consumed = inflater.total_in() as usize;
-            let status = inflater
-                .decompress_vec(
-                    &input[consumed.min(input.len())..],
-                    &mut out,
-                    flate2::FlushDecompress::None,
-                )
-                .map_err(|e| Error::Inflate {
-                    name: entry.name.clone(),
-                    message: e.to_string(),
-                })?;
+            let status = match inflater.decompress_vec(
+                &input[consumed.min(input.len())..],
+                &mut out,
+                flate2::FlushDecompress::None,
+            ) {
+                Ok(status) => status,
+                Err(e) => {
+                    let error = Error::Inflate {
+                        name: entry.name.clone(),
+                        message: e.to_string(),
+                    };
+                    return Err((error, out));
+                }
+            };
             let produced = out.len() as u64;
             if produced > limits.max_entry_size {
-                return Err(Error::TooLarge {
+                let error = Error::TooLarge {
                     name: entry.name.clone(),
                     limit: limits.max_entry_size,
-                });
+                };
+                return Err((error, Vec::new()));
             }
             let read = inflater.total_in().max(1);
             if produced > limits.ratio_floor && produced / read > limits.max_ratio {
-                return Err(Error::Bomb {
+                let error = Error::Bomb {
                     name: entry.name.clone(),
                     ratio: limits.max_ratio,
-                });
+                };
+                return Err((error, Vec::new()));
             }
+            let exhausted = inflater.total_in() as usize >= input.len();
+            let room = out.len() < out.capacity();
             match status {
                 flate2::Status::StreamEnd => return Ok(out),
-                flate2::Status::Ok => continue,
-                flate2::Status::BufError => {
-                    if out.len() < out.capacity() {
-                        return Err(Error::Truncated(entry.name.clone()));
-                    }
-                }
+                _ if !room => continue,
+                flate2::Status::Ok if !exhausted => continue,
+                _ => return Err((Error::Truncated(entry.name.clone()), out)),
             }
         }
     }
