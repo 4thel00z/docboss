@@ -213,7 +213,7 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
         buf.clear();
         self.page_break = false;
         self.inline(
-            &pieces,
+            pieces,
             Context {
                 heading: heading.is_some(),
                 table: false,
