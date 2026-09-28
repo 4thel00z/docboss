@@ -50,7 +50,7 @@ fn mutate_parts(data: &[u8], state: &mut u64) -> Option<Vec<u8>> {
         };
         let mut bytes = contents.data.into_owned();
         let is_xml = entry.name.ends_with(".xml") || entry.name.ends_with(".rels");
-        if is_xml && !bytes.is_empty() && next(state) % 2 == 0 {
+        if is_xml && !bytes.is_empty() && next(state).is_multiple_of(2) {
             let at = (next(state) % bytes.len() as u64) as usize;
             match next(state) % 4 {
                 0 => bytes.truncate(at),
