@@ -52,9 +52,6 @@ def annexes : List (Char × String) := [
 ]
 
 def headings0 : List Heading := [
-  ⟨.clause [1, 0], "means 100% lighten. Also, 0.0 means no change."⟩,
-  ⟨.clause [1, 5], "inches and width 2 inches with text “Shape 1”\""⟩,
-  ⟨.clause [1, 10], "November 5, 1996. http://www.w3.org/Graphics/Color/sRGB"⟩,
   ⟨.clause [2, 1], "Document Conformance"⟩,
   ⟨.clause [2, 2], "Application Conformance"⟩,
   ⟨.clause [2, 3], "Application Descriptions"⟩,
@@ -63,12 +60,6 @@ def headings0 : List Heading := [
   ⟨.clause [2, 3, 3], "Additional Application Descriptions"⟩,
   ⟨.clause [2, 3, 4], "Representation of Application Descriptions within Documents"⟩,
   ⟨.clause [2, 4], "Interoperability Guidelines"⟩,
-  ⟨.clause [3, 78624], "l might be"⟩,
-  ⟨.clause [4, 1], "Constants…………………………………… 6"⟩,
-  ⟨.clause [4, 2], "Bookmarks……………………………………. 6"⟩,
-  ⟨.clause [4, 3], "Operators…….…………………………….. 6"⟩,
-  ⟨.clause [4, 4], "Functions…………………………………… 7"⟩,
-  ⟨.clause [4, 5], "Table cell references……………………….. 8"⟩,
   ⟨.clause [8, 1], "Content Overview"⟩,
   ⟨.clause [8, 2], "Packages and Parts"⟩,
   ⟨.clause [8, 3], "Consumers and Producers"⟩,
@@ -451,10 +442,7 @@ def headings0 : List Heading := [
   ⟨.clause [17, 5, 2, 16], "equation (Equation Structured Document Tag)"⟩,
   ⟨.clause [17, 5, 2, 17], "group (Group Structured Document Tag)"⟩,
   ⟨.clause [17, 5, 2, 18], "id (Unique ID)"⟩,
-  ⟨.clause [17, 5, 2, 19], "label (Structured Document Tag Label)"⟩
-]
-
-def headings1 : List Heading := [
+  ⟨.clause [17, 5, 2, 19], "label (Structured Document Tag Label)"⟩,
   ⟨.clause [17, 5, 2, 20], "lid (Date Picker Language ID)"⟩,
   ⟨.clause [17, 5, 2, 21], "listItem (Combo Box List Item)"⟩,
   ⟨.clause [17, 5, 2, 22], "listItem (Drop-Down List Item)"⟩,
@@ -463,7 +451,10 @@ def headings1 : List Heading := [
   ⟨.clause [17, 5, 2, 25], "placeholder (Structured Document Tag Placeholder Text)"⟩,
   ⟨.clause [17, 5, 2, 26], "richText (Rich Text Structured Document Tag)"⟩,
   ⟨.clause [17, 5, 2, 27], "rPr (Run Properties For Structured Document Tag Contents)"⟩,
-  ⟨.clause [17, 5, 2, 28], "rPr (Structured Document Tag End Character Run Properties)"⟩,
+  ⟨.clause [17, 5, 2, 28], "rPr (Structured Document Tag End Character Run Properties)"⟩
+]
+
+def headings1 : List Heading := [
   ⟨.clause [17, 5, 2, 29], "sdt (Block-Level Structured Document Tag)"⟩,
   ⟨.clause [17, 5, 2, 30], "sdt (Row-Level Structured Document Tag)"⟩,
   ⟨.clause [17, 5, 2, 31], "sdt (Inline-Level Structured Document Tag)"⟩,
@@ -653,6 +644,7 @@ def headings1 : List Heading := [
   ⟨.clause [17, 12, 16], "types (Entry Types)"⟩,
   ⟨.clause [17, 13], "Annotations"⟩,
   ⟨.clause [17, 13, 1], "Inline Annotations"⟩,
+  ⟨.clause [17, 13, 2], "\"Cross Structure\" Annotations"⟩,
   ⟨.clause [17, 13, 3], "Property Annotations"⟩,
   ⟨.clause [17, 13, 4], "Comments"⟩,
   ⟨.clause [17, 13, 4, 1], "annotationRef (Comment Information Block)"⟩,
@@ -672,6 +664,7 @@ def headings1 : List Heading := [
   ⟨.clause [17, 13, 5, 8], "customXmlMoveFromRangeEnd (Custom XML Markup Move Source End)"⟩,
   ⟨.clause [17, 13, 5, 9], "customXmlMoveFromRangeStart (Custom XML Markup Move Source Start)"⟩,
   ⟨.clause [17, 13, 5, 10], "customXmlMoveToRangeEnd (Custom XML Markup Move Destination Location End)"⟩,
+  ⟨.clause [17, 13, 5, 11], "customXmlMoveToRangeStart (Custom XML Markup Move Destination Location Start)"⟩,
   ⟨.clause [17, 13, 5, 12], "del (Deleted Table Row)"⟩,
   ⟨.clause [17, 13, 5, 13], "del (Deleted Math Control Character)"⟩,
   ⟨.clause [17, 13, 5, 14], "del (Deleted Run Content)"⟩,
@@ -747,10 +740,13 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 1], "Document Settings"⟩,
   ⟨.clause [17, 15, 1, 1], "activeWritingStyle (Grammar Checking Settings)"⟩,
   ⟨.clause [17, 15, 1, 2], "alignBordersAndEdges (Align Paragraph and Table Borders with Page Border)"⟩,
+  ⟨.clause [17, 15, 1, 3], "alwaysMergeEmptyNamespace (Do Not Mark Custom XML Elements With No Namespace As Invalid)"⟩,
+  ⟨.clause [17, 15, 1, 4], "alwaysShowPlaceholderText (Use Custom XML Element Names as Default Placeholder Text)"⟩,
   ⟨.clause [17, 15, 1, 5], "attachedSchema (Attached Custom XML Schema)"⟩,
   ⟨.clause [17, 15, 1, 6], "attachedTemplate (Attached Document Template)"⟩,
   ⟨.clause [17, 15, 1, 7], "autoCaption (Single Automatic Captioning Setting)"⟩,
   ⟨.clause [17, 15, 1, 8], "autoCaptions (Automatic Captioning Settings)"⟩,
+  ⟨.clause [17, 15, 1, 9], "autoFormatOverride (Allow Automatic Formatting to Override Formatting Protection Settings)"⟩,
   ⟨.clause [17, 15, 1, 10], "autoHyphenation (Automatically Hyphenate Document Contents When Displayed)"⟩,
   ⟨.clause [17, 15, 1, 11], "bookFoldPrinting (Book Fold Printing)"⟩,
   ⟨.clause [17, 15, 1, 12], "bookFoldPrintingSheets (Number of Pages Per Booklet)"⟩,
@@ -775,6 +771,7 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 1, 31], "docVar (Single Document Variable)"⟩,
   ⟨.clause [17, 15, 1, 32], "docVars (Document Variables)"⟩,
   ⟨.clause [17, 15, 1, 33], "doNotAutoCompressPictures (Do Not Automatically Compress Images)"⟩,
+  ⟨.clause [17, 15, 1, 34], "doNotDemarcateInvalidXml (Do Not Show Visual Indicator For Invalid Custom XML Markup)"⟩,
   ⟨.clause [17, 15, 1, 35], "doNotDisplayPageBoundaries (Do Not Display Visual Boundary For Header/Footer or Between Pages)"⟩,
   ⟨.clause [17, 15, 1, 36], "doNotEmbedSmartTags (Remove Smart Tags When Saving)"⟩,
   ⟨.clause [17, 15, 1, 37], "doNotHyphenateCaps (Do Not Hyphenate Words in ALL CAPITAL LETTERS)"⟩,
@@ -782,6 +779,8 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 1, 39], "doNotShadeFormData (Do Not Show Visual Indicator For Form Fields)"⟩,
   ⟨.clause [17, 15, 1, 40], "doNotTrackFormatting (Do Not Track Formatting Revisions When Tracking Revisions)"⟩,
   ⟨.clause [17, 15, 1, 41], "doNotTrackMoves (Do Not Use Move Syntax When Tracking Revisions)"⟩,
+  ⟨.clause [17, 15, 1, 42], "doNotUseMarginsForDrawingGridOrigin (Do Not Use Margins for Drawing Grid Origin)"⟩,
+  ⟨.clause [17, 15, 1, 43], "doNotValidateAgainstSchema (Do Not Validate Custom XML Markup Against Schemas)"⟩,
   ⟨.clause [17, 15, 1, 44], "drawingGridHorizontalOrigin (Drawing Grid Horizontal Origin Point)"⟩,
   ⟨.clause [17, 15, 1, 45], "drawingGridHorizontalSpacing (Drawing Grid Horizontal Grid Unit Size)"⟩,
   ⟨.clause [17, 15, 1, 46], "drawingGridVerticalOrigin (Drawing Grid Vertical Origin Point)"⟩,
@@ -806,11 +805,13 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 1, 65], "proofState (Spelling and Grammatical Checking State)"⟩,
   ⟨.clause [17, 15, 1, 66], "readModeInkLockDown (Freeze Document Layout)"⟩,
   ⟨.clause [17, 15, 1, 67], "removeDateAndTime (Remove Date and Time from Annotations)"⟩,
+  ⟨.clause [17, 15, 1, 68], "removePersonalInformation (Remove Personal Information from Document Properties)"⟩,
   ⟨.clause [17, 15, 1, 69], "revisionView (Visibility of Annotation Types)"⟩,
   ⟨.clause [17, 15, 1, 70], "rsid (Single Session Revision Save ID)"⟩,
   ⟨.clause [17, 15, 1, 71], "rsidRoot (Original Document Revision Save ID)"⟩,
   ⟨.clause [17, 15, 1, 72], "rsids (Listing of All Revision Save ID Values)"⟩,
   ⟨.clause [17, 15, 1, 73], "saveFormsData (Only Save Form Field Content)"⟩,
+  ⟨.clause [17, 15, 1, 74], "saveInvalidXml (Allow Saving Document As XML File When Custom XML Markup Is Invalid)"⟩,
   ⟨.clause [17, 15, 1, 75], "savePreviewPicture (Generate Thumbnail For Document On Save)"⟩,
   ⟨.clause [17, 15, 1, 76], "saveThroughXslt (Custom XSL Transform To Use When Saving As XML File)"⟩,
   ⟨.clause [17, 15, 1, 77], "saveXmlDataOnly (Only Save Custom XML Markup)"⟩,
@@ -843,6 +844,7 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 2, 9], "divsChild (Child div Elements Contained within Current div)"⟩,
   ⟨.clause [17, 15, 2, 10], "doNotOrganizeInFolder (Do Not Place Supporting Files in Subdirectory)"⟩,
   ⟨.clause [17, 15, 2, 11], "doNotRelyOnCSS (Do Not Rely on CSS for Font Face Formatting)"⟩,
+  ⟨.clause [17, 15, 2, 12], "doNotSaveAsSingleFile (Recommend Web Page Format over Single File Web Page Format)"⟩,
   ⟨.clause [17, 15, 2, 13], "doNotUseLongFileNames (Do Not Use File Names Longer than 8.3 Characters)"⟩,
   ⟨.clause [17, 15, 2, 14], "encoding (Output Encoding When Saving as Web Page)"⟩,
   ⟨.clause [17, 15, 2, 15], "flatBorders (Frameset Splitter Border Style)"⟩,
@@ -852,12 +854,12 @@ def headings1 : List Heading := [
   ⟨.clause [17, 15, 2, 19], "frameset (Root Frameset Definition)"⟩,
   ⟨.clause [17, 15, 2, 20], "framesetSplitbar (Frameset Splitter Properties)"⟩,
   ⟨.clause [17, 15, 2, 21], "left (Left Border for HTML div)"⟩,
-  ⟨.clause [17, 15, 2, 22], "linkedToFile (Maintain Link to Existing File)"⟩,
-  ⟨.clause [17, 15, 2, 23], "longDesc (Frame Long Description)"⟩,
-  ⟨.clause [17, 15, 2, 24], "marBottom (Bottom Margin for HTML div)"⟩
+  ⟨.clause [17, 15, 2, 22], "linkedToFile (Maintain Link to Existing File)"⟩
 ]
 
 def headings2 : List Heading := [
+  ⟨.clause [17, 15, 2, 23], "longDesc (Frame Long Description)"⟩,
+  ⟨.clause [17, 15, 2, 24], "marBottom (Bottom Margin for HTML div)"⟩,
   ⟨.clause [17, 15, 2, 25], "marH (Top and Bottom Margin for Frame)"⟩,
   ⟨.clause [17, 15, 2, 26], "marLeft (Left Margin for HTML div)"⟩,
   ⟨.clause [17, 15, 2, 27], "marRight (Right Margin for HTML div)"⟩,
@@ -1255,12 +1257,12 @@ def headings2 : List Heading := [
   ⟨.clause [18, 3, 1, 96], "v (Cell Value)"⟩,
   ⟨.clause [18, 3, 1, 97], "webPublishItem (Web Publishing Item)"⟩,
   ⟨.clause [18, 3, 1, 98], "webPublishItems (Web Publishing Items)"⟩,
-  ⟨.clause [18, 3, 1, 99], "worksheet (Worksheet)"⟩,
-  ⟨.clause [18, 3, 2], "AutoFilter Settings"⟩,
-  ⟨.clause [18, 3, 2, 1], "colorFilter (Color Filter Criteria)"⟩
+  ⟨.clause [18, 3, 1, 99], "worksheet (Worksheet)"⟩
 ]
 
 def headings3 : List Heading := [
+  ⟨.clause [18, 3, 2], "AutoFilter Settings"⟩,
+  ⟨.clause [18, 3, 2, 1], "colorFilter (Color Filter Criteria)"⟩,
   ⟨.clause [18, 3, 2, 2], "customFilter (Custom Filter Criteria)"⟩,
   ⟨.clause [18, 3, 2, 3], "customFilters (Custom Filters)"⟩,
   ⟨.clause [18, 3, 2, 4], "dateGroupItem (Date Grouping)"⟩,
@@ -1658,12 +1660,12 @@ def headings3 : List Heading := [
   ⟨.clause [18, 17, 7, 66], "CUBEMEMBER"⟩,
   ⟨.clause [18, 17, 7, 67], "CUBEMEMBERPROPERTY"⟩,
   ⟨.clause [18, 17, 7, 68], "CUBERANKEDMEMBER"⟩,
-  ⟨.clause [18, 17, 7, 69], "CUBESET"⟩,
-  ⟨.clause [18, 17, 7, 70], "CUBESETCOUNT"⟩,
-  ⟨.clause [18, 17, 7, 71], "CUBEVALUE"⟩
+  ⟨.clause [18, 17, 7, 69], "CUBESET"⟩
 ]
 
 def headings4 : List Heading := [
+  ⟨.clause [18, 17, 7, 70], "CUBESETCOUNT"⟩,
+  ⟨.clause [18, 17, 7, 71], "CUBEVALUE"⟩,
   ⟨.clause [18, 17, 7, 72], "CUMIPMT"⟩,
   ⟨.clause [18, 17, 7, 73], "CUMPRINC"⟩,
   ⟨.clause [18, 17, 7, 74], "DATE"⟩,
@@ -2061,12 +2063,12 @@ def headings4 : List Heading := [
   ⟨.clause [19, 2, 1, 12], "extLst (Extension List)"⟩,
   ⟨.clause [19, 2, 1, 13], "font (Embedded Font Name)"⟩,
   ⟨.clause [19, 2, 1, 14], "handoutMasterId (Handout Master ID)"⟩,
-  ⟨.clause [19, 2, 1, 15], "handoutMasterIdLst (List of Handout Master IDs)"⟩,
-  ⟨.clause [19, 2, 1, 16], "italic (Italic Embedded Font)"⟩,
-  ⟨.clause [19, 2, 1, 17], "kinsoku (Kinsoku Settings)"⟩
+  ⟨.clause [19, 2, 1, 15], "handoutMasterIdLst (List of Handout Master IDs)"⟩
 ]
 
 def headings5 : List Heading := [
+  ⟨.clause [19, 2, 1, 16], "italic (Italic Embedded Font)"⟩,
+  ⟨.clause [19, 2, 1, 17], "kinsoku (Kinsoku Settings)"⟩,
   ⟨.clause [19, 2, 1, 18], "kiosk (Kiosk Slide Show Mode)"⟩,
   ⟨.clause [19, 2, 1, 19], "modifyVerifier (Modification Verifier)"⟩,
   ⟨.clause [19, 2, 1, 20], "notesMasterId (Notes Master ID)"⟩,
@@ -2336,6 +2338,7 @@ def headings5 : List Heading := [
   ⟨.clause [19, 7, 54], "ST_TransitionSpeed (Transition Speed)"⟩,
   ⟨.clause [19, 7, 55], "ST_ViewType (List of View Types)"⟩,
   ⟨.clause [20, 1], "DrawingML - Main"⟩,
+  ⟨.clause [20, 1, 1], "Table of Contents"⟩,
   ⟨.clause [20, 1, 2], "Basics"⟩,
   ⟨.clause [20, 1, 2, 1], "EMU Unit of Measurement"⟩,
   ⟨.clause [20, 1, 2, 2], "Core Drawing Object Information"⟩,
@@ -2463,13 +2466,13 @@ def headings5 : List Heading := [
   ⟨.clause [20, 1, 4, 2, 5], "bevel (Bevel)"⟩,
   ⟨.clause [20, 1, 4, 2, 6], "bottom (Bottom Border)"⟩,
   ⟨.clause [20, 1, 4, 2, 7], "effect (Effect)"⟩,
-  ⟨.clause [20, 1, 4, 2, 8], "effectRef (Effect Reference)"⟩,
-  ⟨.clause [20, 1, 4, 2, 9], "fill (Fill)"⟩,
-  ⟨.clause [20, 1, 4, 2, 10], "fillRef (Fill Reference)"⟩,
-  ⟨.clause [20, 1, 4, 2, 11], "firstCol (First Column)"⟩
+  ⟨.clause [20, 1, 4, 2, 8], "effectRef (Effect Reference)"⟩
 ]
 
 def headings6 : List Heading := [
+  ⟨.clause [20, 1, 4, 2, 9], "fill (Fill)"⟩,
+  ⟨.clause [20, 1, 4, 2, 10], "fillRef (Fill Reference)"⟩,
+  ⟨.clause [20, 1, 4, 2, 11], "firstCol (First Column)"⟩,
   ⟨.clause [20, 1, 4, 2, 12], "firstRow (First Row)"⟩,
   ⟨.clause [20, 1, 4, 2, 13], "font (Font)"⟩,
   ⟨.clause [20, 1, 4, 2, 14], "insideH (Inside Horizontal Border)"⟩,
@@ -2493,6 +2496,7 @@ def headings6 : List Heading := [
   ⟨.clause [20, 1, 4, 2, 32], "top (Top Border)"⟩,
   ⟨.clause [20, 1, 4, 2, 33], "tr2bl (Top Right to Bottom Left Border)"⟩,
   ⟨.clause [20, 1, 4, 2, 34], "wholeTbl (Whole Table)"⟩,
+  ⟨.clause [20, 1, 5], "3D"⟩,
   ⟨.clause [20, 1, 5, 1], "anchor (Anchor Point)"⟩,
   ⟨.clause [20, 1, 5, 2], "backdrop (Backdrop Plane)"⟩,
   ⟨.clause [20, 1, 5, 3], "bevelB (Bottom Bevel)"⟩,
@@ -2700,6 +2704,7 @@ def headings6 : List Heading := [
   ⟨.clause [20, 1, 10, 86], "ST_TileFlipMode (Tile Flip Mode)"⟩,
   ⟨.clause [20, 1, 10, 87], "ST_TextBulletSize (Bullet Size Percentage)"⟩,
   ⟨.clause [20, 2], "DrawingML - Picture"⟩,
+  ⟨.clause [20, 2, 1], "Table of Contents"⟩,
   ⟨.clause [20, 2, 2], "Elements"⟩,
   ⟨.clause [20, 2, 2, 1], "blipFill (Picture Fill)"⟩,
   ⟨.clause [20, 2, 2, 2], "cNvPicPr (Non-Visual Picture Drawing Properties)"⟩,
@@ -2708,9 +2713,11 @@ def headings6 : List Heading := [
   ⟨.clause [20, 2, 2, 5], "pic (Picture)"⟩,
   ⟨.clause [20, 2, 2, 6], "spPr (Shape Properties)"⟩,
   ⟨.clause [20, 3], "DrawingML - Locked Canvas"⟩,
+  ⟨.clause [20, 3, 1], "Table of Contents"⟩,
   ⟨.clause [20, 3, 2], "Basics"⟩,
   ⟨.clause [20, 3, 2, 1], "lockedCanvas (Locked Canvas Container)"⟩,
   ⟨.clause [20, 4], "DrawingML - WordprocessingML Drawing"⟩,
+  ⟨.clause [20, 4, 1], "Table of Contents"⟩,
   ⟨.clause [20, 4, 2], "Elements"⟩,
   ⟨.clause [20, 4, 2, 1], "align (Relative Horizontal Alignment)"⟩,
   ⟨.clause [20, 4, 2, 2], "align (Relative Vertical Alignment)"⟩,
@@ -2764,6 +2771,7 @@ def headings6 : List Heading := [
   ⟨.clause [20, 4, 3, 6], "ST_WrapDistance (Distance from Text)"⟩,
   ⟨.clause [20, 4, 3, 7], "ST_WrapText (Text Wrapping Location)"⟩,
   ⟨.clause [20, 5], "DrawingML - SpreadsheetML Drawing"⟩,
+  ⟨.clause [20, 5, 1], "Table of Contents"⟩,
   ⟨.clause [20, 5, 2], "Elements"⟩,
   ⟨.clause [20, 5, 2, 1], "absoluteAnchor (Absolute Anchor Shape Size)"⟩,
   ⟨.clause [20, 5, 2, 2], "blipFill (Picture Fill)"⟩,
@@ -2806,6 +2814,7 @@ def headings6 : List Heading := [
   ⟨.clause [20, 5, 3, 2], "ST_EditAs (Resizing Behaviors)"⟩,
   ⟨.clause [20, 5, 3, 3], "ST_RowID (Row ID)"⟩,
   ⟨.clause [21, 1], "DrawingML - Main"⟩,
+  ⟨.clause [21, 1, 1], "Table of Contents"⟩,
   ⟨.clause [21, 1, 2], "Paragraphs and Rich Formatting"⟩,
   ⟨.clause [21, 1, 2, 1], "Body Formatting"⟩,
   ⟨.clause [21, 1, 2, 1, 1], "bodyPr (Body Properties)"⟩,
@@ -2860,7 +2869,10 @@ def headings6 : List Heading := [
   ⟨.clause [21, 1, 2, 4, 14], "lvl2pPr (List Level 2 Text Style)"⟩,
   ⟨.clause [21, 1, 2, 4, 15], "lvl3pPr (List Level 3 Text Style)"⟩,
   ⟨.clause [21, 1, 2, 4, 16], "lvl4pPr (List Level 4 Text Style)"⟩,
-  ⟨.clause [21, 1, 2, 4, 17], "lvl5pPr (List Level 5 Text Style)"⟩,
+  ⟨.clause [21, 1, 2, 4, 17], "lvl5pPr (List Level 5 Text Style)"⟩
+]
+
+def headings7 : List Heading := [
   ⟨.clause [21, 1, 2, 4, 18], "lvl6pPr (List Level 6 Text Style)"⟩,
   ⟨.clause [21, 1, 2, 4, 19], "lvl7pPr (List Level 7 Text Style)"⟩,
   ⟨.clause [21, 1, 2, 4, 20], "lvl8pPr (List Level 8 Text Style)"⟩,
@@ -2869,10 +2881,7 @@ def headings6 : List Heading := [
   ⟨.clause [21, 1, 3], "Tables"⟩,
   ⟨.clause [21, 1, 3, 1], "cell3D (Cell 3-D)"⟩,
   ⟨.clause [21, 1, 3, 2], "gridCol (Table Grid Column)"⟩,
-  ⟨.clause [21, 1, 3, 3], "header (Header Cell Reference)"⟩
-]
-
-def headings7 : List Heading := [
+  ⟨.clause [21, 1, 3, 3], "header (Header Cell Reference)"⟩,
   ⟨.clause [21, 1, 3, 4], "headers (Header Cells Associated With Table Cell)"⟩,
   ⟨.clause [21, 1, 3, 5], "lnB (Bottom Border Line Properties)"⟩,
   ⟨.clause [21, 1, 3, 6], "lnBlToTr (Bottom-Left to Top-Right Border Line Properties)"⟩,
@@ -2889,6 +2898,7 @@ def headings7 : List Heading := [
   ⟨.clause [21, 1, 3, 17], "tcPr (Table Cell Properties)"⟩,
   ⟨.clause [21, 1, 3, 18], "tr (Table Row)"⟩,
   ⟨.clause [21, 2], "DrawingML - Charts"⟩,
+  ⟨.clause [21, 2, 1], "Table of Contents"⟩,
   ⟨.clause [21, 2, 2], "Elements"⟩,
   ⟨.clause [21, 2, 2, 1], "applyToEnd (Apply to End)"⟩,
   ⟨.clause [21, 2, 2, 2], "applyToFront (Apply To Front)"⟩,
@@ -3189,6 +3199,7 @@ def headings7 : List Heading := [
   ⟨.clause [21, 2, 3, 59], "ST_Thickness (Thickness Percentage)"⟩,
   ⟨.clause [21, 2, 3, 60], "ST_ThicknessPercent (Thickness Percentage)"⟩,
   ⟨.clause [21, 3], "DrawingML - Chart Drawings"⟩,
+  ⟨.clause [21, 3, 1], "Table of Contents"⟩,
   ⟨.clause [21, 3, 2], "Elements"⟩,
   ⟨.clause [21, 3, 2, 1], "absSizeAnchor (Absolute Anchor Shape Size)"⟩,
   ⟨.clause [21, 3, 2, 2], "blipFill (Picture Fill)"⟩,
@@ -3222,6 +3233,7 @@ def headings7 : List Heading := [
   ⟨.clause [21, 3, 3], "Simple Types"⟩,
   ⟨.clause [21, 3, 3, 1], "ST_MarkerCoordinate (Chart Marker Coordinate Value)"⟩,
   ⟨.clause [21, 4], "DrawingML - Diagrams"⟩,
+  ⟨.clause [21, 4, 1], "Table of Contents"⟩,
   ⟨.clause [21, 4, 2], "Diagram Definition"⟩,
   ⟨.clause [21, 4, 2, 1], "adj (Shape Adjust)"⟩,
   ⟨.clause [21, 4, 2, 2], "adjLst (Shape Adjust List)"⟩,
@@ -3260,7 +3272,10 @@ def headings7 : List Heading := [
   ⟨.clause [21, 4, 3, 3], "cxnLst (Connection List)"⟩,
   ⟨.clause [21, 4, 3, 4], "prSet (Property Set)"⟩,
   ⟨.clause [21, 4, 3, 5], "pt (Point)"⟩,
-  ⟨.clause [21, 4, 3, 6], "ptLst (Point List)"⟩,
+  ⟨.clause [21, 4, 3, 6], "ptLst (Point List)"⟩
+]
+
+def headings8 : List Heading := [
   ⟨.clause [21, 4, 3, 7], "spPr (Shape Properties)"⟩,
   ⟨.clause [21, 4, 3, 8], "t (Text Body)"⟩,
   ⟨.clause [21, 4, 3, 9], "whole (Whole E2O Formatting)"⟩,
@@ -3272,10 +3287,7 @@ def headings7 : List Heading := [
   ⟨.clause [21, 4, 4, 5], "colorsDefHdrLst (Color Transform Header List)"⟩,
   ⟨.clause [21, 4, 4, 6], "desc (Description)"⟩,
   ⟨.clause [21, 4, 4, 7], "effectClrLst (Effect Color List)"⟩,
-  ⟨.clause [21, 4, 4, 8], "fillClrLst (Fill Color List)"⟩
-]
-
-def headings8 : List Heading := [
+  ⟨.clause [21, 4, 4, 8], "fillClrLst (Fill Color List)"⟩,
   ⟨.clause [21, 4, 4, 9], "linClrLst (Line Color List)"⟩,
   ⟨.clause [21, 4, 4, 10], "styleLbl (Style Label)"⟩,
   ⟨.clause [21, 4, 4, 11], "title (Title)"⟩,
@@ -3372,6 +3384,7 @@ def headings8 : List Heading := [
   ⟨.clause [21, 4, 7, 65], "ST_VerticalAlignment (Vertical Alignment)"⟩,
   ⟨.clause [21, 4, 7, 66], "ST_PrSetCustVal (Property Set Customized Value)"⟩,
   ⟨.clause [22, 1], "Math"⟩,
+  ⟨.clause [22, 1, 1], "Table of Contents"⟩,
   ⟨.clause [22, 1, 2], "Elements"⟩,
   ⟨.clause [22, 1, 2, 1], "acc (Accent)"⟩,
   ⟨.clause [22, 1, 2, 2], "accPr (Accent Properties)"⟩,
@@ -3513,6 +3526,7 @@ def headings8 : List Heading := [
   ⟨.clause [22, 1, 3, 13], "ST_TopBot (Top-Bottom)"⟩,
   ⟨.clause [22, 1, 3, 14], "ST_UnSignedInteger (Unsigned integer.)"⟩,
   ⟨.clause [22, 2], "Extended Properties"⟩,
+  ⟨.clause [22, 2, 1], "Table of Contents"⟩,
   ⟨.clause [22, 2, 2], "Elements"⟩,
   ⟨.clause [22, 2, 2, 1], "Application (Application Name)"⟩,
   ⟨.clause [22, 2, 2, 2], "AppVersion (Application Version)"⟩,
@@ -3543,10 +3557,12 @@ def headings8 : List Heading := [
   ⟨.clause [22, 2, 2, 27], "TotalTime (Total Edit Time Metadata Element)"⟩,
   ⟨.clause [22, 2, 2, 28], "Words (Word Count)"⟩,
   ⟨.clause [22, 3], "Custom Properties"⟩,
+  ⟨.clause [22, 3, 1], "Table of Contents"⟩,
   ⟨.clause [22, 3, 2], "Elements"⟩,
   ⟨.clause [22, 3, 2, 1], "Properties (Custom File Properties)"⟩,
   ⟨.clause [22, 3, 2, 2], "property (Custom File Property)"⟩,
   ⟨.clause [22, 4], "Variant Types"⟩,
+  ⟨.clause [22, 4, 1], "Table of Contents"⟩,
   ⟨.clause [22, 4, 2], "Elements"⟩,
   ⟨.clause [22, 4, 2, 1], "array (Array)"⟩,
   ⟨.clause [22, 4, 2, 2], "blob (Binary Blob)"⟩,
@@ -3588,11 +3604,13 @@ def headings8 : List Heading := [
   ⟨.clause [22, 4, 3, 3], "ST_Error (Error Status Code Simple Type)"⟩,
   ⟨.clause [22, 4, 3, 4], "ST_VectorBaseType (Vector Base Type Simple Type)"⟩,
   ⟨.clause [22, 5], "Custom XML Data Properties"⟩,
+  ⟨.clause [22, 5, 1], "Table of Contents"⟩,
   ⟨.clause [22, 5, 2], "Elements"⟩,
   ⟨.clause [22, 5, 2, 1], "datastoreItem (Custom XML Data Properties)"⟩,
   ⟨.clause [22, 5, 2, 2], "schemaRef (Associated XML Schema)"⟩,
   ⟨.clause [22, 5, 2, 3], "schemaRefs (Set of Associated XML Schemas)"⟩,
   ⟨.clause [22, 6], "Bibliography"⟩,
+  ⟨.clause [22, 6, 1], "Table of Contents"⟩,
   ⟨.clause [22, 6, 2], "Elements"⟩,
   ⟨.clause [22, 6, 2, 1], "AbbreviatedCaseNumber (Abbreviated Case Number)"⟩,
   ⟨.clause [22, 6, 2, 2], "AlbumTitle (Album Title)"⟩,
@@ -3657,7 +3675,10 @@ def headings8 : List Heading := [
   ⟨.clause [22, 6, 2, 61], "SourceType (Source Type)"⟩,
   ⟨.clause [22, 6, 2, 62], "StandardNumber (Standard Number)"⟩,
   ⟨.clause [22, 6, 2, 63], "StateProvince (State or Province)"⟩,
-  ⟨.clause [22, 6, 2, 64], "Station (Station)"⟩,
+  ⟨.clause [22, 6, 2, 64], "Station (Station)"⟩
+]
+
+def headings9 : List Heading := [
   ⟨.clause [22, 6, 2, 65], "Tag (Tag)"⟩,
   ⟨.clause [22, 6, 2, 66], "Theater (Theater)"⟩,
   ⟨.clause [22, 6, 2, 67], "ThesisType (Thesis Type)"⟩,
@@ -3673,18 +3694,18 @@ def headings8 : List Heading := [
   ⟨.clause [22, 6, 3], "Simple Types"⟩,
   ⟨.clause [22, 6, 3, 1], "ST_SourceType (Bibliographic Data Source Types)"⟩,
   ⟨.clause [22, 7], "Additional Characteristics"⟩,
+  ⟨.clause [22, 7, 1], "Table of Contents"⟩,
   ⟨.clause [22, 7, 2], "Elements"⟩,
   ⟨.clause [22, 7, 2, 1], "additionalCharacteristics (Set of Additional Characteristics)"⟩,
-  ⟨.clause [22, 7, 2, 2], "characteristic (Single Characteristic)"⟩
-]
-
-def headings9 : List Heading := [
+  ⟨.clause [22, 7, 2, 2], "characteristic (Single Characteristic)"⟩,
   ⟨.clause [22, 7, 3], "Simple Types"⟩,
   ⟨.clause [22, 7, 3, 1], "ST_Relation (Characteristic Relationship Types)"⟩,
   ⟨.clause [22, 8], "Office Document Relationships"⟩,
+  ⟨.clause [22, 8, 1], "Table of Contents"⟩,
   ⟨.clause [22, 8, 2], "Simple Types"⟩,
   ⟨.clause [22, 8, 2, 1], "ST_RelationshipId (Explicit Relationship ID)"⟩,
   ⟨.clause [22, 9], "Shared Simple Types"⟩,
+  ⟨.clause [22, 9, 1], "Table of Contents"⟩,
   ⟨.clause [22, 9, 2], "Simple Types"⟩,
   ⟨.clause [22, 9, 2, 1], "ST_CalendarType (Calendar Types)"⟩,
   ⟨.clause [22, 9, 2, 2], "ST_ConformanceClass (Document Conformance Class Value)"⟩,
@@ -4057,7 +4078,10 @@ def headings9 : List Heading := [
   ⟨.annex 'L' [2, 7, 3, 7], "Cell Styles"⟩,
   ⟨.annex 'L' [2, 7, 3, 8], "Differential Formatting Records"⟩,
   ⟨.annex 'L' [2, 7, 3, 9], "Custom Table Style Definitions"⟩,
-  ⟨.annex 'L' [2, 7, 4], "Example"⟩,
+  ⟨.annex 'L' [2, 7, 4], "Example"⟩
+]
+
+def headings10 : List Heading := [
   ⟨.annex 'L' [2, 7, 4, 1], "Illustration"⟩,
   ⟨.annex 'L' [2, 7, 4, 2], "File Architecture"⟩,
   ⟨.annex 'L' [2, 7, 4, 3], "The XML For This Example"⟩,
@@ -4078,10 +4102,7 @@ def headings9 : List Heading := [
   ⟨.annex 'L' [2, 8, 3, 2, 3], "Metadata Strings"⟩,
   ⟨.annex 'L' [2, 8, 3, 2, 4], "mdxMetadata"⟩,
   ⟨.annex 'L' [2, 8, 3, 2, 5], "valueMetadata"⟩,
-  ⟨.annex 'L' [2, 9], "Pivot Table, Pivot Cache, and Common Types"⟩
-]
-
-def headings10 : List Heading := [
+  ⟨.annex 'L' [2, 9], "Pivot Table, Pivot Cache, and Common Types"⟩,
   ⟨.annex 'L' [2, 9, 1], "Feature Overview"⟩,
   ⟨.annex 'L' [2, 9, 2], "File Architecture"⟩,
   ⟨.annex 'L' [2, 9, 3], "Example - Native with Range Source"⟩,
@@ -4313,6 +4334,8 @@ def headings10 : List Heading := [
   ⟨.annex 'L' [4, 5, 3, 5], "Row"⟩,
   ⟨.annex 'L' [4, 5, 3, 6], "Table Properties"⟩,
   ⟨.annex 'L' [4, 5, 3, 7], "Table"⟩,
+  ⟨.annex 'L' [4, 6], "3D Aspects"⟩,
+  ⟨.annex 'L' [4, 6, 1], "Introduction"⟩,
   ⟨.annex 'L' [4, 7], "Coordinate Systems and Transformations"⟩,
   ⟨.annex 'L' [4, 7, 1], "Introduction"⟩,
   ⟨.annex 'L' [4, 7, 2], "Coordinate System"⟩,
@@ -4396,6 +4419,7 @@ def headings10 : List Heading := [
   ⟨.annex 'L' [4, 13, 1], "Overview"⟩,
   ⟨.annex 'L' [4, 13, 1, 1], "Basic Chart Types"⟩,
   ⟨.annex 'L' [4, 13, 1, 2], "Basic Chart Components"⟩,
+  ⟨.annex 'L' [4, 13, 1, 3], "3D Charts"⟩,
   ⟨.annex 'L' [4, 13, 1, 4], "Chart Styles"⟩,
   ⟨.annex 'L' [4, 13, 2], "XML Overview"⟩,
   ⟨.annex 'L' [4, 13, 2, 1], "Relationships"⟩,
@@ -4457,7 +4481,10 @@ def headings10 : List Heading := [
   ⟨.annex 'L' [4, 15, 6, 1, 14], "Child Alignment"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 15], "Secondary Child Alignment"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 16], "Linear Direction"⟩,
-  ⟨.annex 'L' [4, 15, 6, 1, 17], "Secondary Linear Direction"⟩,
+  ⟨.annex 'L' [4, 15, 6, 1, 17], "Secondary Linear Direction"⟩
+]
+
+def headings11 : List Heading := [
   ⟨.annex 'L' [4, 15, 6, 1, 18], "Starting Element"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 19], "Rotation Path"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 20], "Center Shape Mapping"⟩,
@@ -4481,10 +4508,7 @@ def headings10 : List Heading := [
   ⟨.annex 'L' [4, 15, 6, 1, 38], "Flow Direction"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 39], "Continue Direction"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 40], "Breakpoint"⟩,
-  ⟨.annex 'L' [4, 15, 6, 1, 41], "Offset"⟩
-]
-
-def headings11 : List Heading := [
+  ⟨.annex 'L' [4, 15, 6, 1, 41], "Offset"⟩,
   ⟨.annex 'L' [4, 15, 6, 1, 42], "Hierarchy Alignment"⟩,
   ⟨.annex 'L' [4, 15, 6, 2], "Variable Type"⟩,
   ⟨.annex 'L' [4, 15, 6, 2, 1], "Output Shape Type"⟩,

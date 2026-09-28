@@ -21,13 +21,22 @@ Usage, from the repository root:
 
 The PDF texts are read through their tables of contents: every line with a
 dot leader and a page number that starts with a clause number (`17.3.1.29`,
-`2.5.1`) or an annex clause (`A.1`, `Annex A.`) is a heading, and a title
-wrapped onto a second line is joined. Headings deeper than the table of
-contents goes are taken from the body when their parent is a heading the
-table of contents lists without children. APPNOTE.TXT has no table of
-contents: its numbered paragraphs (`4.3.7  Local file header:`) are the
-headings, `4.0 ZIP Files` is chapter 4, and a title is cut at its first
-colon or sentence end.
+`2.5.1`) or an annex clause (`A.1`, `Annex A.`) is a heading. That covers
+the front table and Part 1's informative per-clause tables. A title wrapped
+onto a second line is joined, as is a title whose page number sits alone on
+the next line. Headings the tables leave out (`20.1.1 Table of Contents`,
+the deeper element clauses) are read from the body in one pass, and only as
+the next numbered child of an open heading, so table rows, list items and
+cross-references are not taken for headings. APPNOTE.TXT has no table of
+contents: `4.0` in column 0 opens chapter 4, numbered paragraphs follow in
+sequence (`4.5 - File uses ZIP64` table rows start with a dash and a space
+and are skipped), and a title is its text up to the first colon or sentence
+end, cut at 80 characters.
+
+Every outline then passes `self_check`: references strictly increasing and
+unique, every heading's parent present, sibling numbers consecutive from 1,
+and no title that reads like a table row or a fragment. A failure stops the
+run with the offending headings named.
 """
 
 from __future__ import annotations
@@ -37,11 +46,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-LEADER = re.compile(r"\s*(?:\.\s*){4,}\s*([0-9]+|[ivxlc]+)\s*$")
+LEADER = re.compile(
+    r"(?:\s*(?:\.\s*){2,}|\s\.\s|(?<=\))\s)\s*([0-9]+|[ivxlc]+)"
+    r"(?:\s+(?:ECMA-376 Part \d+|\d+\s*/\s*\d+|\[MS-[A-Z0-9]+\].*))?\s*$"
+)
 CLAUSE = re.compile(r"^(\d{1,2}(?:\.\d+)*)\.?\s+(\S.*?)\s*$")
 ANNEX_TITLE = re.compile(r"^Annex\s+([A-Z])\.?\s+(?:\((?:normative|informative)\)\s*)?(.*?)\s*$")
 ANNEX_CLAUSE = re.compile(r"^([A-Z])\.(\d+(?:\.\d+)*)\s+(\S.*?)\s*$")
-APPNOTE_HEADING = re.compile(r"^\s{0,12}(\d{1,2})\.(\d+)((?:\.\d+)*)\.?\s+(\S.*?)\s*$")
+APPNOTE_HEADING = re.compile(r"^( *)(\d{1,2})\.(\d+)((?:\.\d+)*)\.?\s+(\S.*?)\s*$")
+TABLE_CELLS = re.compile(r"\b(?:Yes|No)\b.*\b(?:Yes|No)\b")
+FRAGMENT_END = re.compile(r"(?:[,;(\-–]|\b(?:and|or|of|the|to|a|an|in|for|with))$")
 
 
 @dataclass(frozen=True)
@@ -86,6 +100,10 @@ def clean(title: str) -> str:
     return re.sub(r"\s+", " ", title).strip()
 
 
+def title_start(title: str) -> bool:
+    return title[0].isalpha() or title[0] in "\"“'" or bool(re.match(r"\d[A-Za-z]", title))
+
+
 def parse_heading(text: str) -> Heading | None:
     match = ANNEX_TITLE.match(text)
     if match:
@@ -94,85 +112,211 @@ def parse_heading(text: str) -> Heading | None:
     if match:
         return Heading(match.group(1), tuple(int(p) for p in match.group(2).split(".")), clean(match.group(3)))
     match = CLAUSE.match(text)
-    if match and match.group(2)[0].isalpha():
+    if match and title_start(match.group(2)):
         return Heading("", tuple(int(p) for p in match.group(1).split(".")), clean(match.group(2)))
     return None
 
 
-def toc_headings(lines: list[str]) -> tuple[list[Heading], int]:
+def toc_headings(lines: list[str]) -> tuple[list[Heading], set[int]]:
+    """Every table-of-contents entry: the front table and, in Part 1, the
+    informative per-clause tables. Returns the headings and the line numbers
+    they were read from."""
     headings: dict[tuple, Heading] = {}
-    last_toc_line = 0
+    toc_lines: set[int] = set()
     pending: str | None = None
     for number, line in enumerate(lines):
         leader = LEADER.search(line)
+        between_entries = any(LEADER.search(nearby) for nearby in lines[max(0, number - 3): number + 4])
+        if not leader and pending and between_entries and re.fullmatch(r"\d+", line.strip()):
+            heading = parse_heading(pending)
+            if heading:
+                headings.setdefault(heading.key, heading)
+                toc_lines.update((number - 1, number))
+            pending = None
+            continue
         if not leader:
             pending = line.strip() if parse_heading(line.strip()) else None
             continue
         text = line[: leader.start()].strip()
         heading = parse_heading(text)
-        if not heading and pending:
-            heading = parse_heading(f"{pending} {text}")
+        if pending:
+            joined = parse_heading(f"{pending} {text}")
+            if joined and (not heading or not text[:1].isdigit()):
+                heading = joined
+                toc_lines.add(number - 1)
         pending = None
-        if not heading:
+        if not heading or "…" in heading.title:
             continue
         headings.setdefault(heading.key, heading)
-        last_toc_line = number
-    return list(headings.values()), last_toc_line
+        toc_lines.add(number)
+    return list(headings.values()), toc_lines
 
 
 def parent_key(heading: Heading) -> tuple | None:
     if not heading.path:
         return None
-    parent = Heading(heading.letter, heading.path[:-1], "")
-    if not heading.letter and not parent.path:
-        return None
-    return parent.key
+    return Heading(heading.letter, heading.path[:-1], "").key
 
 
-def body_headings(lines: list[str], start: int, known: list[Heading]) -> list[Heading]:
-    """Headings deeper than the table of contents, found in the body under a
-    listed heading that has no listed children."""
-    by_key = {h.key: h for h in known}
-    has_children = {parent_key(h) for h in known}
+def acceptable_title(title: str) -> bool:
+    return (
+        bool(title)
+        and len(title) <= 150
+        and title_start(title)
+        and not TABLE_CELLS.search(title)
+        and not FRAGMENT_END.search(title)
+    )
+
+
+def body_headings(lines: list[str], toc: list[Heading], toc_lines: set[int]) -> list[Heading]:
+    """Headings the tables of contents leave out, read from the body in one
+    pass. A listed heading met in the body with its listed title opens its
+    place in the tree; an unlisted one is kept only when it is the next
+    numbered child of an open heading, so cross-references, table rows and
+    list items do not count."""
+    listed = {h.key: h for h in toc}
+    by_parent: dict[tuple, list[Heading]] = {}
+    for h in toc:
+        by_parent.setdefault(parent_key(h), []).append(h)
+    chain: list[Heading] = []
+    next_child: dict[tuple, int] = {}
+    last: tuple = ()
     found: dict[tuple, Heading] = {}
-    for line in lines[start:]:
-        if LEADER.search(line):
+    for number, line in enumerate(lines):
+        if number in toc_lines:
             continue
         heading = parse_heading(line.strip())
-        if not heading or heading.key in by_key or heading.key in found:
+        if not heading:
             continue
         parent = parent_key(heading)
-        if parent is None:
-            continue
-        if parent in found or (parent in by_key and parent not in has_children):
-            if len(heading.title) > 120 or not re.match(r"^[A-Za-z]", heading.title):
+        known = listed.get(heading.key)
+        if known:
+            prefix = min(len(known.title), 20)
+            if heading.key <= last or heading.title[:prefix].lower() != known.title[:prefix].lower():
                 continue
-            found[heading.key] = heading
+            ancestors = [listed[k] for k in ancestor_keys(known) if k in listed]
+            chain = ancestors + [known]
+            if parent is not None:
+                next_child[parent] = heading.path[-1] + 1
+            next_child[known.key] = 1
+            last = heading.key
+            continue
+        open_keys = [h.key for h in chain]
+        if parent not in open_keys or heading.key in found:
+            continue
+        if heading.path[-1] != next_child.get(parent, 1) or heading.key <= last:
+            continue
+        siblings = by_parent.get(parent, [])
+        if any(s.path[-1] == heading.path[-1] for s in siblings):
+            continue
+        if not acceptable_title(heading.title):
+            continue
+        del chain[open_keys.index(parent) + 1:]
+        chain.append(heading)
+        next_child[parent] = heading.path[-1] + 1
+        next_child[heading.key] = 1
+        last = heading.key
+        found[heading.key] = heading
     return list(found.values())
 
 
+def ancestor_keys(heading: Heading) -> list[tuple]:
+    keys = []
+    for depth in range(0 if heading.letter else 1, len(heading.path)):
+        keys.append(Heading(heading.letter, heading.path[:depth], "").key)
+    return keys
+
+
+def appnote_title(lines: list[str], number: int, first: str) -> str:
+    """A numbered APPNOTE paragraph's title: its text up to the first colon
+    or sentence end, joined across at most two wrapped lines."""
+    text = first
+    for follow in lines[number + 1: number + 3]:
+        underline = re.fullmatch(r"\s*-{3,}\s*", follow)
+        if re.search(r":|\.\s|\.$", text) or not follow.strip() or underline or APPNOTE_HEADING.match(follow):
+            break
+        text = f"{text} {follow.strip()}"
+    title = re.split(r":|\.\s|\.$", clean(text).lstrip("-. "))[0].strip()
+    if len(title) <= 80:
+        return title
+    return title[:80].rsplit(" ", 1)[0].rstrip(",;") + "…"
+
+
 def appnote_headings(lines: list[str]) -> tuple[list[Heading], list[tuple[int, str]]]:
-    headings: dict[tuple, Heading] = {}
+    """Numbered paragraphs, in sequence: `4.0` in column 0 opens chapter 4, and each accepted
+    heading is the next child of an open heading. Table rows such as
+    `4.5 - File uses ZIP64` start with a dash and a space and are rejected;
+    `6.0.1` sits directly under chapter 6."""
+    headings: list[Heading] = []
     chapters: list[tuple[int, str]] = []
-    current = 0
-    for line in lines:
+    chain: list[tuple[int, ...]] = []
+    next_child: dict[tuple[int, ...], int] = {}
+    for number, line in enumerate(lines):
         match = APPNOTE_HEADING.match(line.rstrip("\r\n"))
         if not match:
             continue
-        chapter, second, rest, title = match.groups()
-        path = [int(chapter), int(second)] + [int(p) for p in rest.split(".") if p]
-        title = re.split(r":|\.\s|\.$", clean(title).lstrip("-. "))[0].strip()
+        indent, chapter, second, rest, text = match.groups()
+        path = (int(chapter), int(second), *(int(p) for p in rest.split(".") if p))
+        if re.match(r"-\s", text):
+            continue
+        if len(path) == 2 and path[1] == 0 and not indent:
+            if chapters and path[0] != chapters[-1][0] + 1:
+                continue
+            chapters.append((path[0], appnote_title(lines, number, text)))
+            chain = [(path[0],), (path[0], 0)]
+            next_child = {(path[0],): 1, (path[0], 0): 1}
+            continue
+        if not chain:
+            continue
+        parent = path[:-1]
+        if parent not in chain or path[-1] != next_child.get(parent, 1):
+            continue
+        title = appnote_title(lines, number, text)
         if not title or not title[0].isalpha():
             continue
-        if path[1] == 0 and len(path) == 2 and path[0] == current + 1 and not line[0].isspace():
-            chapters.append((path[0], title))
-            current = path[0]
-            continue
-        if path[0] != current:
-            continue
-        heading = Heading("", tuple(path), title[:80])
-        headings.setdefault(heading.key, heading)
-    return list(headings.values()), chapters
+        del chain[chain.index(parent) + 1:]
+        chain.append(path)
+        next_child[parent] = path[-1] + 1
+        next_child[path] = 1
+        headings.append(Heading("", path, title))
+    return headings, chapters
+
+
+class OutlineError(Exception):
+    pass
+
+
+def self_check(standard: Standard, chapters: list[tuple[int, str]], annexes: list[tuple[str, str]],
+               headings: list[Heading]) -> None:
+    """Fails when an outline is not a clean heading tree: duplicate or
+    out-of-order references, a heading whose parent is missing, a gap in a
+    numbered sequence, or a title that reads like a table row or a fragment."""
+    problems: list[str] = []
+    keys = [h.key for h in headings]
+    if keys != sorted(keys) or len(set(keys)) != len(keys):
+        problems.append("headings are not strictly increasing")
+    present = set(keys) | {(0, n) for n, _ in chapters} | {(1, ord(l)) for l, _ in annexes}
+    if standard.appnote:
+        present |= {(0, n, 0) for n, _ in chapters}
+    last_child: dict[tuple, int] = {}
+    for h in headings:
+        parent = parent_key(h)
+        if parent not in present:
+            problems.append(f"{render_ref(h)} has no parent heading")
+        expected = last_child.get(parent, 0) + 1
+        if h.path[-1] not in (expected, 1 if expected == 1 else expected):
+            problems.append(f"{render_ref(h)} {h.title!r} skips from {expected - 1}")
+        last_child[parent] = h.path[-1]
+        if not standard.appnote and not acceptable_title(h.title):
+            problems.append(f"{render_ref(h)} has a suspicious title {h.title!r}")
+        if not h.title:
+            problems.append(f"{render_ref(h)} has an empty title")
+    for n, title in chapters:
+        if not title:
+            problems.append(f"chapter {n} has an empty title")
+    if problems:
+        shown = "\n  ".join(problems[:40])
+        raise OutlineError(f"{standard.module}: {len(problems)} problems\n  {shown}")
 
 
 def lean_string(text: str) -> str:
@@ -234,8 +378,8 @@ def outline(standard: Standard, text: str) -> tuple[list[tuple[int, str]], list[
     if standard.appnote:
         headings, chapters = appnote_headings(lines)
         return chapters, [], sorted(headings, key=lambda h: h.key)
-    toc, last = toc_headings(lines)
-    headings = toc + body_headings(lines, 0, toc)
+    toc, toc_lines = toc_headings(lines)
+    headings = toc + body_headings(lines, toc, toc_lines)
     chapters = sorted({(h.path[0], h.title) for h in headings if not h.letter and len(h.path) == 1})
     annexes = sorted({(h.letter, h.title) for h in headings if h.letter and not h.path})
     chapter_numbers = {n for n, _ in chapters}
@@ -255,6 +399,7 @@ def main(argv: list[str]) -> int:
     for standard in STANDARDS:
         text = (specs / standard.source).read_text(encoding="utf-8", errors="replace")
         chapters, annexes, headings = outline(standard, text)
+        self_check(standard, chapters, annexes, headings)
         (target / f"{standard.module}.lean").write_text(render_module(standard, chapters, annexes, headings))
         print(f"{standard.module}: {len(chapters)} chapters, {len(annexes)} annexes, {len(headings)} headings",
               file=sys.stderr)

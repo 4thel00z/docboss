@@ -97,6 +97,7 @@ def headings0 : List Heading := [
   ⟨.clause [3, 2], "PropertyBag Property Set"⟩,
   ⟨.clause [3, 2, 1], "Control Stream (\"{4c8cc155-6c1e-11d1-8e41-00c04fb9386d}\")"⟩,
   ⟨.clause [3, 2, 2], "PropertyBag Stream (\"Docf_\\005Bagaaqy23kudbhchAaq5u2chNd\")"⟩,
+  ⟨.clause [3, 2, 2, 1], "\"CONTENTS\" Stream"⟩,
   ⟨.clause [3, 2, 2, 1, 1], "CodePage"⟩,
   ⟨.clause [3, 2, 2, 1, 2], "Locale"⟩,
   ⟨.clause [3, 2, 2, 1, 3], "Behavior"⟩,
@@ -112,7 +113,9 @@ def headings0 : List Heading := [
   ⟨.clause [3, 2, 2, 1, 7], "Price(GBP)"⟩,
   ⟨.clause [3, 2, 2, 1, 8], "MyStorage"⟩,
   ⟨.clause [3, 2, 2, 1, 9], "CaseSensitive Mixed Case"⟩,
-  ⟨.clause [3, 2, 2, 1, 10], "CASESENSITIVE All Uppercase"⟩
+  ⟨.clause [3, 2, 2, 1, 10], "CASESENSITIVE All Uppercase"⟩,
+  ⟨.clause [3, 2, 2, 2], "\"prop6\" Stream"⟩,
+  ⟨.clause [3, 2, 2, 3], "\"prop12\" Storage"⟩
 ]
 
 /-- Every numbered heading of the specification, in document order. -/
