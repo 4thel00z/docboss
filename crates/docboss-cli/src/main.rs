@@ -2,15 +2,14 @@
 //! JSON extraction, page rendering, conversion to DOCX and container
 //! inspection.
 
-mod container;
 mod fonts;
 mod hexdump;
 mod q;
 mod remote;
 mod render;
 mod skill;
-mod xmlpretty;
 
+use docboss_tui::container;
 use std::io::{IsTerminal, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -424,13 +423,13 @@ fn run(command: Command) -> Result<(), Failure> {
         Command::Xml { file, part, raw } => {
             let data = match remote::url_of(&file) {
                 Some(url) => remote::part(url, &part).map_err(Failure::new)?,
-                None => container::part_bytes(&read_file(&file)?, &part)?,
+                None => part_bytes(&read_file(&file)?, &part)?,
             };
             let text = docboss_xml::decode(&data);
             let text = if raw {
                 text.into_owned()
             } else {
-                xmlpretty::pretty(&text, 2)
+                docboss_tui::xmlpretty::pretty(&text, 2)
             };
             emit(None, &text)
         }
@@ -686,14 +685,31 @@ fn cmd_q(source: &Source, program: &str, raw: bool, blocks: bool) -> Result<(), 
     emit(None, &out)
 }
 
+/// The bytes of the part a user-typed name refers to.
+fn part_bytes(bytes: &[u8], name: &str) -> Result<Vec<u8>, Failure> {
+    let part = container::find(bytes, name).map_err(Failure::new)?;
+    container::part_bytes(bytes, &part).map_err(Failure::new)
+}
+
 fn cmd_parts(file: &Path) -> Result<(), Failure> {
     let bytes = read_file(file)?;
     let mut out = String::new();
-    for part in container::parts(&bytes)? {
+    let (kind, parts) = container::parts(&bytes);
+    if kind == container::Kind::Unknown {
+        return Err(Failure::new(format!(
+            "{}: neither a ZIP package nor a compound file",
+            file.display()
+        )));
+    }
+    for part in parts {
         let stored = part
             .stored
             .map_or(String::new(), |stored| format!("  ({stored} stored)"));
-        out.push_str(&format!("{:>10}  {}{stored}\n", part.size, part.name));
+        out.push_str(&format!(
+            "{:>10}  {}{stored}\n",
+            part.size,
+            part.display_name()
+        ));
     }
     emit(None, &out)
 }
@@ -707,7 +723,7 @@ fn cmd_hex(
 ) -> Result<(), Failure> {
     let bytes = read_file(file)?;
     let data = match part {
-        Some(name) => container::part_bytes(&bytes, name)?,
+        Some(name) => part_bytes(&bytes, name)?,
         None => bytes,
     };
     let start = usize::try_from(offset)

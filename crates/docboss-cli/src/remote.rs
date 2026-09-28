@@ -204,7 +204,7 @@ pub fn load(url: &str, password: Option<String>, media: bool) -> Result<Document
 
 /// One ZIP entry or compound file stream of a remote document.
 pub fn part(url: &str, name: &str) -> Result<Vec<u8>, String> {
-    let name = crate::container::display_name(name);
+    let name = docboss_tui::container::display_name(name);
     let name = name.trim_start_matches("\\x05").to_string();
     with_document(url, async |document| {
         let exact = document.part(&name).await;

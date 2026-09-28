@@ -18,13 +18,7 @@ impl Part {
     /// The name with control characters written as `\xNN`, so
     /// `\u{5}SummaryInformation` shows as `\x05SummaryInformation`.
     pub fn display_name(&self) -> String {
-        self.path
-            .chars()
-            .map(|c| match c.is_control() {
-                true => format!("\\x{:02x}", c as u32),
-                false => c.to_string(),
-            })
-            .collect()
+        display_name(&self.path)
     }
 
     /// Whether the part holds XML, judged by its name.
@@ -32,6 +26,45 @@ impl Part {
         let lower = self.path.to_ascii_lowercase();
         lower.ends_with(".xml") || lower.ends_with(".rels")
     }
+}
+
+/// A stored path with control characters written as `\xNN`.
+pub fn display_name(path: &str) -> String {
+    path.chars()
+        .map(|c| match c.is_control() {
+            true => format!("\\x{:02x}", c as u32),
+            false => c.to_string(),
+        })
+        .collect()
+}
+
+/// The part a user-typed name refers to: the stored path itself, its
+/// `\xNN`-escaped display form, or the path without leading control
+/// characters compared case-insensitively (`SummaryInformation` for
+/// `\u{5}SummaryInformation`). A leading `/` is ignored.
+pub fn find(bytes: &[u8], name: &str) -> Result<Part, String> {
+    let name = name.trim_start_matches('/');
+    let (kind, parts) = parts(bytes);
+    if kind == Kind::Unknown {
+        return Err("neither a ZIP package nor a compound file".to_string());
+    }
+    let strip = |path: &str| -> String {
+        path.split('/')
+            .map(|segment| segment.trim_start_matches(char::is_control))
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    parts
+        .iter()
+        .find(|part| part.path == name)
+        .or_else(|| parts.iter().find(|part| part.display_name() == name))
+        .or_else(|| {
+            parts
+                .iter()
+                .find(|part| strip(&part.path).eq_ignore_ascii_case(name))
+        })
+        .cloned()
+        .ok_or_else(|| format!("{name}: no such part"))
 }
 
 /// Which container the file is.
