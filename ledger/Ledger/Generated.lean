@@ -779,8 +779,9 @@ def Generated.citations3 : List Citation := [
   ⟨.ecma376Part1, some (.clause [20, 4, 2, 35]), "crates/docboss-layout/tests/layout.rs", 920, true⟩,
   ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-layout/tests/layout.rs", 920, true⟩,
   ⟨.ecma376Part1, some (.clause [20, 4, 2, 22]), "crates/docboss-layout/tests/layout.rs", 970, true⟩,
-  ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-layout/tests/layout.rs", 1017, true⟩,
-  ⟨.ecma376Part1, some (.clause [17, 3, 1, 33]), "crates/docboss-layout/tests/layout.rs", 1073, true⟩,
+  ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-layout/tests/layout.rs", 1018, true⟩,
+  ⟨.ecma376Part1, some (.clause [17, 3, 1, 33]), "crates/docboss-layout/tests/layout.rs", 1074, true⟩,
+  ⟨.ecma376Part1, some (.clause [20, 4, 2, 22]), "crates/docboss-layout/tests/layout.rs", 1114, true⟩,
   ⟨.msDoc, none, "crates/docboss-model/src/document.rs", 13, false⟩,
   ⟨.msDoc, none, "crates/docboss-model/src/lib.rs", 4, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 6, 12]), "crates/docboss-model/src/section.rs", 117, false⟩,
@@ -815,11 +816,11 @@ def Generated.citations3 : List Citation := [
   ⟨.ecma376Part1, some (.clause [17, 11, 23]), "crates/docboss-write/src/docx.rs", 45, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 2, 2]), "crates/docboss-write/src/docx.rs", 291, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 6, 17]), "crates/docboss-write/src/docx.rs", 291, false⟩,
-  ⟨.ecma376Part2, some (.clause [7, 3, 4]), "crates/docboss-write/src/package.rs", 1, false⟩,
-  ⟨.ecma376Part2, some (.clause [7, 3, 7]), "crates/docboss-write/src/package.rs", 1, false⟩
+  ⟨.ecma376Part2, some (.clause [7, 3, 4]), "crates/docboss-write/src/package.rs", 1, false⟩
 ]
 
 def Generated.citations4 : List Citation := [
+  ⟨.ecma376Part2, some (.clause [7, 3, 7]), "crates/docboss-write/src/package.rs", 1, false⟩,
   ⟨.ecma376Part2, some (.clause [6, 5]), "crates/docboss-write/src/package.rs", 2, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 7, 4]), "crates/docboss-write/src/parts.rs", 10, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 9]), "crates/docboss-write/src/parts.rs", 86, false⟩,

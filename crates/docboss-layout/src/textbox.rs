@@ -11,8 +11,8 @@ const DEFAULT_INSETS: [i64; 4] = [91_440, 45_720, 91_440, 45_720];
 const DEFAULT_OUTLINE: i64 = 9_525;
 
 /// A laid-out text box: its items relative to the drawing's top-left
-/// corner, and its height, which exceeds the drawing's when the shape grows
-/// to fit its text.
+/// corner, and its height, which is its text's when the shape fits its
+/// text.
 pub(crate) struct TextBox {
     pub items: Vec<Item>,
     pub height: f32,
@@ -20,7 +20,8 @@ pub(crate) struct TextBox {
 
 /// Lays out a drawing's text box. ECMA-376 Part 1 §20.4.2.38 (`txbxContent`)
 /// supplies the blocks and §20.4.2.22 (`wps:bodyPr`) the insets, the
-/// vertical anchor and `a:spAutoFit`; the fill and outline come from
+/// vertical anchor and `a:spAutoFit`, which sizes the shape to its text;
+/// the fill and outline come from
 /// `wps:spPr` (§20.4.2.35).
 pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
     if drawing.text_box.is_empty() {
@@ -37,7 +38,7 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
     let content = stack_height(&slabs) + trailing;
     let stated = emu_to_pt(drawing.height).max(0.0);
     let height = match shape.auto_fit {
-        true => stated.max(content + top + bottom),
+        true => content + top + bottom,
         false => stated,
     };
     let room = height - top - bottom;

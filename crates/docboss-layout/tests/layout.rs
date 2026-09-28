@@ -967,8 +967,9 @@ fn anchored_text_boxes_paint_fill_text_and_outline() {
         .any(|item| matches!(item, Item::Image { .. })));
 }
 
-/// ECMA-376 Part 1 §20.4.2.22: `a:spAutoFit` grows the shape to its text,
-/// and the `anchor` attribute places the text vertically.
+/// ECMA-376 Part 1 §20.4.2.22: `a:spAutoFit` sizes the shape to its text,
+/// growing or shrinking it, and the `anchor` attribute places the text
+/// vertically.
 #[test]
 fn text_boxes_grow_to_fit_and_anchor_their_text() {
     let lines: Vec<Block> = (0..12).map(|i| para(&format!("line {i}"))).collect();
@@ -1108,4 +1109,25 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
         "the picture starts at {} pt, not at the margin",
         image.y
     );
+}
+
+/// ECMA-376 Part 1 §20.4.2.22: an `a:spAutoFit` box taller than its one
+/// line of text shrinks to that line plus its insets.
+#[test]
+fn auto_fit_text_boxes_shrink_to_their_text() {
+    let mut fit = framed();
+    fit.auto_fit = true;
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), fit, vec![para("short")])],
+        ..Paragraph::default()
+    })]));
+    let fill = layout.pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Rect { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .expect("fill");
+    assert!(fill.height > 20.0 && fill.height < 40.0, "{fill:?}");
 }
