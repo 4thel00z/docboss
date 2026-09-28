@@ -10,6 +10,7 @@ use docboss_model::{
 use crate::breaks;
 use crate::flow::{Ctx, Floating, Slab};
 use crate::shape::{Glyph, RunStyle};
+use crate::textbox::layout_text_box;
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{GlyphRun, Item, LineStyle, PositionedGlyph, Rect};
 
@@ -316,7 +317,9 @@ impl Flattener<'_, '_> {
     }
 }
 
-/// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points.
+/// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points. Under
+/// auto line spacing (§17.3.1.33) the multiple scales the text of a line;
+/// an inline picture keeps its own height on the text baseline.
 pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: f32) -> Laid {
     let doc = ctx.doc;
     let table_style = ctx.table_style.clone();
@@ -390,22 +393,26 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     let mut slabs = Vec::with_capacity(count);
     let mut pending_break: Option<Break> = None;
     for (index, line) in lines.iter().enumerate() {
-        let (mut ascent, mut descent) = line
-            .placed
-            .iter()
-            .map(|p| &atoms[p.atom])
-            .filter(|a| a.kind != Kind::Tab)
-            .fold((0.0f32, 0.0f32), |(a, d), atom| {
-                (a.max(atom.ascent), d.max(atom.descent))
-            });
+        let extent = |objects: bool| {
+            line.placed
+                .iter()
+                .map(|p| &atoms[p.atom])
+                .filter(|a| a.kind != Kind::Tab && (a.kind == Kind::Object) == objects)
+                .fold((0.0f32, 0.0f32), |(a, d), atom| {
+                    (a.max(atom.ascent), d.max(atom.descent))
+                })
+        };
+        let (mut ascent, mut descent) = extent(false);
+        let (object_height, _) = extent(true);
         if ascent + descent <= 0.0 {
             ascent = mark_metrics.ascent;
             descent = mark_metrics.descent;
         }
-        let natural = ascent + descent;
+        let natural = ascent.max(object_height) + descent;
         let (height, baseline) = match rule {
             LineRule::Auto => {
-                let h = natural * line_value.max(1) as f32 / 240.0;
+                let text = (ascent + descent) * line_value.max(1) as f32 / 240.0;
+                let h = text.max(object_height + descent);
                 (h, h - descent)
             }
             LineRule::Exact => {
@@ -628,16 +635,16 @@ fn build_atoms(
                 else {
                     continue;
                 };
+                let text_box = layout_text_box(ctx, drawing);
+                let height = text_box
+                    .as_ref()
+                    .map_or(emu_to_pt(drawing.height), |text_box| text_box.height);
                 floats.push(Floating {
                     media: drawing.media,
-                    rect: Rect::new(
-                        emu_to_pt(x),
-                        emu_to_pt(y),
-                        emu_to_pt(drawing.width),
-                        emu_to_pt(drawing.height),
-                    ),
+                    rect: Rect::new(emu_to_pt(x), emu_to_pt(y), emu_to_pt(drawing.width), height),
                     relative_to_page,
                     behind: behind_text,
+                    content: text_box.map(|text_box| text_box.items).unwrap_or_default(),
                 });
             }
             Elem::Note(id) => match word.as_mut() {
@@ -887,10 +894,19 @@ fn emit_line(
                     continue;
                 };
                 let h = emu_to_pt(drawing.height);
-                glyphs.push(Item::Image {
-                    media: drawing.media,
-                    rect: Rect::new(x0, baseline - h, width, h),
-                });
+                let text_box = layout_text_box(ctx, drawing);
+                if drawing.media.is_some() || text_box.is_none() {
+                    glyphs.push(Item::Image {
+                        media: drawing.media,
+                        rect: Rect::new(x0, baseline - h, width, h),
+                    });
+                }
+                if let Some(text_box) = text_box {
+                    glyphs.extend(text_box.items.into_iter().map(|mut item| {
+                        item.offset(x0, baseline - h);
+                        item
+                    }));
+                }
                 continue;
             }
             Kind::Tab => {

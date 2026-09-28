@@ -227,6 +227,7 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         name: Some("Picture 1".into()),
         description: Some(description.into()),
         text_box: Vec::new(),
+        shape: Default::default(),
     }))
 }
 
@@ -244,5 +245,6 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         name: Some("Text Box 1".into()),
         description: None,
         text_box: blocks,
+        shape: Default::default(),
     }))
 }

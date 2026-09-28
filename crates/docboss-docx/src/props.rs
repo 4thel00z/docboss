@@ -2,7 +2,7 @@
 //! §17.3.2, §17.4 and §17.6).
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Columns, FontSlots, Indentation, Justification, LineRule,
+    Border, BorderStyle, Borders, Color, Columns, FontSlots, Indentation, Justification, LineRule,
     NumberingRef, Orientation, PageMargins, PageSize, ParagraphProperties, RunProperties,
     SectionBreak, SectionProperties, Shading, Spacing, TabAlignment, TabLeader, TabStop,
     TableCellProperties, TableProperties, TableRowProperties, Underline, VerticalAlign,
@@ -20,9 +20,34 @@ use crate::xml::{
 pub struct Theme {
     pub major: [Option<String>; 3],
     pub minor: [Option<String>; 3],
+    /// The color scheme's slots (`dk1`, `lt1`, `accent1`, ...) and their
+    /// colors (ECMA-376 Part 1 §20.1.6.2).
+    pub colors: Vec<(String, Color)>,
 }
 
 impl Theme {
+    /// The color of a scheme slot, with the text and background aliases
+    /// (`tx1`, `bg1`, `tx2`, `bg2`) mapped to the dark and light slots as
+    /// Word's default color mapping does (ECMA-376 Part 1 §17.15.1.20).
+    pub fn color(&self, slot: &str) -> Option<Color> {
+        let slot = match slot {
+            "tx1" => "dk1",
+            "bg1" => "lt1",
+            "tx2" => "dk2",
+            "bg2" => "lt2",
+            other => other,
+        };
+        let found = self
+            .colors
+            .iter()
+            .find(|(name, _)| name == slot)
+            .map(|(_, color)| *color);
+        found.or(match slot {
+            "dk1" => Some(Color::BLACK),
+            "lt1" => Some(Color::WHITE),
+            _ => None,
+        })
+    }
     /// The face a theme font reference such as `minorHAnsi` names.
     pub fn font(&self, reference: &str) -> Option<String> {
         let (scheme, rest) = match reference.strip_prefix("major") {

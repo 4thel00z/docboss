@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use docboss_model::{
-    AbstractNumbering, Diagnostic, FontEntry, Level, Metadata, NumberFormat, Numbering,
+    AbstractNumbering, Color, Diagnostic, FontEntry, Level, Metadata, NumberFormat, Numbering,
     NumberingInstance, ParagraphProperties, RunProperties, Settings, Style, StyleKind, Styles,
 };
 use docboss_xml::{Ns, Reader};
@@ -236,12 +236,32 @@ pub fn settings(text: &str) -> Settings {
     settings
 }
 
-/// `a:theme` font scheme (ECMA-376 Part 1 §20.1.4.1.18).
+/// `a:theme` font scheme (ECMA-376 Part 1 §20.1.4.1.18) and color scheme
+/// (ECMA-376 Part 1 §20.1.6.2, §20.1.4.1.9): each slot's sRGB value or its
+/// system color's last value.
 pub fn theme(text: &str) -> Theme {
     let mut reader = Reader::new(text);
     let mut theme = Theme::default();
     fn walk(reader: &mut Reader<'_>, theme: &mut Theme) {
         children(reader, |reader, e| {
+            if e.local == "clrScheme" {
+                children(reader, |reader, slot| {
+                    let name = slot.local.to_string();
+                    children(reader, |_, value| {
+                        let color = match value.local {
+                            "srgbClr" => value.attr_raw(Ns::NONE, "val").and_then(Color::from_hex),
+                            "sysClr" => value
+                                .attr_raw(Ns::NONE, "lastClr")
+                                .and_then(Color::from_hex),
+                            _ => None,
+                        };
+                        if let Some(color) = color {
+                            theme.colors.push((name.clone(), color));
+                        }
+                    });
+                });
+                return;
+            }
             let major = match e.local {
                 "majorFont" => true,
                 "minorFont" => false,

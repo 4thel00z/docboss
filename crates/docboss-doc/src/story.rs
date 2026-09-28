@@ -78,6 +78,8 @@ pub struct Context<'a> {
     pub markers: Vec<(u32, u8, Marker)>,
     pub authors: Vec<String>,
     pub shape_blips: HashMap<u32, usize>,
+    /// Fill, line and text frame of each floating shape by shape id.
+    pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
     /// Text box stories by shape id: the CP range of each.
     pub text_boxes: HashMap<u32, (u32, u32)>,
     pub blip_store: Vec<Option<Image>>,
@@ -303,6 +305,7 @@ impl<'a> Context<'a> {
             markers: Vec::new(),
             authors: Vec::new(),
             shape_blips: HashMap::new(),
+            shape_formats: HashMap::new(),
             text_boxes: HashMap::new(),
             blip_store: Vec::new(),
             media: RefCell::new(Vec::new()),
@@ -504,6 +507,7 @@ impl<'a> Context<'a> {
             name: None,
             description: None,
             text_box: Vec::new(),
+            shape: Default::default(),
         }))
     }
 
@@ -542,6 +546,14 @@ impl<'a> Context<'a> {
             },
             name: None,
             description: None,
+            shape: match text_box.is_empty() {
+                true => Default::default(),
+                false => self
+                    .shape_formats
+                    .get(&anchor.shape_id)
+                    .copied()
+                    .unwrap_or_default(),
+            },
             text_box,
         }))
     }

@@ -42,6 +42,26 @@ pub struct Drawing {
     /// The content of a text box the drawing carries, empty for a plain
     /// picture.
     pub text_box: Vec<crate::Block>,
+    /// How the shape around a text box is drawn.
+    pub shape: ShapeFormat,
+}
+
+/// Fill, outline and text frame of a shape. Every field is optional: an
+/// unstated fill or outline is not drawn.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct ShapeFormat {
+    pub fill: Option<crate::Color>,
+    pub outline: Option<crate::Color>,
+    /// Outline width in EMU.
+    pub outline_width: Option<i64>,
+    /// Space between the shape edge and its text in EMU: left, top, right,
+    /// bottom.
+    pub insets: Option<[i64; 4]>,
+    /// Where the text sits vertically: `Top`, `Center` or `Bottom`.
+    pub text_anchor: Option<crate::VerticalAlign>,
+    /// The shape grows to fit its text.
+    pub auto_fit: bool,
 }
 
 /// One piece of run content.
