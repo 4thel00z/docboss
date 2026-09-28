@@ -1069,3 +1069,43 @@ fn header_text_boxes_are_painted() {
     let layout = laid(&document);
     assert!(runs(&layout, 0).iter().any(|r| r.text == "Logo"));
 }
+
+/// ECMA-376 Part 1 §17.3.1.33: auto line spacing multiplies the text of a
+/// line, not an inline picture on it, so a 100 pt picture under 1.15 line
+/// spacing takes 100 pt plus the text descent.
+#[test]
+fn auto_line_spacing_leaves_inline_pictures_unscaled() {
+    let picture = Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(docboss_model::Drawing {
+            media: None,
+            width: 1_270_000,
+            height: 1_270_000,
+            placement: docboss_model::DrawingPlacement::Inline,
+            name: None,
+            description: None,
+            text_box: Vec::new(),
+            shape: Default::default(),
+        })],
+    });
+    let mut properties = ParagraphProperties::default();
+    properties.spacing.line = Some(276);
+    let layout = laid(&doc(vec![
+        para_with(properties.clone(), vec![picture]),
+        para_with(properties, vec![run("after")]),
+    ]));
+    let image = layout.pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Image { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .expect("picture");
+    assert!((image.height - 100.0).abs() < 0.01);
+    assert!(
+        (image.y - 72.0).abs() < 0.01,
+        "the picture starts at {} pt, not at the margin",
+        image.y
+    );
+}

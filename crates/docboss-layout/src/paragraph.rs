@@ -317,7 +317,9 @@ impl Flattener<'_, '_> {
     }
 }
 
-/// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points.
+/// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points. Under
+/// auto line spacing (§17.3.1.33) the multiple scales the text of a line;
+/// an inline picture keeps its own height on the text baseline.
 pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: f32) -> Laid {
     let doc = ctx.doc;
     let table_style = ctx.table_style.clone();
@@ -391,22 +393,26 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     let mut slabs = Vec::with_capacity(count);
     let mut pending_break: Option<Break> = None;
     for (index, line) in lines.iter().enumerate() {
-        let (mut ascent, mut descent) = line
-            .placed
-            .iter()
-            .map(|p| &atoms[p.atom])
-            .filter(|a| a.kind != Kind::Tab)
-            .fold((0.0f32, 0.0f32), |(a, d), atom| {
-                (a.max(atom.ascent), d.max(atom.descent))
-            });
+        let extent = |objects: bool| {
+            line.placed
+                .iter()
+                .map(|p| &atoms[p.atom])
+                .filter(|a| a.kind != Kind::Tab && (a.kind == Kind::Object) == objects)
+                .fold((0.0f32, 0.0f32), |(a, d), atom| {
+                    (a.max(atom.ascent), d.max(atom.descent))
+                })
+        };
+        let (mut ascent, mut descent) = extent(false);
+        let (object_height, _) = extent(true);
         if ascent + descent <= 0.0 {
             ascent = mark_metrics.ascent;
             descent = mark_metrics.descent;
         }
-        let natural = ascent + descent;
+        let natural = ascent.max(object_height) + descent;
         let (height, baseline) = match rule {
             LineRule::Auto => {
-                let h = natural * line_value.max(1) as f32 / 240.0;
+                let text = (ascent + descent) * line_value.max(1) as f32 / 240.0;
+                let h = text.max(object_height + descent);
                 (h, h - descent)
             }
             LineRule::Exact => {
