@@ -21,6 +21,9 @@ theorem every_row_is_in_its_own_file : Gate.misfiledRows.isEmpty = true := by
 theorem every_row_names_a_chapter_of_its_standard : Gate.unslicedRows.isEmpty = true := by
   native_decide
 
+theorem every_row_names_a_clause_by_its_title : Gate.unknownRows.isEmpty = true := by
+  native_decide
+
 theorem ledger_rows_are_unique : Gate.duplicateRefs.isEmpty = true := by
   native_decide
 

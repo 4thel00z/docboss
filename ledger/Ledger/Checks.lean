@@ -82,6 +82,25 @@ def Slice.unaddressed (s : Slice) : List Heading :=
 def Gate.unaddressed : List (Standard × Heading) :=
   Gate.slices.flatMap fun s => (Slice.unaddressed s).map (s.standard, ·)
 
+/-- The title the outline gives a reference: a heading's, or a chapter's or
+annex's own title for a top-level reference. -/
+def Outline.titleOf (s : Standard) (r : Ref) : Option String :=
+  match r with
+  | .clause [n] => ((Outline.chapters s).find? (·.1 == n)).map (·.2)
+  | .annex l [] => ((Outline.annexes s).find? (·.1 == l)).map (·.2)
+  | _ => ((Outline.headings s).find? (·.ref == r)).map (·.title)
+
+/-- Rows of the slice that name no clause of the outline, or name one under
+another title. -/
+def Slice.unknownRows (s : Slice) : List Feature :=
+  s.features.filter fun f =>
+    match f.ref with
+    | .clause [n] => ((Outline.chapters s.standard).find? (·.1 == n)).all (·.2 != f.title)
+    | .annex l [] => ((Outline.annexes s.standard).find? (·.1 == l)).all (·.2 != f.title)
+    | r => !s.headings.any fun h => h.ref == r && h.title == f.title
+
+def Gate.unknownRows : List Feature := Gate.slices.flatMap Slice.unknownRows
+
 /-- Citations naming a clause of the slice's chapter that the specification
 does not have: the cited number must be a heading or an ancestor of one. -/
 def Slice.danglingCitations (s : Slice) : List Citation :=

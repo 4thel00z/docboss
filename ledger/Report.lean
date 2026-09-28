@@ -113,7 +113,11 @@ def checkReport : List String :=
     s!"row {f.standard.label} {f.ref.render} sits in another specification's file"
   let unsliced := Gate.unslicedRows.map fun f =>
     s!"row {f.standard.label} {f.ref.render} names a chapter its specification does not have"
-  offenders ++ unaddressed ++ dangling ++ duplicates ++ misfiled ++ unsliced
+  let unknown := Gate.unknownRows.map fun f =>
+    let expected := (Outline.titleOf f.standard f.ref).map (s!"; the outline calls it {·}") |>.getD
+      "; the outline has no such clause"
+    s!"row {f.standard.label} {f.ref.render} {f.title}: not a clause of the outline by that title{expected}"
+  offenders ++ unaddressed ++ dangling ++ duplicates ++ misfiled ++ unsliced ++ unknown
 
 /-- Mentions of a specification that name no clause, listed so a typo in a
 citation does not pass unnoticed. -/

@@ -81,6 +81,8 @@ def rows0 : List Feature := [
     note := "The coreProperties root is read (test structure.rs document_properties)." },
   { standard := .ecma376Part2, ref := .clause [8, 3, 4], title := "Core property elements", status := .incomplete,
     note := "Ten core property elements are read (test structure.rs document_properties); contentStatus, identifier, language, lastPrinted and version are not." },
+  { standard := .ecma376Part2, ref := .clause [10, 2], title := "Overview of OPC-specific restrictions and extensions to “XML-Signature Syntax and Processing”", status := .outOfScope,
+    note := "Digital signatures are not read or verified; reading content does not depend on them." },
   { standard := .ecma376Part2, ref := .clause [10, 3], title := "Choosing content to sign", status := .outOfScope,
     note := "Digital signatures are not read or verified; reading content does not depend on them." },
   { standard := .ecma376Part2, ref := .clause [10, 4], title := "Digital signature parts", status := .outOfScope,
