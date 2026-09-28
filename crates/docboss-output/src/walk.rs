@@ -6,8 +6,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use docboss_model::{
-    Document, Drawing, Field, Inline, NoteKind, NumberFormat, NumberingCounter, NumberingRef,
-    Paragraph, RevisionKind, RunContent, RunProperties, Underline, VerticalAlign,
+    Block, Document, Drawing, Field, Inline, NoteKind, NumberFormat, NumberingCounter,
+    NumberingRef, Paragraph, RevisionKind, RunContent, RunProperties, Underline, VerticalAlign,
 };
 
 use crate::symbol::{self, SymbolFont};
@@ -267,6 +267,21 @@ fn field_tokens(text: &str) -> Vec<String> {
         tokens.push(token);
     }
     tokens
+}
+
+/// The bodies of the text boxes a paragraph anchors, in order, from its
+/// flattened pieces, so hidden and deleted drawings stay out (ECMA-376
+/// Part 1 §20.4.2.38).
+pub(crate) fn text_boxes<'a>(pieces: &[Piece<'a>]) -> Vec<&'a [Block]> {
+    pieces
+        .iter()
+        .filter_map(|piece| match piece {
+            Piece::Image(drawing) if !drawing.text_box.is_empty() => {
+                Some(drawing.text_box.as_slice())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Flattens a paragraph's inlines into `out`: hidden runs (ECMA-376 Part 1

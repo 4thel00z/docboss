@@ -147,7 +147,11 @@ impl<'a> HtmlWriter<'a, '_> {
     fn blocks<W: Write>(&mut self, blocks: &'a [Block], out: &mut W) -> fmt::Result {
         for block in blocks {
             match block {
-                Block::Paragraph(paragraph) => self.paragraph(paragraph, out)?,
+                Block::Paragraph(paragraph) => {
+                    for body in self.paragraph(paragraph, out)? {
+                        self.blocks(body, out)?;
+                    }
+                }
                 Block::Table(table) => {
                     self.close_blocks(out)?;
                     self.table(table, out)?;
@@ -157,7 +161,13 @@ impl<'a> HtmlWriter<'a, '_> {
         Ok(())
     }
 
-    fn paragraph<W: Write>(&mut self, paragraph: &'a Paragraph, out: &mut W) -> fmt::Result {
+    /// Writes the paragraph and returns the bodies of the text boxes it
+    /// anchors, for the caller to write after it.
+    fn paragraph<W: Write>(
+        &mut self,
+        paragraph: &'a Paragraph,
+        out: &mut W,
+    ) -> Result<Vec<&'a [Block]>, fmt::Error> {
         let info = self.resolver.paragraph(paragraph);
         let mut pieces = Vec::new();
         walk::flatten(&mut self.resolver, paragraph, &mut pieces);
@@ -171,7 +181,8 @@ impl<'a> HtmlWriter<'a, '_> {
                 out.write_str("<pre><code>")?;
                 self.in_code = true;
             }
-            return escape(text.trim_end(), out);
+            escape(text.trim_end(), out)?;
+            return Ok(walk::text_boxes(&pieces));
         }
         self.close_code(out)?;
         let item = info
@@ -196,7 +207,7 @@ impl<'a> HtmlWriter<'a, '_> {
             }
         };
         self.buf = buf;
-        result
+        result.map(|()| walk::text_boxes(&pieces))
     }
 
     fn list_item<W: Write>(&mut self, item: &ListItem, content: &str, out: &mut W) -> fmt::Result {

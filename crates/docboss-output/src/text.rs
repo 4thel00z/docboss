@@ -99,7 +99,7 @@ impl<'a> TextWriter<'a, '_> {
     fn blocks<W: Write>(&mut self, blocks: &'a [Block], out: &mut W) -> fmt::Result {
         for block in blocks {
             self.line.clear();
-            match block {
+            let boxes = match block {
                 Block::Paragraph(paragraph) => self.paragraph(paragraph),
                 Block::Table(table) => {
                     for (i, row) in table.rows.iter().enumerate() {
@@ -113,10 +113,14 @@ impl<'a> TextWriter<'a, '_> {
                             self.cell(&cell.blocks);
                         }
                     }
+                    Vec::new()
                 }
-            }
+            };
             out.write_str(&self.line)?;
             out.write_char('\n')?;
+            for body in boxes {
+                self.blocks(body, out)?;
+            }
         }
         Ok(())
     }
@@ -129,10 +133,14 @@ impl<'a> TextWriter<'a, '_> {
             match block {
                 Block::Paragraph(paragraph) => {
                     let start = self.line.len();
-                    self.paragraph(paragraph);
+                    let boxes = self.paragraph(paragraph);
                     let flattened = self.line[start..].replace(['\n', '\t'], " ");
                     self.line.truncate(start);
                     self.line.push_str(&flattened);
+                    for body in boxes {
+                        self.line.push(' ');
+                        self.cell(body);
+                    }
                 }
                 Block::Table(table) => {
                     for row in &table.rows {
@@ -146,7 +154,9 @@ impl<'a> TextWriter<'a, '_> {
         }
     }
 
-    fn paragraph(&mut self, paragraph: &'a Paragraph) {
+    /// Writes the paragraph to the line and returns the bodies of the text
+    /// boxes it anchors, for the caller to write after it.
+    fn paragraph(&mut self, paragraph: &'a Paragraph) -> Vec<&'a [Block]> {
         let info = self.resolver.paragraph(paragraph);
         let item = info
             .numbering
@@ -173,7 +183,9 @@ impl<'a> TextWriter<'a, '_> {
                 _ => {}
             }
         }
+        let boxes = walk::text_boxes(&pieces);
         self.pieces = pieces;
+        boxes
     }
 
     fn body(&mut self, blocks: &'a [Block]) -> String {
@@ -181,7 +193,12 @@ impl<'a> TextWriter<'a, '_> {
         for block in blocks {
             self.line.clear();
             match block {
-                Block::Paragraph(paragraph) => self.paragraph(paragraph),
+                Block::Paragraph(paragraph) => {
+                    for body in self.paragraph(paragraph) {
+                        self.line.push(' ');
+                        self.cell(body);
+                    }
+                }
                 Block::Table(table) => {
                     for row in &table.rows {
                         for cell in &row.cells {

@@ -747,12 +747,14 @@ def Generated.citations3 : List Citation := [
   ⟨.ecma376Part1, some (.clause [17, 9, 15]), "crates/docboss-model/tests/resolution.rs", 179, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 9, 23]), "crates/docboss-output/src/walk.rs", 89, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 16, 5, 25]), "crates/docboss-output/src/walk.rs", 209, false⟩,
-  ⟨.ecma376Part1, some (.clause [17, 3, 2, 41]), "crates/docboss-output/src/walk.rs", 272, false⟩,
-  ⟨.ecma376Part1, some (.clause [17, 9]), "crates/docboss-output/src/walk.rs", 385, false⟩,
-  ⟨.ecma376Part1, some (.clause [17, 11, 17]), "crates/docboss-output/src/walk.rs", 466, false⟩,
+  ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-output/src/walk.rs", 273, false⟩,
+  ⟨.ecma376Part1, some (.clause [17, 3, 2, 41]), "crates/docboss-output/src/walk.rs", 287, false⟩,
+  ⟨.ecma376Part1, some (.clause [17, 9]), "crates/docboss-output/src/walk.rs", 400, false⟩,
+  ⟨.ecma376Part1, some (.clause [17, 11, 17]), "crates/docboss-output/src/walk.rs", 481, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 9]), "crates/docboss-output/tests/text.rs", 11, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 3, 2, 41]), "crates/docboss-output/tests/text.rs", 41, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 16]), "crates/docboss-output/tests/text.rs", 81, true⟩,
+  ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-output/tests/text.rs", 171, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 7, 2]), "crates/docboss-tui/tests/explorer.rs", 172, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 3]), "crates/docboss-write/src/body.rs", 2, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 16, 22]), "crates/docboss-write/src/body.rs", 120, false⟩,
@@ -814,12 +816,12 @@ def Generated.citations3 : List Citation := [
   ⟨.appnote, some (.clause [4, 3, 7]), "crates/docboss-zip/src/write.rs", 299, true⟩,
   ⟨.appnote, some (.clause [4, 3, 9]), "crates/docboss-zip/src/write.rs", 299, true⟩,
   ⟨.appnote, some (.clause [4, 3, 12]), "crates/docboss-zip/tests/archive.rs", 24, true⟩,
-  ⟨.appnote, some (.clause [4, 3, 16]), "crates/docboss-zip/tests/archive.rs", 24, true⟩,
-  ⟨.appnote, some (.clause [4, 3, 6]), "crates/docboss-zip/tests/archive.rs", 26, true⟩,
-  ⟨.appnote, some (.clause [4, 3, 8]), "crates/docboss-zip/tests/archive.rs", 26, true⟩
+  ⟨.appnote, some (.clause [4, 3, 16]), "crates/docboss-zip/tests/archive.rs", 24, true⟩
 ]
 
 def Generated.citations4 : List Citation := [
+  ⟨.appnote, some (.clause [4, 3, 6]), "crates/docboss-zip/tests/archive.rs", 26, true⟩,
+  ⟨.appnote, some (.clause [4, 3, 8]), "crates/docboss-zip/tests/archive.rs", 26, true⟩,
   ⟨.appnote, some (.clause [4, 4, 5]), "crates/docboss-zip/tests/archive.rs", 26, true⟩,
   ⟨.appnote, some (.clause [5, 5]), "crates/docboss-zip/tests/archive.rs", 26, true⟩,
   ⟨.appnote, some (.clause [4, 3, 9]), "crates/docboss-zip/tests/archive.rs", 32, true⟩,

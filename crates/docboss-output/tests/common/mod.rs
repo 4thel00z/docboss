@@ -229,3 +229,20 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         text_box: Vec::new(),
     }))
 }
+
+pub fn text_box(blocks: Vec<Block>) -> Inline {
+    content(RunContent::Drawing(Drawing {
+        media: None,
+        width: 1905000,
+        height: 952500,
+        placement: DrawingPlacement::Anchored {
+            x: 0,
+            y: 0,
+            behind_text: false,
+            relative_to_page: false,
+        },
+        name: Some("Text Box 1".into()),
+        description: None,
+        text_box: blocks,
+    }))
+}

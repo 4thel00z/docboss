@@ -167,3 +167,37 @@ fn headers_footers_and_comments_on_request() {
         "head\nbody[c1]\nfoot\n\n[c1] Ada: check this\n"
     );
 }
+
+/// ECMA-376 Part 1 §20.4.2.38: a text box's content is part of the document
+/// text, written after the paragraph that anchors it, in every output.
+#[test]
+fn text_box_content_follows_its_anchor() {
+    let doc = document(vec![
+        para(vec![
+            run("Anchor"),
+            text_box(vec![para(vec![run("Inside the box")])]),
+        ]),
+        para(vec![run("After")]),
+        table(vec![row(vec![cell(vec![para(vec![
+            run("Cell"),
+            text_box(vec![para(vec![run("boxed cell")])]),
+        ])])])]),
+    ]);
+    assert_eq!(
+        text(&doc),
+        "Anchor\nInside the box\nAfter\nCell boxed cell\n"
+    );
+    let markdown = docboss_output::to_markdown(&doc, &docboss_output::MarkdownOptions::default());
+    assert!(
+        markdown.contains("Anchor\n\nInside the box\n\nAfter"),
+        "{markdown}"
+    );
+    let html = docboss_output::to_html(&doc, &docboss_output::HtmlOptions::default());
+    assert!(
+        html.contains("<p>Anchor</p>\n<p>Inside the box</p>\n<p>After</p>"),
+        "{html}"
+    );
+    let views = docboss_output::blocks_view(&doc);
+    let texts: Vec<&str> = views.iter().map(|view| view.text.as_str()).collect();
+    assert_eq!(texts[..3], ["Anchor", "Inside the box", "After"]);
+}

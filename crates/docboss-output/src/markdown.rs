@@ -168,7 +168,11 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
     fn blocks<W: Write>(&mut self, blocks: &'a [Block], out: &mut W) -> fmt::Result {
         for block in blocks {
             match block {
-                Block::Paragraph(paragraph) => self.paragraph(paragraph, out)?,
+                Block::Paragraph(paragraph) => {
+                    for body in self.paragraph(paragraph, out)? {
+                        self.blocks(body, out)?;
+                    }
+                }
                 Block::Table(table) => self.table(table, out)?,
             }
         }
@@ -180,13 +184,20 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
         out.write_str("---")
     }
 
-    fn paragraph<W: Write>(&mut self, paragraph: &'a Paragraph, out: &mut W) -> fmt::Result {
+    /// Writes the paragraph and returns the bodies of the text boxes it
+    /// anchors, for the caller to write after it.
+    fn paragraph<W: Write>(
+        &mut self,
+        paragraph: &'a Paragraph,
+        out: &mut W,
+    ) -> Result<Vec<&'a [Block]>, fmt::Error> {
         let info = self.resolver.paragraph(paragraph);
         let mut pieces = std::mem::take(&mut self.pieces);
         walk::flatten(&mut self.resolver, paragraph, &mut pieces);
         let result = self.paragraph_pieces(paragraph, info, &pieces, out);
+        let boxes = walk::text_boxes(&pieces);
         self.pieces = pieces;
-        result
+        result.map(|()| boxes)
     }
 
     fn paragraph_pieces<W: Write>(
