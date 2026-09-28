@@ -1,0 +1,20 @@
+name = "ledger"
+version = "0.1.0"
+defaultTargets = ["Ledger"]
+# A `sorry` or any other warning fails the build: the gate has no holes.
+moreLeanArgs = ["-DwarningAsError=true"]
+
+[[lean_lib]]
+name = "Ledger"
+
+[[lean_exe]]
+name = "ledger-index"
+root = "Index"
+
+[[lean_exe]]
+name = "ledger-report"
+root = "Report"
+
+[[lean_exe]]
+name = "ledger-vectors"
+root = "Vectors"
