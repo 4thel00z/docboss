@@ -816,6 +816,9 @@ fn apply_grid(table: &mut Table, edges: &[Vec<i32>]) {
         return;
     }
     table.grid = all.windows(2).map(|w| w[1] - w[0]).collect();
+    if table.properties.indent.is_none() {
+        table.properties.indent = Some(all[0]);
+    }
     for (row, row_edges) in table.rows.iter_mut().zip(edges) {
         if row_edges.len() < 2 {
             continue;
