@@ -100,6 +100,7 @@ struct MarkdownWriter<'a, 'o> {
     list_stack: Vec<(u8, usize)>,
     page_break: bool,
     buf: String,
+    pieces: Vec<Piece<'a>>,
 }
 
 impl<'a, 'o> MarkdownWriter<'a, 'o> {
@@ -114,6 +115,7 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
             list_stack: Vec::new(),
             page_break: false,
             buf: String::new(),
+            pieces: Vec::new(),
         }
     }
 
@@ -180,16 +182,28 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
 
     fn paragraph<W: Write>(&mut self, paragraph: &'a Paragraph, out: &mut W) -> fmt::Result {
         let info = self.resolver.paragraph(paragraph);
-        let mut pieces = Vec::new();
+        let mut pieces = std::mem::take(&mut self.pieces);
         walk::flatten(&mut self.resolver, paragraph, &mut pieces);
+        let result = self.paragraph_pieces(paragraph, info, &pieces, out);
+        self.pieces = pieces;
+        result
+    }
+
+    fn paragraph_pieces<W: Write>(
+        &mut self,
+        paragraph: &'a Paragraph,
+        info: walk::ParagraphInfo,
+        pieces: &[Piece<'a>],
+        out: &mut W,
+    ) -> fmt::Result {
         if self.options.page_breaks
             && paragraph.properties.page_break_before == Some(true)
             && self.last != Last::None
         {
             self.thematic_break(out)?;
         }
-        if info.code || walk::all_monospace(&pieces) {
-            return self.code_line(&pieces, out);
+        if info.code || walk::all_monospace(pieces) {
+            return self.code_line(pieces, out);
         }
         let item = info
             .numbering
@@ -629,7 +643,17 @@ fn code_span(text: &str, out: &mut String) {
 /// Escapes the characters that start Markdown inline syntax. Underscores
 /// between two alphanumerics cannot open emphasis and are kept bare.
 fn escape(text: &str, table: bool, out: &mut String) {
-    out.reserve(text.len());
+    let plain = !text.bytes().any(|b| {
+        matches!(
+            b,
+            b'\\' | b'`' | b'*' | b'[' | b']' | b'<' | b'~' | b'_' | b'|'
+        )
+    });
+    if plain {
+        out.push_str(text);
+        return;
+    }
+    out.reserve(text.len() + 8);
     let mut previous: Option<char> = None;
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
