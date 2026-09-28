@@ -226,5 +226,6 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         placement: DrawingPlacement::Inline,
         name: Some("Picture 1".into()),
         description: Some(description.into()),
+        text_box: Vec::new(),
     }))
 }

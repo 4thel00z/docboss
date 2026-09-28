@@ -157,6 +157,7 @@ impl Para {
             placement: DrawingPlacement::Inline,
             name: None,
             description: None,
+            text_box: Vec::new(),
         };
         self.content(RunContent::Drawing(drawing), RunProperties::default())
     }

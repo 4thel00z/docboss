@@ -103,6 +103,7 @@ pub fn kitchen_sink() -> Document {
             },
             name: Some("anchored".into()),
             description: Some("An anchored picture".into()),
+            text_box: Vec::new(),
         }),
         RunProperties::default(),
     ));
