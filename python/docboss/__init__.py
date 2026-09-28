@@ -2,6 +2,7 @@
 
 from docboss import md
 from docboss._docboss import (
+    AsyncDocument,
     Block,
     Diagnostic,
     DocbossError,
@@ -16,6 +17,7 @@ from docboss._docboss import (
 )
 
 __all__ = [
+    "AsyncDocument",
     "Block",
     "Diagnostic",
     "DocbossError",

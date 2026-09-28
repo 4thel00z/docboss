@@ -62,6 +62,58 @@ class Image:
     @property
     def data(self) -> bytes: ...
 
+class AsyncDocument:
+    """A DOCX or DOC read asynchronously over a file, bytes or an http(s) URL,
+    fetching only the byte ranges each call needs."""
+
+    @staticmethod
+    async def open(path: str | os.PathLike, *, password: str | None = None) -> AsyncDocument: ...
+    @staticmethod
+    async def from_bytes(data: Buffer, *, password: str | None = None) -> AsyncDocument: ...
+    @staticmethod
+    async def open_url(url: str, *, password: str | None = None) -> AsyncDocument: ...
+    @property
+    def format(self) -> Literal["docx", "doc", "unknown"]: ...
+    @property
+    def bytes_fetched(self) -> int: ...
+    @property
+    def requests(self) -> list[tuple[int, int]]: ...
+    def part_names(self) -> list[str]: ...
+    async def part(self, name: str) -> bytes: ...
+    async def extract_text(
+        self,
+        *,
+        list_labels: bool = True,
+        headers_footers: bool = False,
+        notes: bool = True,
+        comments: bool = False,
+    ) -> str: ...
+    async def extract_markdown(
+        self,
+        *,
+        title: bool = False,
+        page_breaks: bool = False,
+        images: ImagesMode = "reference",
+        image_prefix: str = "",
+        headers_footers: bool = False,
+        notes: bool = True,
+        comments: bool = False,
+    ) -> str: ...
+    async def extract_html(
+        self,
+        *,
+        standalone: bool = False,
+        images: ImagesMode = "embed",
+        image_prefix: str = "",
+        headers_footers: bool = False,
+        notes: bool = True,
+        comments: bool = False,
+    ) -> str: ...
+    async def to_json(self, *, pretty: bool = False) -> str: ...
+    async def blocks(self) -> list[Block]: ...
+    async def images(self) -> list[Image]: ...
+    async def document(self) -> Document: ...
+
 class Document:
     def __init__(
         self,

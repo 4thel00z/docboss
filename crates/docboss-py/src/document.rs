@@ -51,7 +51,7 @@ fn image_format(format: &str, jpeg_quality: u8) -> PyResult<Format> {
     }
 }
 
-fn image_mode(images: &str, prefix: &str) -> PyResult<ImageMode> {
+pub(crate) fn image_mode(images: &str, prefix: &str) -> PyResult<ImageMode> {
     match images {
         "reference" => Ok(ImageMode::Reference {
             prefix: prefix.to_string(),
@@ -93,6 +93,14 @@ pub struct Document {
 }
 
 impl Document {
+    /// A document over a model another reader already parsed.
+    pub(crate) fn from_model(document: Arc<docboss_model::Document>) -> Self {
+        Self {
+            document,
+            layout: OnceLock::new(),
+        }
+    }
+
     fn layout(&self, py: Python<'_>) -> Arc<Layout> {
         if let Some(layout) = self.layout.get() {
             return layout.clone();

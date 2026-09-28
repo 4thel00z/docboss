@@ -20,4 +20,7 @@ docboss-font = { workspace = true }
 docboss-layout = { workspace = true }
 docboss-render = { workspace = true }
 docboss-write = { workspace = true }
+docboss-aio = { workspace = true, features = ["http"] }
 pyo3 = { version = "0.25", features = ["abi3-py312"] }
+pyo3-async-runtimes = { version = "0.25", features = ["tokio-runtime"] }
+tokio = { version = "1", features = ["sync", "rt"] }

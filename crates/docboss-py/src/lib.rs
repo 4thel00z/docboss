@@ -16,8 +16,11 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
+mod aio;
 mod document;
 mod types;
+
+pub use aio::AsyncDocument;
 
 pub use document::Document;
 pub use types::{Block, Diagnostic, FontInfo, Image, Metadata, StyleInfo};
@@ -143,6 +146,7 @@ fn _docboss(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DocbossError", m.py().get_type::<DocbossError>())?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<Document>()?;
+    m.add_class::<AsyncDocument>()?;
     m.add_class::<Metadata>()?;
     m.add_class::<Diagnostic>()?;
     m.add_class::<FontInfo>()?;
