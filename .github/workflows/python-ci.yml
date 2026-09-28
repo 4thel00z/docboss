@@ -1,0 +1,94 @@
+name: python-ci
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "crates/**"
+      - "python/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "pyproject.toml"
+      - ".github/workflows/python-ci.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "python/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "pyproject.toml"
+      - ".github/workflows/python-ci.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install package (builds extension via maturin backend)
+        run: pip install . pytest pyyaml
+      - name: Run integration tests
+        run: pytest -q
+
+  build:
+    name: wheel (${{ matrix.platform.runner }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: macos-latest
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist
+          manylinux: auto
+          sccache: true
+      - name: Import smoke test
+        shell: bash
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          /tmp/venv/bin/python -c "
+          import docboss
+          doc = docboss.Document('crates/docboss-docx/tests/fixtures/libreoffice-rich.docx')
+          assert doc.format == 'docx'
+          assert 'Fixture Heading' in doc.extract_text()
+          assert doc.page_count() >= 1
+          png = doc.render(0)
+          assert png[:8] == b'\x89PNG\r\n\x1a\n'
+          assert docboss.Document('crates/docboss-doc/tests/fixtures/lists.doc').format == 'doc'
+          try:
+              docboss.Document(data=b'not a document')
+          except docboss.DocbossError:
+              pass
+          else:
+              raise SystemExit('expected DocbossError on garbage input')
+          print('ok', docboss.__version__)
+          "
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ci-wheels-${{ runner.os }}-${{ matrix.platform.target }}
+          path: dist

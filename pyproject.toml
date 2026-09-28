@@ -1,0 +1,52 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "docboss"
+version = "0.1.0"
+description = "Fast DOCX and DOC text extraction, Markdown and HTML conversion, page rendering and DOCX writing in pure Rust, with pythonic bindings"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "4thel00z" }]
+keywords = ["docx", "doc", "word", "ooxml", "ecma-376", "text-extraction", "docx-to-markdown", "docx-to-html", "rendering", "rust"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Text Processing",
+    "Topic :: Office/Business :: Office Suites",
+]
+
+[project.urls]
+Homepage = "https://github.com/4thel00z/docboss"
+Repository = "https://github.com/4thel00z/docboss"
+Issues = "https://github.com/4thel00z/docboss/issues"
+Changelog = "https://github.com/4thel00z/docboss/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+python-source = "python"
+module-name = "docboss._docboss"
+manifest-path = "crates/docboss-py/Cargo.toml"
+features = ["pyo3/extension-module"]
+# The declared License-Files live at the workspace root, outside the
+# manifest dir: include them explicitly or PyPI rejects the sdist (PEP 639).
+include = [
+    { path = "LICENSE-MIT", format = "sdist" },
+    { path = "LICENSE-APACHE", format = "sdist" },
+]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.7",
+    "pytest>=8",
+    # test_release_meta.py parses .github/workflows/release-please.yaml
+    "pyyaml>=6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
