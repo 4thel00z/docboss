@@ -22,10 +22,13 @@ pub mod slot {
     pub const CLX: usize = 33;
     pub const GRP_XST_ATN_OWNERS: usize = 36;
     pub const PLC_SPA_MOM: usize = 40;
+    pub const PLC_SPA_HDR: usize = 41;
     pub const PLCFEND_REF: usize = 46;
     pub const PLCFEND_TXT: usize = 47;
     pub const DGG_INFO: usize = 50;
     pub const STTBF_RMARK: usize = 51;
+    pub const PLCFTXBX_TXT: usize = 56;
+    pub const PLCF_HDRTXBX_TXT: usize = 58;
     pub const PLF_LST: usize = 73;
     pub const PLF_LFO: usize = 74;
 }

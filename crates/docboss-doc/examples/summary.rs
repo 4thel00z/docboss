@@ -9,8 +9,12 @@ fn inline(i: &Inline, out: &mut String) {
                 match c {
                     RunContent::Text(t) => out.push_str(t),
                     RunContent::Drawing(d) => out.push_str(&format!(
-                        "[img {:?} {}x{} {:?}]",
-                        d.media, d.width, d.height, d.placement
+                        "[img {:?} {}x{} {:?} box={:?}]",
+                        d.media,
+                        d.width,
+                        d.height,
+                        d.placement,
+                        d.text_box.iter().map(block_text).collect::<Vec<_>>()
                     )),
                     RunContent::FootnoteReference(n) => out.push_str(&format!("[fn{n}]")),
                     RunContent::EndnoteReference(n) => out.push_str(&format!("[en{n}]")),
@@ -30,6 +34,13 @@ fn inline(i: &Inline, out: &mut String) {
             out.push(']');
         }
         other => out.push_str(&format!("[{other:?}]")),
+    }
+}
+
+fn block_text(block: &Block) -> String {
+    match block {
+        Block::Paragraph(p) => p.text(),
+        Block::Table(_) => "table".to_string(),
     }
 }
 

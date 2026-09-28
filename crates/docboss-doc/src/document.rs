@@ -25,6 +25,8 @@ struct Parts {
     headers: u32,
     comments: u32,
     endnotes: u32,
+    textboxes: u32,
+    header_textboxes: u32,
 }
 
 impl Parts {
@@ -34,12 +36,16 @@ impl Parts {
         let headers = footnotes.saturating_add(c.footnotes);
         let comments = headers.saturating_add(c.headers);
         let endnotes = comments.saturating_add(c.comments);
+        let textboxes = endnotes.saturating_add(c.endnotes);
+        let header_textboxes = textboxes.saturating_add(c.textboxes);
         Parts {
             main: 0,
             footnotes,
             headers,
             comments,
             endnotes,
+            textboxes,
+            header_textboxes,
         }
     }
 }
@@ -191,7 +197,7 @@ fn assemble(
     bookmarks(&mut context, table, fib);
     context.markers.extend(comment_ranges);
     context.markers.sort_by_key(|(cp, rank, _)| (*cp, *rank));
-    shapes(&mut context, word, table, fib);
+    shapes(&mut context, word, table, fib, &parts);
 
     let footnotes: Vec<Note> = footnotes
         .into_iter()
@@ -211,22 +217,6 @@ fn assemble(
         .collect();
     let comments = comments(&context, table, fib, parts.comments);
     let (sections, headers_footers) = sections(&context, word, table, fib, &parts);
-    if fib
-        .counts
-        .textboxes
-        .saturating_add(fib.counts.header_textboxes)
-        > 0
-    {
-        diagnostics.push(Diagnostic::dropped(
-            "WordDocument",
-            format!(
-                "{} text box characters are not read",
-                fib.counts
-                    .textboxes
-                    .saturating_add(fib.counts.header_textboxes)
-            ),
-        ));
-    }
     let dop = table_range(table, fib, slot::DOP);
     let settings = Settings {
         default_tab_stop: u16_at(dop, 10).map_or(720, |v| i32::from(v).max(1)),
@@ -376,13 +366,21 @@ fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
 /// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent: the
 /// drawing group, then one OfficeArtWordDrawing per story, each a dgglbl
 /// byte and a drawing container, §2.9.172).
-fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib) {
-    let (cps, spas) = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
-    for (cp, spa) in cps.iter().zip(&spas) {
+fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts: &Parts) {
+    let main = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
+    let headers = plc(table_range(table, fib, slot::PLC_SPA_HDR), 26);
+    let header_cps = headers.0.iter().map(|cp| parts.headers.saturating_add(*cp));
+    let anchored = main
+        .0
+        .iter()
+        .copied()
+        .zip(main.1)
+        .chain(header_cps.zip(headers.1));
+    for (cp, spa) in anchored {
         let flags = u16_at(spa, 20).unwrap_or(0);
         let value = |at: usize| u32_at(spa, at).unwrap_or(0) as i32;
         context.anchors.insert(
-            *cp,
+            cp,
             Anchor {
                 shape_id: u32_at(spa, 0).unwrap_or(0),
                 left: value(4),
@@ -396,6 +394,29 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib) {
     }
     if context.anchors.is_empty() {
         return;
+    }
+    let stories = [
+        (slot::PLCFTXBX_TXT, parts.textboxes),
+        (slot::PLCF_HDRTXBX_TXT, parts.header_textboxes),
+    ];
+    for (which, base) in stories {
+        let (cps, boxes) = plc(table_range(table, fib, which), 22);
+        let last = boxes.len().saturating_sub(1);
+        for (i, ftxbxs) in boxes.iter().enumerate().take(last) {
+            if u16_at(ftxbxs, 8).unwrap_or(1) & 1 != 0 {
+                continue;
+            }
+            let (Some(lid), Some(&start), Some(&end)) =
+                (u32_at(ftxbxs, 14), cps.get(i), cps.get(i + 1))
+            else {
+                continue;
+            };
+            let guard = u32::from(end > start + 1);
+            context.text_boxes.insert(
+                lid,
+                (base.saturating_add(start), base.saturating_add(end - guard)),
+            );
+        }
     }
     let Some((fc, lcb)) = fib.range(slot::DGG_INFO) else {
         return;

@@ -56,6 +56,7 @@ pub enum StoryKind {
     Note,
     Comment,
     HeaderFooter,
+    TextBox,
 }
 
 pub struct Context<'a> {
@@ -76,6 +77,8 @@ pub struct Context<'a> {
     pub markers: Vec<(u32, u8, Marker)>,
     pub authors: Vec<String>,
     pub shape_blips: HashMap<u32, usize>,
+    /// Text box stories by shape id: the CP range of each.
+    pub text_boxes: HashMap<u32, (u32, u32)>,
     pub blip_store: Vec<Option<Image>>,
     pub media: RefCell<Vec<Media>>,
     pub diagnostics: RefCell<Vec<Diagnostic>>,
@@ -299,6 +302,7 @@ impl<'a> Context<'a> {
             markers: Vec::new(),
             authors: Vec::new(),
             shape_blips: HashMap::new(),
+            text_boxes: HashMap::new(),
             blip_store: Vec::new(),
             media: RefCell::new(Vec::new()),
             diagnostics: RefCell::new(Vec::new()),
@@ -498,9 +502,12 @@ impl<'a> Context<'a> {
             placement: DrawingPlacement::Inline,
             name: None,
             description: None,
+            text_box: Vec::new(),
         }))
     }
 
+    /// A floating shape: its picture from the BLIP store, or its text box
+    /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt).
     fn floating(&self, cp: u32) -> Option<RunContent> {
         let anchor = self.anchors.get(&cp)?;
         let media = self
@@ -508,11 +515,15 @@ impl<'a> Context<'a> {
             .get(&anchor.shape_id)
             .and_then(|&index| self.blip_store.get(index).cloned().flatten())
             .map(|image| self.add_media(image));
-        if media.is_none() {
+        let text_box = match self.text_boxes.get(&anchor.shape_id) {
+            Some(&(start, end)) => self.story(start, end, StoryKind::TextBox),
+            None => Vec::new(),
+        };
+        if media.is_none() && text_box.is_empty() {
             self.report(Diagnostic::dropped(
                 "WordDocument",
                 format!(
-                    "shape {} at CP {cp} is not a picture docboss reads",
+                    "shape {} at CP {cp} is neither a picture nor a text box",
                     anchor.shape_id
                 ),
             ));
@@ -530,6 +541,7 @@ impl<'a> Context<'a> {
             },
             name: None,
             description: None,
+            text_box,
         }))
     }
 

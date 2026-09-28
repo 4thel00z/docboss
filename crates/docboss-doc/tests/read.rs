@@ -303,3 +303,41 @@ fn encrypted_documents() {
     let document = docboss_doc::read_with_password(&rc4, "tika").unwrap();
     assert!(plain_text(&document).contains("This is an encrypted Word 2007 File."));
 }
+
+/// [MS-DOC] §2.8.27 PlcfSpa anchors, [MS-ODRAW] §2.2.32 BLIP store and
+/// [MS-DOC] §2.8.32 PlcftxbxTxt: a floating picture and a text box.
+#[test]
+fn floating_picture_and_text_box() {
+    let document = fixture("floating");
+    let drawings: Vec<docboss_model::Drawing> = paragraphs(&document)
+        .iter()
+        .flat_map(|p| runs(p))
+        .flat_map(|r| &r.content)
+        .filter_map(|c| match c {
+            RunContent::Drawing(d) => Some(d.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawings.len(), 2);
+    assert!(matches!(
+        drawings[0].placement,
+        DrawingPlacement::Anchored { .. }
+    ));
+    let media = document.media(drawings[0].media.unwrap()).unwrap();
+    assert_eq!(media.content_type, "image/png");
+    assert!(drawings[1].media.is_none());
+    let texts: Vec<String> = drawings[1]
+        .text_box
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p.text()),
+            Block::Table(_) => None,
+        })
+        .collect();
+    assert_eq!(texts, ["Inside the box.", "Second box line."]);
+    assert!(
+        document.diagnostics.is_empty(),
+        "{:?}",
+        document.diagnostics
+    );
+}
