@@ -195,5 +195,6 @@ pub fn parse(
         }
         numbering.instances.push(instance);
     }
+    numbering.sort_by_id();
     numbering
 }

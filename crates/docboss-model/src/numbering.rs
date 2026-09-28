@@ -82,10 +82,45 @@ pub struct Numbering {
 }
 
 impl Numbering {
+    /// Orders instances and abstract definitions by id, keeping the first of
+    /// equal ids first, so lookups binary-search instead of scanning.
+    pub fn sort_by_id(&mut self) {
+        self.instances.sort_by_key(|instance| instance.num_id);
+        self.abstracts.sort_by_key(|definition| definition.id);
+    }
+
+    /// The first instance with `num_id`. A binary search finds it when the
+    /// instances are sorted ([`Numbering::sort_by_id`]); otherwise the scan
+    /// that follows does.
     pub fn instance(&self, num_id: i64) -> Option<&NumberingInstance> {
+        let at = self
+            .instances
+            .partition_point(|instance| instance.num_id < num_id);
+        if let Some(instance) = self
+            .instances
+            .get(at)
+            .filter(|instance| instance.num_id == num_id)
+        {
+            return Some(instance);
+        }
         self.instances
             .iter()
             .find(|instance| instance.num_id == num_id)
+    }
+
+    /// The first abstract definition with `id`, found like [`Numbering::instance`].
+    pub fn definition(&self, id: i64) -> Option<&AbstractNumbering> {
+        let at = self
+            .abstracts
+            .partition_point(|definition| definition.id < id);
+        if let Some(definition) = self
+            .abstracts
+            .get(at)
+            .filter(|definition| definition.id == id)
+        {
+            return Some(definition);
+        }
+        self.abstracts.iter().find(|definition| definition.id == id)
     }
 
     /// The effective definition of one level of a numbering instance.
@@ -98,61 +133,108 @@ impl Numbering {
         {
             return Some(level);
         }
-        self.abstracts
-            .iter()
-            .find(|definition| definition.id == instance.abstract_id)?
+        self.definition(instance.abstract_id)?
             .levels
             .iter()
             .find(|level| level.level == reference.level)
     }
 
-    fn start(&self, reference: NumberingRef) -> u32 {
-        let overridden = self.instance(reference.num_id).and_then(|instance| {
-            instance
-                .start_overrides
-                .iter()
-                .find(|(level, _)| *level == reference.level)
-        });
-        match overridden {
-            Some((_, start)) => *start,
-            None => self.level(reference).map_or(1, |level| level.start),
-        }
-    }
-
     /// A counter that produces list labels in document order.
     pub fn counter(&self) -> NumberingCounter<'_> {
+        let instances = self
+            .instances
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(index, instance)| (instance.num_id, index))
+            .collect();
+        let abstracts = self
+            .abstracts
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(index, definition)| (definition.id, index))
+            .collect();
         NumberingCounter {
             numbering: self,
+            instances,
+            abstracts,
+            resolved: HashMap::new(),
             counts: HashMap::new(),
         }
     }
 }
 
+/// The nine levels of one numbering instance with overrides applied, and
+/// each level's start value.
+struct ResolvedInstance<'a> {
+    abstract_id: i64,
+    levels: [Option<&'a Level>; 9],
+    starts: [u32; 9],
+}
+
 /// Walks list paragraphs in document order and produces their labels.
 /// Counters are kept per abstract definition, so two instances of one
 /// definition continue each other unless a start override restarts them.
+/// Instances are resolved once, so each label costs a few map lookups
+/// however many lists the document has.
 pub struct NumberingCounter<'a> {
     numbering: &'a Numbering,
+    instances: HashMap<i64, usize>,
+    abstracts: HashMap<i64, usize>,
+    resolved: HashMap<i64, ResolvedInstance<'a>>,
     counts: HashMap<i64, [Option<u32>; 9]>,
 }
 
-impl NumberingCounter<'_> {
+impl<'a> NumberingCounter<'a> {
+    fn resolve(&self, num_id: i64) -> Option<ResolvedInstance<'a>> {
+        let numbering: &'a Numbering = self.numbering;
+        let instance = &numbering.instances[*self.instances.get(&num_id)?];
+        let definition = self
+            .abstracts
+            .get(&instance.abstract_id)
+            .map(|&index| &numbering.abstracts[index]);
+        let levels: [Option<&'a Level>; 9] = std::array::from_fn(|index| {
+            let wanted = index as u8;
+            instance
+                .level_overrides
+                .iter()
+                .find(|level| level.level == wanted)
+                .or_else(|| {
+                    definition?
+                        .levels
+                        .iter()
+                        .find(|level| level.level == wanted)
+                })
+        });
+        let starts = std::array::from_fn(|index| {
+            instance
+                .start_overrides
+                .iter()
+                .find(|(level, _)| usize::from(*level) == index)
+                .map(|(_, start)| *start)
+                .or_else(|| levels[index].map(|level| level.start))
+                .unwrap_or(1)
+        });
+        Some(ResolvedInstance {
+            abstract_id: instance.abstract_id,
+            levels,
+            starts,
+        })
+    }
+
     /// Advances the counter for a list paragraph and returns its label, such
     /// as `2.1.` or `•`; `None` when the reference names no list.
     pub fn next(&mut self, reference: NumberingRef) -> Option<String> {
         let level_index = usize::from(reference.level.min(8));
-        let instance = self.numbering.instance(reference.num_id)?;
-        let level = self.numbering.level(reference)?.clone();
-        let starts: Vec<u32> = (0..9u8)
-            .map(|l| {
-                self.numbering.start(NumberingRef {
-                    num_id: reference.num_id,
-                    level: l,
-                })
-            })
-            .collect();
-        let counts = self.counts.entry(instance.abstract_id).or_insert([None; 9]);
-        let current = counts[level_index].map_or(starts[level_index], |n| n + 1);
+        if !self.resolved.contains_key(&reference.num_id) {
+            let resolved = self.resolve(reference.num_id)?;
+            self.resolved.insert(reference.num_id, resolved);
+        }
+        let resolved = self.resolved.get(&reference.num_id)?;
+        let level = resolved.levels[level_index]?;
+        let counts = self.counts.entry(resolved.abstract_id).or_insert([None; 9]);
+        let current = counts[level_index].map_or(resolved.starts[level_index], |n| n + 1);
         counts[level_index] = Some(current);
         counts[level_index + 1..].fill(None);
         if level.format == NumberFormat::None {
@@ -171,25 +253,13 @@ impl NumberingCounter<'_> {
                 continue;
             }
             chars.next();
-            let referenced = (digit.unwrap_or(1).max(1) - 1) as usize;
-            let value = snapshot
-                .get(referenced)
-                .copied()
-                .flatten()
-                .unwrap_or(starts[referenced.min(8)]);
-            let format = self
-                .numbering
-                .level(NumberingRef {
-                    num_id: reference.num_id,
-                    level: referenced as u8,
-                })
-                .map_or(NumberFormat::Decimal, |l| l.format.clone());
-            let format = if level.legal {
-                NumberFormat::Decimal
-            } else {
-                format
+            let referenced = ((digit.unwrap_or(1).max(1) - 1) as usize).min(8);
+            let value = snapshot[referenced].unwrap_or(resolved.starts[referenced]);
+            let format = match level.legal {
+                true => &NumberFormat::Decimal,
+                false => resolved.levels[referenced].map_or(&NumberFormat::Decimal, |l| &l.format),
             };
-            label.push_str(&crate::number_label(&format, value));
+            label.push_str(&crate::number_label(format, value));
         }
         Some(label)
     }

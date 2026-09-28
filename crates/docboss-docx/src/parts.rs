@@ -188,6 +188,7 @@ pub fn numbering(text: &str, theme: &Theme) -> (Numbering, Vec<(i64, String)>) {
         }
         _ => {}
     });
+    numbering.sort_by_id();
     (numbering, links)
 }
 

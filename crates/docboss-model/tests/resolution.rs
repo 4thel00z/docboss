@@ -174,3 +174,36 @@ fn table_style_sits_between_defaults_and_paragraph_style() {
         Some(18)
     );
 }
+
+/// Lookups find instances whether or not the reader sorted them, and two
+/// instances of one abstract definition share its counters (ECMA-376 Part 1
+/// §17.9.15).
+#[test]
+fn instances_resolve_sorted_or_not() {
+    let definition = AbstractNumbering {
+        id: 7,
+        levels: vec![level(0, NumberFormat::Decimal, "%1.")],
+    };
+    let instance = |num_id: i64| NumberingInstance {
+        num_id,
+        abstract_id: 7,
+        ..NumberingInstance::default()
+    };
+    let mut numbering = Numbering {
+        abstracts: vec![definition],
+        instances: vec![instance(9), instance(2), instance(5)],
+    };
+    for sorted in [false, true] {
+        if sorted {
+            numbering.sort_by_id();
+        }
+        assert!([2, 5, 9].iter().all(|&id| numbering.instance(id).is_some()));
+        assert!(numbering.instance(4).is_none());
+        let mut counter = numbering.counter();
+        let labels: Vec<String> = [9, 2, 5]
+            .iter()
+            .map(|&num_id| counter.next(NumberingRef { num_id, level: 0 }).unwrap())
+            .collect();
+        assert_eq!(labels, ["1.", "2.", "3."]);
+    }
+}
