@@ -228,7 +228,6 @@ dependencies = [
 name = "docboss-layout"
 version = "0.1.0"
 dependencies = [
- "criterion",
  "docboss-font",
  "docboss-model",
 ]

@@ -114,9 +114,9 @@ impl Geometry {
         (self.width - self.right).max(self.left + 1.0)
     }
 
-    /// ECMA-376 Part 1 §17.3.1.37: the first custom stop right of `x`,
-    /// else the hanging indent, else the next default stop
-    /// (ECMA-376 Part 1 §17.15.1.25).
+    /// ECMA-376 Part 1 §17.3.1 (`w:tabs`): the first custom stop right of
+    /// `x`, else the hanging indent, else the next default stop
+    /// (`w:defaultTabStop`, ECMA-376 Part 1 §17.15.1).
     fn next_stop(&self, x: f32) -> (f32, TabAlignment, TabLeader) {
         let hanging =
             (self.first_offset < 0.0).then_some((self.left, TabAlignment::Left, TabLeader::None));
@@ -189,7 +189,7 @@ impl Flattener<'_, '_> {
         }
     }
 
-    /// ECMA-376 Part 1 §17.16.5: `PAGE`, `NUMPAGES` and `SECTIONPAGES` are
+    /// ECMA-376 Part 1 §17.16: `PAGE`, `NUMPAGES` and `SECTIONPAGES` are
     /// evaluated at layout time; every other field shows its cached result.
     fn field(&mut self, field: &docboss_model::Field) {
         let kind = field_kind(&field.instruction);

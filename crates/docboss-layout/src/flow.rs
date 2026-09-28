@@ -19,6 +19,7 @@ use crate::{Item, LayoutOptions, LineStyle, Page, Rect};
 
 const MAX_PAGES: usize = 100_000;
 const SEPARATOR_HEIGHT: f32 = 12.0;
+const MAX_NESTING: usize = 24;
 
 /// A drawing positioned independently of the text.
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +75,7 @@ pub(crate) struct Ctx<'a> {
     pub page_number: u32,
     pub total_pages: Option<u32>,
     pub current_note: Option<String>,
+    depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -125,6 +127,20 @@ fn collect_notes(blocks: &[Block], out: &mut Vec<(NoteKind, i64)>) {
 /// Lays out a list of blocks at `width`, joining paragraph spacing, and
 /// returns the slabs and the spacing after the last block.
 pub(crate) fn layout_blocks(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (Vec<Slab>, f32) {
+    if ctx.depth >= MAX_NESTING {
+        ctx.diagnostics.push(Diagnostic::dropped(
+            "layout",
+            "tables nested too deeply; inner content was not laid out",
+        ));
+        return (Vec::new(), 0.0);
+    }
+    ctx.depth += 1;
+    let laid = layout_blocks_at_depth(ctx, blocks, width);
+    ctx.depth -= 1;
+    laid
+}
+
+fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (Vec<Slab>, f32) {
     let mut out: Vec<Slab> = Vec::new();
     let mut prev_after = 0.0;
     let mut prev_style: Option<Option<String>> = None;
@@ -549,7 +565,8 @@ impl Paginator<'_, '_> {
         self.cursor.empty = false;
     }
 
-    /// ECMA-376 Part 1 §17.6.22: starts a section as its break type asks.
+    /// ECMA-376 Part 1 §17.6 (`w:type`): starts a section as its break type
+    /// asks.
     fn start_section(&mut self, props: &SectionProperties, first: bool) {
         let previous = self.geometry.take();
         let headers = previous.as_ref().map_or(props.headers.clone(), |g| {
@@ -650,6 +667,7 @@ pub(crate) fn run(
         page_number: 1,
         total_pages: None,
         current_note: None,
+        depth: 0,
         note_labels: labels,
         diagnostics: Vec::new(),
     };

@@ -13,6 +13,12 @@ use crate::units::twips_to_pt;
 use crate::{Item, LineStyle, Rect};
 
 const DEFAULT_CELL_MARGIN: i32 = 108;
+/// Word's limit on the columns of a table grid.
+const MAX_COLUMNS: usize = 63;
+
+fn span(cell: &docboss_model::TableCell) -> usize {
+    (cell.span() as usize).min(MAX_COLUMNS)
+}
 
 /// A border line along an edge, or `None` for no border.
 pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> Option<Item> {
@@ -52,6 +58,8 @@ pub(crate) struct CellPlan {
     width: f32,
     margins: [f32; 4],
     content: Vec<Slab>,
+    /// Spacing after the cell's last paragraph.
+    trailing: f32,
     shading: Option<Color>,
     borders: Sides,
     align: Option<VerticalAlign>,
@@ -63,7 +71,7 @@ pub(crate) struct CellPlan {
 
 impl CellPlan {
     fn content_height(&self) -> f32 {
-        stack_height(&self.content) + self.margins[0] + self.margins[2]
+        stack_height(&self.content) + self.trailing + self.margins[0] + self.margins[2]
     }
 }
 
@@ -74,8 +82,8 @@ pub(crate) struct RowPlan {
 }
 
 impl RowPlan {
-    /// ECMA-376 Part 1 §17.4.38 and §17.4.66: shading first, then content,
-    /// then borders on every cell edge.
+    /// ECMA-376 Part 1 §17.4 (`w:shd`, `w:tcBorders`): shading first, then
+    /// content, then borders on every cell edge.
     pub(crate) fn paint(&self, height: f32) -> Vec<Item> {
         let mut items = Vec::new();
         for cell in self.cells.iter().filter(|c| !c.continues) {
@@ -224,12 +232,12 @@ fn grid_columns(table: &Table, props: &TableProperties, available: f32) -> Vec<f
     let columns = table
         .rows
         .iter()
-        .map(|r| r.cells.iter().map(|c| c.span() as usize).sum::<usize>())
+        .map(|r| r.cells.iter().map(span).sum::<usize>().min(MAX_COLUMNS * 4))
         .max()
         .unwrap_or(0);
     if grid.len() < columns || grid.iter().sum::<f32>() <= 0.0 {
         let widths: Option<Vec<f32>> = table.rows.first().and_then(|row| {
-            let spans_one = row.cells.iter().all(|c| c.span() == 1);
+            let spans_one = row.cells.iter().all(|c| span(c) == 1);
             let all = row
                 .cells
                 .iter()
@@ -287,7 +295,7 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
         let mut columns = Vec::with_capacity(row.cells.len());
         let cell_count = row.cells.len();
         for (c, cell) in row.cells.iter().enumerate() {
-            let span = cell.span() as usize;
+            let span = span(cell);
             let x = offsets.get(column).copied().unwrap_or(total) + table_x;
             let end = (column + span).min(grid.len());
             let w = grid
@@ -302,10 +310,10 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 .unwrap_or(default_margins)
                 .map(twips_to_pt);
             let continues = cell.properties.vertical_merge == Some(VerticalMerge::Continue);
-            let content = if continues {
-                Vec::new()
+            let (content, trailing) = if continues {
+                (Vec::new(), 0.0)
             } else {
-                layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0)).0
+                layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0))
             };
             let own = cell.properties.borders.unwrap_or_default();
             let edge_h = |outer: bool| {
@@ -338,6 +346,7 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 width: w,
                 margins: m,
                 content,
+                trailing,
                 shading: cell
                     .properties
                     .shading

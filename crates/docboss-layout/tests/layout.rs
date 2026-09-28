@@ -144,6 +144,7 @@ fn many_paragraphs_paginate() {
     assert!(text.contains("line199"));
 }
 
+/// ECMA-376 Part 1 §17.3.3: a page break ends the page.
 #[test]
 fn page_breaks_start_a_new_page() {
     let broken = Inline::Run(Run {
@@ -172,6 +173,8 @@ fn border() -> Border {
     }
 }
 
+/// ECMA-376 Part 1 §17.4: cells sit on the table grid with their margins
+/// and borders.
 #[test]
 fn table_cells_sit_on_the_grid_with_borders() {
     let cell = |text: &str| TableCell {
@@ -226,6 +229,8 @@ fn table_cells_sit_on_the_grid_with_borders() {
     }
 }
 
+/// ECMA-376 Part 1 §17.10 and §17.16: every page's header evaluates its
+/// `PAGE` and `NUMPAGES` fields.
 #[test]
 fn headers_show_the_page_number() {
     let page_field = Inline::Field(Field {
@@ -263,6 +268,8 @@ fn headers_show_the_page_number() {
     }
 }
 
+/// ECMA-376 Part 1 §17.11: a footnote sits at the bottom of the page that
+/// references it.
 #[test]
 fn footnotes_sit_at_the_bottom_of_their_page() {
     let reference = Inline::Run(Run {
@@ -304,6 +311,8 @@ fn footnotes_sit_at_the_bottom_of_their_page() {
     assert!(note.baseline > 792.0 - 72.0 - 30.0, "{}", note.baseline);
 }
 
+/// ECMA-376 Part 1 §17.9: list labels sit at the hanging indent and the
+/// text at the left indent.
 #[test]
 fn list_paragraphs_get_labels_at_the_hanging_indent() {
     let numbering = Numbering {
@@ -359,6 +368,8 @@ fn list_paragraphs_get_labels_at_the_hanging_indent() {
     assert!((body - (72.0 + 36.0)).abs() < 0.01, "{body}");
 }
 
+/// ECMA-376 Part 1 §17.3.1: `w:jc` both stretches wrapped lines to the
+/// right indent.
 #[test]
 fn justified_lines_reach_the_right_margin() {
     let props = ParagraphProperties {
@@ -380,6 +391,8 @@ fn justified_lines_reach_the_right_margin() {
     assert!((end - (612.0 - 72.0)).abs() < 0.05, "{end}");
 }
 
+/// ECMA-376 Part 1 §17.3.1: a right tab stop ends the following text at
+/// the stop, with its leader filling the gap.
 #[test]
 fn right_tabs_align_text_to_the_stop() {
     let props = ParagraphProperties {
@@ -414,6 +427,8 @@ fn right_tabs_align_text_to_the_stop() {
     assert!(dots > 20, "{dots} leader dots");
 }
 
+/// ECMA-376 Part 1 §17.6: `w:cols` flows text down the first column
+/// before the second.
 #[test]
 fn two_columns_fill_left_then_right() {
     let mut document = doc((0..130).map(|i| para(&format!("c{i}"))).collect());
@@ -427,6 +442,8 @@ fn two_columns_fill_left_then_right() {
     assert!(runs[..first_right].iter().all(|r| r.glyphs[0].x < middle));
 }
 
+/// ECMA-376 Part 1 §17.3.1: `w:keepNext` keeps a heading on the page of
+/// the paragraph after it.
 #[test]
 fn keep_with_next_moves_a_heading_to_the_next_page() {
     let heading = ParagraphProperties {
@@ -446,6 +463,7 @@ fn keep_with_next_moves_a_heading_to_the_next_page() {
     assert!(layout.pages[1].text().starts_with("Heading"));
 }
 
+/// ECMA-376 Part 1 §17.4: a row taller than the page breaks across pages.
 #[test]
 fn a_tall_row_splits_across_pages() {
     let lines: Vec<Block> = (0..120).map(|i| para(&format!("row line {i}"))).collect();
@@ -467,4 +485,84 @@ fn a_tall_row_splits_across_pages() {
     for page in &layout.pages {
         assert!(page.glyph_runs().all(|r| r.baseline <= 792.0 - 72.0 + 0.01));
     }
+}
+
+fn nested(depth: usize) -> Block {
+    if depth == 0 {
+        return para("core");
+    }
+    Block::Table(Table {
+        grid: vec![4000],
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                blocks: vec![nested(depth - 1)],
+                ..TableCell::default()
+            }],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    })
+}
+
+#[test]
+fn hostile_values_lay_out_without_panicking() {
+    let wild = RunProperties {
+        size: Some(u32::MAX),
+        spacing: Some(-100_000),
+        position: Some(i32::MIN / 4),
+        ..RunProperties::default()
+    };
+    let odd = ParagraphProperties {
+        indentation: Indentation {
+            left: Some(i32::MAX / 2),
+            right: Some(-50_000),
+            hanging: Some(i32::MIN / 2),
+            ..Indentation::default()
+        },
+        tabs: vec![TabStop {
+            position: -500,
+            alignment: TabAlignment::Decimal,
+            leader: TabLeader::Dot,
+        }],
+        ..ParagraphProperties::default()
+    };
+    let mut document = doc(vec![
+        para_with(
+            odd,
+            vec![Inline::Run(Run {
+                properties: wild,
+                content: vec![RunContent::Text("x\ty".into()), RunContent::Tab],
+            })],
+        ),
+        Block::Table(Table {
+            grid: vec![],
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    properties: docboss_model::TableCellProperties {
+                        grid_span: u32::MAX,
+                        ..Default::default()
+                    },
+                    blocks: vec![para("span")],
+                }],
+                ..TableRow::default()
+            }],
+            ..Table::default()
+        }),
+        nested(60),
+    ]);
+    document.sections[0].properties.page_size.width = -5;
+    document.sections[0].properties.margins.top = i32::MIN / 2;
+    document.sections[0].properties.columns.count = u32::MAX;
+    let started = std::time::Instant::now();
+    let layout = laid(&document);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(!layout.pages.is_empty());
+    assert!(layout
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("nested")));
 }

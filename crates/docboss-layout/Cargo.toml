@@ -13,10 +13,3 @@ keywords.workspace = true
 [dependencies]
 docboss-model = { workspace = true }
 docboss-font = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-
-[[bench]]
-name = "layout"
-harness = false
