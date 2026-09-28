@@ -472,6 +472,53 @@ fn family_keys(family: &str, typographic: Option<&str>, full: Option<&str>) -> V
     keys
 }
 
+/// Directories LibreOffice installs its bundled fonts into. They hold the
+/// metric-compatible substitutes (Carlito, Caladea, Liberation) that the
+/// substitution table prefers when the Microsoft faces are absent.
+fn libreoffice_font_dirs(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if cfg!(target_os = "macos") {
+        roots.push(PathBuf::from(
+            "/Applications/LibreOffice.app/Contents/Resources",
+        ));
+        roots.extend(home.map(|h| h.join("Applications/LibreOffice.app/Contents/Resources")));
+        return roots.into_iter().map(|root| root.join("fonts")).collect();
+    }
+    if cfg!(windows) {
+        let program_files = ["ProgramFiles", "ProgramFiles(x86)"]
+            .iter()
+            .filter_map(std::env::var_os)
+            .map(PathBuf::from);
+        return program_files
+            .map(|root| root.join("LibreOffice").join("share").join("fonts"))
+            .collect();
+    }
+    roots.extend(
+        [
+            "/usr/lib/libreoffice",
+            "/usr/lib64/libreoffice",
+            "/usr/local/lib/libreoffice",
+        ]
+        .map(PathBuf::from),
+    );
+    if let Ok(entries) = std::fs::read_dir("/opt") {
+        let mut found: Vec<PathBuf> = entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("libreoffice"))
+            })
+            .collect();
+        found.sort();
+        roots.extend(found);
+    }
+    roots
+        .into_iter()
+        .map(|root| root.join("share").join("fonts"))
+        .collect()
+}
+
 fn system_font_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("DOCBOSS_FONT_PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
@@ -480,6 +527,9 @@ fn system_font_dirs() -> Vec<PathBuf> {
     if cfg!(target_os = "macos") {
         dirs.extend(["/System/Library/Fonts", "/Library/Fonts"].map(PathBuf::from));
         dirs.extend(home.iter().map(|h| h.join("Library/Fonts")));
+        dirs.push(PathBuf::from(
+            "/System/Library/PrivateFrameworks/FontServices.framework/Versions/A/Resources/Fonts/ApplicationSupport",
+        ));
     }
     if cfg!(all(unix, not(target_os = "macos"))) {
         dirs.extend(["/usr/share/fonts", "/usr/local/share/fonts"].map(PathBuf::from));
@@ -496,6 +546,8 @@ fn system_font_dirs() -> Vec<PathBuf> {
             dirs.push(PathBuf::from(local).join("Microsoft\\Windows\\Fonts"));
         }
     }
+    dirs.extend(libreoffice_font_dirs(home.as_deref()));
+    dirs.dedup();
     dirs
 }
 
@@ -579,4 +631,30 @@ fn scan_file(path: &Path) -> std::io::Result<Vec<Scanned>> {
         out.push((index as u32, families, names.family, style));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn libreoffice_bundled_fonts_are_searched() {
+        let home = Path::new("/home/someone");
+        let dirs = libreoffice_font_dirs(Some(home));
+        let expected = if cfg!(target_os = "macos") {
+            home.join("Applications/LibreOffice.app/Contents/Resources/fonts")
+        } else if cfg!(windows) {
+            return;
+        } else {
+            PathBuf::from("/usr/lib/libreoffice/share/fonts")
+        };
+        assert!(dirs.contains(&expected), "{dirs:?}");
+        assert!(system_font_dirs().iter().any(|d| d.ends_with("fonts")));
+    }
+
+    #[test]
+    fn calibri_prefers_its_metric_compatible_substitute() {
+        assert_eq!(substitutes("calibri").first(), Some(&"carlito"));
+        assert_eq!(substitutes("cambria").first(), Some(&"caladea"));
+    }
 }
