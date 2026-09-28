@@ -63,10 +63,9 @@ fn ink(pixmap: &Pixmap, x0: u32, y0: u32, x1: u32, y1: u32) -> usize {
 
 fn red_png() -> Vec<u8> {
     let mut image = Pixmap::new(4, 4).unwrap();
-    image
-        .data
-        .chunks_exact_mut(4)
-        .for_each(|p| p.copy_from_slice(&[255, 0, 0, 255]));
+    for pixel in image.data.as_chunks_mut::<4>().0 {
+        *pixel = [255, 0, 0, 255];
+    }
     image.encode(Format::Png).unwrap()
 }
 
