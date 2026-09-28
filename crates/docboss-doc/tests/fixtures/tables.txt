@@ -1,0 +1,8 @@
+﻿Before table
+Merged across	Merged down
+A2	B2	
+A3	in1	in2
+	C3
+After table	After table	After table
+After table	After table	After table
+After table

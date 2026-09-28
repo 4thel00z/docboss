@@ -39,6 +39,9 @@ pub struct Drawing {
     pub placement: DrawingPlacement,
     pub name: Option<String>,
     pub description: Option<String>,
+    /// The content of a text box the drawing carries, empty for a plain
+    /// picture.
+    pub text_box: Vec<crate::Block>,
 }
 
 /// One piece of run content.

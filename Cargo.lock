@@ -200,6 +200,11 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "docboss-cfb"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "docboss-model",
+ "thiserror",
+]
 
 [[package]]
 name = "docboss-cli"
@@ -212,6 +217,13 @@ version = "0.1.0"
 [[package]]
 name = "docboss-doc"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "docboss-cfb",
+ "docboss-model",
+ "flate2",
+ "thiserror",
+]
 
 [[package]]
 name = "docboss-docx"

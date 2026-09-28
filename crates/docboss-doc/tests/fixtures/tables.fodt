@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+<office:meta><dc:title>Fixture tables</dc:title><dc:subject>docboss tests</dc:subject><meta:initial-creator>Ada Lovelace</meta:initial-creator><meta:keyword>alpha</meta:keyword><dc:description>A generated fixture.</dc:description></office:meta>
+<office:styles>
+<style:style style:name="Standard" style:family="paragraph"><style:text-properties fo:font-size="11pt"/></style:style>
+<style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:parent-style-name="Standard" style:default-outline-level="1"><style:text-properties fo:font-size="16pt" fo:font-weight="bold"/></style:style>
+<style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:parent-style-name="Standard" style:default-outline-level="2"><style:text-properties fo:font-size="13pt" fo:font-weight="bold"/></style:style>
+<style:style style:name="Quote" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="0.5in"/><style:text-properties fo:font-style="italic"/></style:style>
+<style:style style:name="Strong" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>
+</office:styles>
+<office:automatic-styles>
+<style:style style:name="T1" style:family="text"><style:text-properties fo:font-style="italic" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>
+<style:style style:name="T2" style:family="text"><style:text-properties fo:color="#0000ff" fo:font-size="14pt"/></style:style>
+<style:style style:name="P1" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:text-align="center" fo:break-before="page"/></style:style>
+<style:style style:name="Sect2" style:family="section"><style:section-properties><style:columns fo:column-count="2" fo:column-gap="0.3in"/></style:section-properties></style:style>
+<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-format="1" style:num-suffix="."/><text:list-level-style-number text:level="2" style:num-format="a" style:num-suffix=")"/></text:list-style>
+<text:list-style style:name="L2"><text:list-level-style-bullet text:level="1" text:bullet-char="•"/></text:list-style>
+</office:automatic-styles>
+<office:master-styles><style:master-page style:name="Standard"><style:header><text:p>Header text here</text:p></style:header><style:footer><text:p>Footer text here</text:p></style:footer></style:master-page></office:master-styles>
+<office:body><office:text>
+<text:p>Before table</text:p><table:table table:name="T1"><table:table-column table:number-columns-repeated="3"/>
+<table:table-row><table:table-cell table:number-columns-spanned="2"><text:p>Merged across</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:number-rows-spanned="2"><text:p>Merged down</text:p></table:table-cell></table:table-row>
+<table:table-row><table:table-cell><text:p>A2</text:p></table:table-cell><table:table-cell><text:p>B2</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+<table:table-row><table:table-cell><text:p>A3</text:p></table:table-cell><table:table-cell><table:table table:name="Inner"><table:table-column table:number-columns-repeated="2"/><table:table-row><table:table-cell><text:p>in1</text:p></table:table-cell><table:table-cell><text:p>in2</text:p></table:table-cell></table:table-row></table:table></table:table-cell><table:table-cell><text:p>C3</text:p></table:table-cell></table:table-row></table:table><text:p>After table</text:p></office:text></office:body></office:document>

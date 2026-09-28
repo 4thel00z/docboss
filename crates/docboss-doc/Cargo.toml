@@ -1,5 +1,6 @@
 [package]
 name = "docboss-doc"
+description = "Word 97-2003 binary document ([MS-DOC]) reader in pure Rust: text, formatting, styles, lists, tables, notes, comments and pictures"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,14 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+docboss-cfb = { workspace = true }
+thiserror = { workspace = true }
+flate2 = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "doc"
+harness = false
