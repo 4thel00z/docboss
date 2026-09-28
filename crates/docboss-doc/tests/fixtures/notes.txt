@@ -1,0 +1,4 @@
+﻿Body with a footnote1 and an endnotei.
+Commented word here.
+Link to the example site and page 1.
+Bookmarked paragraph.
