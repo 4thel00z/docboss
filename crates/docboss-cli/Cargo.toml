@@ -1,5 +1,6 @@
 [package]
 name = "docboss-cli"
+description = "DOCX and DOC command line: text, Markdown, HTML and JSON extraction, page rendering, conversion to DOCX, and the parts/hex/xml/q explorer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,6 +8,29 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 readme.workspace = true
-keywords.workspace = true
+keywords = ["docx", "doc", "cli", "docx-to-markdown", "word"]
+categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
+docboss-core = { workspace = true }
+docboss-model = { workspace = true, features = ["serde"] }
+docboss-zip = { workspace = true }
+docboss-cfb = { workspace = true }
+docboss-xml = { workspace = true }
+docboss-output = { workspace = true, features = ["serde"] }
+docboss-font = { workspace = true }
+docboss-layout = { workspace = true }
+docboss-render = { workspace = true }
+docboss-write = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+serde_json = { workspace = true }
+jaq-core = "3"
+jaq-std = "3"
+jaq-json = { version = "2", features = ["serde"] }
+
+[dev-dependencies]
+docboss-testkit = { workspace = true }
+
+[[bin]]
+name = "docboss"
+path = "src/main.rs"
