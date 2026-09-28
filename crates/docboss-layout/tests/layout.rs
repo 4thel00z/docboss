@@ -566,3 +566,65 @@ fn hostile_values_lay_out_without_panicking() {
         .iter()
         .any(|d| d.message.contains("nested")));
 }
+
+fn one_cell_table(
+    style_id: Option<&str>,
+    fill: Option<docboss_model::Color>,
+    texts: &[&str],
+) -> Block {
+    Block::Table(Table {
+        properties: TableProperties {
+            style_id: style_id.map(str::to_string),
+            ..TableProperties::default()
+        },
+        grid: vec![4320],
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                properties: docboss_model::TableCellProperties {
+                    shading: fill.map(|fill| docboss_model::Shading { fill: Some(fill) }),
+                    ..docboss_model::TableCellProperties::default()
+                },
+                blocks: texts.iter().map(|t| para(t)).collect(),
+            }],
+            ..TableRow::default()
+        }],
+    })
+}
+
+/// ECMA-376 Part 1 §17.7.2: a table style's paragraph properties apply to
+/// the paragraphs in its cells, above the document defaults.
+#[test]
+fn table_style_paragraph_spacing_applies_inside_cells() {
+    let mut document = doc(vec![one_cell_table(Some("Grid"), None, &["one", "two"])]);
+    document.styles.default_paragraph.spacing.after = Some(400);
+    let mut grid = Style::new("Grid", StyleKind::Table);
+    grid.paragraph.spacing.after = Some(0);
+    document.styles.push(grid);
+    let layout = laid(&document);
+    let styled_runs = runs(&layout, 0);
+    let baseline = |text: &str| {
+        styled_runs
+            .iter()
+            .find(|r| r.text == text)
+            .unwrap()
+            .baseline
+    };
+    let pitch = baseline("two") - baseline("one");
+    assert!(
+        pitch < 15.0,
+        "20 pt of spacing after leaked into the cell: {pitch}"
+    );
+
+    let mut unstyled = doc(vec![one_cell_table(None, None, &["one", "two"])]);
+    unstyled.styles.default_paragraph.spacing.after = Some(400);
+    let layout = laid(&unstyled);
+    let unstyled_runs = runs(&layout, 0);
+    let baseline = |text: &str| {
+        unstyled_runs
+            .iter()
+            .find(|r| r.text == text)
+            .unwrap()
+            .baseline
+    };
+    assert!(baseline("two") - baseline("one") > 30.0);
+}

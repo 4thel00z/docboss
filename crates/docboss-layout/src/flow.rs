@@ -75,6 +75,8 @@ pub(crate) struct Ctx<'a> {
     pub page_number: u32,
     pub total_pages: Option<u32>,
     pub current_note: Option<String>,
+    /// The style of the table whose cell is being laid out.
+    pub table_style: Option<String>,
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -669,6 +671,7 @@ pub(crate) fn run(
         current_note: None,
         depth: 0,
         note_labels: labels,
+        table_style: None,
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {

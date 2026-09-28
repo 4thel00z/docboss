@@ -162,11 +162,11 @@ impl Flattener<'_, '_> {
     }
 
     fn resolve(&mut self, props: &docboss_model::RunProperties) -> RunStyle {
-        let resolved = self
-            .ctx
-            .doc
-            .styles
-            .resolve_run(self.paragraph_style.as_deref(), props);
+        let resolved = self.ctx.doc.styles.resolve_run_in(
+            self.paragraph_style.as_deref(),
+            props,
+            self.ctx.table_style.as_deref(),
+        );
         RunStyle::from_properties(&resolved)
     }
 
@@ -284,11 +284,16 @@ impl Flattener<'_, '_> {
 /// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points.
 pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: f32) -> Laid {
     let doc = ctx.doc;
-    let props = doc.styles.resolve_paragraph(paragraph, &doc.numbering);
-    let paragraph_style = paragraph.style_id.clone();
-    let mark_resolved = doc
+    let table_style = ctx.table_style.clone();
+    let props = doc
         .styles
-        .resolve_run(paragraph_style.as_deref(), &paragraph.mark);
+        .resolve_paragraph_in(paragraph, &doc.numbering, table_style.as_deref());
+    let paragraph_style = paragraph.style_id.clone();
+    let mark_resolved = doc.styles.resolve_run_in(
+        paragraph_style.as_deref(),
+        &paragraph.mark,
+        table_style.as_deref(),
+    );
     let mark_style = RunStyle::from_properties(&mark_resolved);
     let mut flat = Flattener {
         ctx,

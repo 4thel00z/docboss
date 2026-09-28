@@ -264,7 +264,19 @@ fn grid_columns(table: &Table, props: &TableProperties, available: f32) -> Vec<f
 /// per row.
 pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<Slab> {
     let props = effective_properties(ctx, table);
-    let grid = grid_columns(table, &props, width);
+    let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
+    let slabs = layout_table_rows(ctx, table, &props, width);
+    ctx.table_style = outer_style;
+    slabs
+}
+
+fn layout_table_rows(
+    ctx: &mut Ctx<'_>,
+    table: &Table,
+    props: &TableProperties,
+    width: f32,
+) -> Vec<Slab> {
+    let grid = grid_columns(table, props, width);
     let total: f32 = grid.iter().sum();
     let offsets: Vec<f32> = grid
         .iter()
@@ -310,6 +322,11 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 .unwrap_or(default_margins)
                 .map(twips_to_pt);
             let continues = cell.properties.vertical_merge == Some(VerticalMerge::Continue);
+            let fill = cell
+                .properties
+                .shading
+                .and_then(|s| s.fill)
+                .or(props.shading.and_then(|s| s.fill));
             let (content, trailing) = if continues {
                 (Vec::new(), 0.0)
             } else {
@@ -347,11 +364,7 @@ pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<
                 margins: m,
                 content,
                 trailing,
-                shading: cell
-                    .properties
-                    .shading
-                    .and_then(|s| s.fill)
-                    .or(props.shading.and_then(|s| s.fill)),
+                shading: fill,
                 borders: sides,
                 align: cell.properties.vertical_align,
                 continues,

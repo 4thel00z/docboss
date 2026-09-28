@@ -137,3 +137,40 @@ fn number_formats() {
     assert_eq!(number_label(&NumberFormat::Ordinal, 22), "22nd");
     assert_eq!(number_label(&NumberFormat::DecimalZero, 7), "07");
 }
+
+/// ECMA-376 Part 1 §17.7.2: table style properties sit above the document
+/// defaults and below the paragraph style.
+#[test]
+fn table_style_sits_between_defaults_and_paragraph_style() {
+    let mut normal = Style::new("Normal", StyleKind::Paragraph);
+    normal.is_default = true;
+    let mut quote = Style::new("Quote", StyleKind::Paragraph);
+    quote.paragraph.spacing.before = Some(120);
+    let mut grid = Style::new("Grid", StyleKind::Table);
+    grid.paragraph.spacing.after = Some(0);
+    grid.paragraph.spacing.before = Some(60);
+    grid.run.size = Some(18);
+    let mut defaults = ParagraphProperties::default();
+    defaults.spacing.after = Some(200);
+    let styles = Styles::new(
+        defaults,
+        RunProperties::default(),
+        vec![normal, quote, grid],
+    );
+
+    let paragraph = Paragraph {
+        style_id: Some("Quote".into()),
+        ..Paragraph::default()
+    };
+    let resolved = styles.resolve_paragraph_in(&paragraph, &Numbering::default(), Some("Grid"));
+    assert_eq!(resolved.spacing.after, Some(0));
+    assert_eq!(resolved.spacing.before, Some(120));
+    let outside = styles.resolve_paragraph(&paragraph, &Numbering::default());
+    assert_eq!(outside.spacing.after, Some(200));
+    assert_eq!(
+        styles
+            .resolve_run_in(Some("Quote"), &RunProperties::default(), Some("Grid"))
+            .size,
+        Some(18)
+    );
+}
