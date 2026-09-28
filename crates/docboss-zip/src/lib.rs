@@ -6,7 +6,7 @@
 //! missing or damaged, entries are recovered by scanning for local file
 //! headers and each recovery is reported as a [`Diagnostic`]. Stored and
 //! deflated entries are read; stored ones borrow from the input. The
-//! [`write`](crate::write) module writes archives deterministically.
+//! [`ZipWriter`] writes archives deterministically.
 
 mod cp437;
 mod crc;
