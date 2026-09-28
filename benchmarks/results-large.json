@@ -1,0 +1,64 @@
+{
+  "sections": 3000,
+  "pages": 1329,
+  "docx_bytes": 165806,
+  "doc_bytes": 15371264,
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "docx": {
+    "docboss": {
+      "time_ms": 372.04750000091735,
+      "chars": 1636053
+    },
+    "python-docx": {
+      "time_ms": 1483.3764999930281,
+      "chars": 916742
+    },
+    "docx2python": {
+      "time_ms": 9346.374125001603,
+      "chars": 1021741
+    },
+    "mammoth": {
+      "time_ms": 5545.0332920008805,
+      "chars": 979743
+    },
+    "docx2txt": {
+      "time_ms": 752.5682919949759,
+      "chars": 979741
+    },
+    "pandoc": {
+      "time_ms": 7437.239958991995,
+      "chars": 2256779
+    }
+  },
+  "doc": {
+    "docboss": {
+      "time_ms": 891.7057090002345,
+      "chars": 946743
+    },
+    "antiword": {
+      "time_ms": 2472.550542006502,
+      "chars": 2796780
+    },
+    "catdoc": {
+      "time_ms": 46.03274998953566,
+      "chars": 916648
+    }
+  }
+}

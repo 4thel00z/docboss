@@ -1,0 +1,93 @@
+{
+  "kind": "docx",
+  "files": 300,
+  "bytes": 8458437,
+  "workers": 12,
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "engines": {
+    "docboss": {
+      "sequential_s": 0.10426170799473766,
+      "routes_s": {
+        "extract_texts": 0.019942583006923087,
+        "threads": 0.023511583989602514
+      },
+      "best_route": "extract_texts",
+      "best_s": 0.019942583006923087,
+      "speedup": 5.228094472944809,
+      "files_per_s": 15043.186727409118,
+      "mb_per_s": 424.13949071008733
+    },
+    "python-docx": {
+      "sequential_s": 0.4676028329995461,
+      "routes_s": {
+        "processes": 0.33759024999744724
+      },
+      "best_route": "processes",
+      "best_s": 0.33759024999744724,
+      "speedup": 1.3851194843544266,
+      "files_per_s": 888.6512569668955,
+      "mb_per_s": 25.055335573417658
+    },
+    "docx2python": {
+      "sequential_s": 2.75371350000205,
+      "routes_s": {
+        "processes": 0.9518777920020511
+      },
+      "best_route": "processes",
+      "best_s": 0.9518777920020511,
+      "speedup": 2.892927561856718,
+      "files_per_s": 315.16650826470124,
+      "mb_per_s": 8.886053515556515
+    },
+    "mammoth": {
+      "sequential_s": 3.488899207994109,
+      "routes_s": {
+        "processes": 0.8656731250084704
+      },
+      "best_route": "processes",
+      "best_s": 0.8656731250084704,
+      "speedup": 4.030273214222714,
+      "files_per_s": 346.5511303669784,
+      "mb_per_s": 9.770936344959578
+    },
+    "docx2txt": {
+      "sequential_s": 0.3872868330072379,
+      "routes_s": {
+        "processes": 0.21266037499299273
+      },
+      "best_route": "processes",
+      "best_s": 0.21266037499299273,
+      "speedup": 1.8211518390297166,
+      "files_per_s": 1410.7000423087054,
+      "mb_per_s": 39.774391445885065
+    },
+    "pandoc": {
+      "sequential_s": 37.79935887499596,
+      "routes_s": {
+        "threads": 5.847900833003223
+      },
+      "best_route": "threads",
+      "best_s": 5.847900833003223,
+      "speedup": 6.4637482670142825,
+      "files_per_s": 51.30045952676206,
+      "mb_per_s": 1.4464056832605559
+    }
+  }
+}

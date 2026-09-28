@@ -1,0 +1,70 @@
+{
+  "kind": "doc",
+  "files": 150,
+  "timeout_s": 30.0,
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "engines": {
+    "docboss": {
+      "ok": 94,
+      "error": 56,
+      "crash": 0,
+      "timeout": 0
+    },
+    "antiword": {
+      "ok": 71,
+      "error": 76,
+      "crash": 3,
+      "timeout": 0
+    },
+    "catdoc": {
+      "ok": 100,
+      "error": 49,
+      "crash": 0,
+      "timeout": 1
+    }
+  },
+  "failures": {
+    "docboss": [],
+    "antiword": [
+      {
+        "file": "0035-flip-documentProperties.doc",
+        "outcome": "crash",
+        "detail": "/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/tools/antiword/antiword killed by signal 11"
+      },
+      {
+        "file": "0037-sector-Bug46817.doc",
+        "outcome": "crash",
+        "detail": "/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/tools/antiword/antiword killed by signal 11"
+      },
+      {
+        "file": "0072-flip-floating.doc",
+        "outcome": "crash",
+        "detail": "/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/tools/antiword/antiword killed by signal 11"
+      }
+    ],
+    "catdoc": [
+      {
+        "file": "0089-sector-header_image.doc",
+        "outcome": "timeout",
+        "detail": "text: SIGKILL after 30s"
+      }
+    ]
+  }
+}
