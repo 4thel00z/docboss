@@ -1,0 +1,470 @@
+use std::path::Path;
+use std::sync::Arc;
+
+use docboss_font::FontDatabase;
+use docboss_layout::{layout, Item, Layout};
+use docboss_model::{
+    AbstractNumbering, Block, Border, BorderStyle, Borders, Break, Document, Field, HeaderFooter,
+    HeaderFooterKind, HeaderFooterRefs, Indentation, Inline, Justification, Level, Note, NoteKind,
+    NumberFormat, Numbering, NumberingInstance, NumberingRef, Paragraph, ParagraphProperties, Run,
+    RunContent, RunProperties, Section, SectionProperties, Style, StyleKind, Styles, TabAlignment,
+    TabLeader, TabStop, Table, TableCell, TableProperties, TableRow,
+};
+
+const COUSINE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../docboss-font/tests/fixtures/Cousine-Regular.ttf"
+);
+
+fn fonts() -> Arc<FontDatabase> {
+    let mut db = FontDatabase::new();
+    db.add_file(Path::new(COUSINE));
+    Arc::new(db)
+}
+
+fn run(text: &str) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Text(text.into())],
+    })
+}
+
+fn para(text: &str) -> Block {
+    Block::Paragraph(Paragraph {
+        inlines: vec![run(text)],
+        ..Paragraph::default()
+    })
+}
+
+fn para_with(properties: ParagraphProperties, inlines: Vec<Inline>) -> Block {
+    Block::Paragraph(Paragraph {
+        properties,
+        inlines,
+        ..Paragraph::default()
+    })
+}
+
+fn doc(blocks: Vec<Block>) -> Document {
+    let mut normal = Style::new("Normal", StyleKind::Paragraph);
+    normal.is_default = true;
+    normal.run.fonts.ascii = Some("Courier New".into());
+    normal.run.size = Some(20);
+    Document {
+        styles: Styles::new(
+            ParagraphProperties::default(),
+            RunProperties::default(),
+            vec![normal],
+        ),
+        sections: vec![Section {
+            properties: SectionProperties::default(),
+            blocks,
+        }],
+        ..Document::default()
+    }
+}
+
+fn laid(document: &Document) -> Layout {
+    layout(document, &fonts())
+}
+
+fn runs(layout: &Layout, page: usize) -> Vec<&docboss_layout::GlyphRun> {
+    layout.pages[page].glyph_runs().collect()
+}
+
+/// Cousine advances 1229/2048 em: 6.0 points per character at 10 points.
+const ADVANCE: f32 = 1229.0 / 2048.0 * 10.0;
+
+#[test]
+fn one_paragraph_starts_at_the_margins() {
+    let layout = laid(&doc(vec![para("Hello world")]));
+    assert_eq!(layout.pages.len(), 1);
+    let page = &layout.pages[0];
+    assert_eq!((page.width, page.height), (612.0, 792.0));
+    let runs = runs(&layout, 0);
+    assert_eq!(
+        runs.iter().map(|r| r.text.as_str()).collect::<String>(),
+        "Helloworld"
+    );
+    let first = runs[0];
+    assert!((first.glyphs[0].x - 72.0).abs() < 0.01);
+    assert!(
+        first.baseline > 72.0 && first.baseline < 72.0 + 12.0,
+        "{}",
+        first.baseline
+    );
+    let world = runs
+        .iter()
+        .find(|r| r.text.starts_with('w'))
+        .map_or(first.glyphs[5].x, |r| r.glyphs[0].x);
+    assert!((world - (72.0 + 6.0 * ADVANCE)).abs() < 0.01);
+}
+
+#[test]
+fn long_paragraphs_wrap_inside_the_margins() {
+    let text = "lorem ipsum dolor sit amet ".repeat(40);
+    let layout = laid(&doc(vec![para(&text)]));
+    let right = 612.0 - 72.0;
+    let mut baselines: Vec<f32> = Vec::new();
+    for run in runs(&layout, 0) {
+        for g in &run.glyphs {
+            assert!(
+                g.x + ADVANCE <= right + 0.01,
+                "glyph at {} past the margin",
+                g.x
+            );
+        }
+        if baselines.last() != Some(&run.baseline) {
+            baselines.push(run.baseline);
+        }
+    }
+    assert!(baselines.len() > 10);
+    assert!(baselines.windows(2).all(|w| w[1] > w[0]));
+}
+
+#[test]
+fn many_paragraphs_paginate() {
+    let blocks = (0..200).map(|i| para(&format!("line {i}"))).collect();
+    let layout = laid(&doc(blocks));
+    assert!(layout.pages.len() >= 3, "{} pages", layout.pages.len());
+    for page in &layout.pages {
+        for run in page.glyph_runs() {
+            assert!(
+                run.baseline > 72.0 && run.baseline <= 792.0 - 72.0 + 0.01,
+                "{}",
+                run.baseline
+            );
+        }
+    }
+    let text: String = layout
+        .pages
+        .iter()
+        .map(|p| p.text())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("line199"));
+}
+
+#[test]
+fn page_breaks_start_a_new_page() {
+    let broken = Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![
+            RunContent::Text("before".into()),
+            RunContent::Break(Break::Page),
+            RunContent::Text("after".into()),
+        ],
+    });
+    let layout = laid(&doc(vec![para_with(
+        ParagraphProperties::default(),
+        vec![broken],
+    )]));
+    assert_eq!(layout.pages.len(), 2);
+    assert_eq!(layout.pages[0].text(), "before");
+    assert_eq!(layout.pages[1].text(), "after");
+}
+
+fn border() -> Border {
+    Border {
+        style: BorderStyle::Single,
+        size: 4,
+        space: 0,
+        color: None,
+    }
+}
+
+#[test]
+fn table_cells_sit_on_the_grid_with_borders() {
+    let cell = |text: &str| TableCell {
+        blocks: vec![para(text)],
+        ..TableCell::default()
+    };
+    let table = Table {
+        properties: TableProperties {
+            borders: Some(Borders {
+                top: Some(border()),
+                left: Some(border()),
+                bottom: Some(border()),
+                right: Some(border()),
+                inside_horizontal: Some(border()),
+                inside_vertical: Some(border()),
+            }),
+            ..TableProperties::default()
+        },
+        grid: vec![2880, 4320],
+        rows: vec![
+            TableRow {
+                cells: vec![cell("a1"), cell("b1")],
+                ..TableRow::default()
+            },
+            TableRow {
+                cells: vec![cell("a2"), cell("b2")],
+                ..TableRow::default()
+            },
+        ],
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let x_of = |text: &str| runs.iter().find(|r| r.text == text).unwrap().glyphs[0].x;
+    assert!((x_of("a1") - (72.0 + 5.4)).abs() < 0.01);
+    assert!((x_of("b1") - (72.0 + 144.0 + 5.4)).abs() < 0.01);
+    let row_of = |text: &str| runs.iter().find(|r| r.text == text).unwrap().baseline;
+    assert!(row_of("a2") > row_of("a1"));
+    assert_eq!(row_of("a1"), row_of("b1"));
+    let verticals: Vec<f32> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Line { from, to, .. } if from.0 == to.0 => Some(from.0),
+            _ => None,
+        })
+        .collect();
+    for x in [72.0, 216.0, 432.0] {
+        assert!(
+            verticals.iter().any(|v| (v - x).abs() < 0.01),
+            "no border at {x}: {verticals:?}"
+        );
+    }
+}
+
+#[test]
+fn headers_show_the_page_number() {
+    let page_field = Inline::Field(Field {
+        instruction: " PAGE ".into(),
+        result: vec![run("1")],
+    });
+    let total_field = Inline::Field(Field {
+        instruction: "NUMPAGES".into(),
+        result: vec![run("1")],
+    });
+    let header = HeaderFooter {
+        id: "rId1".into(),
+        kind: HeaderFooterKind::Header,
+        blocks: vec![para_with(
+            ParagraphProperties::default(),
+            vec![run("Page "), page_field, run(" of "), total_field],
+        )],
+    };
+    let mut document = doc((0..120).map(|i| para(&format!("body {i}"))).collect());
+    document.sections[0].properties.headers = HeaderFooterRefs {
+        default: Some("rId1".into()),
+        ..HeaderFooterRefs::default()
+    };
+    document.headers_footers.push(header);
+    let layout = laid(&document);
+    let pages = layout.pages.len();
+    assert!(pages >= 2);
+    for (i, page) in layout.pages.iter().enumerate() {
+        let top: String = page
+            .glyph_runs()
+            .filter(|r| r.baseline < 72.0)
+            .map(|r| r.text.clone())
+            .collect();
+        assert_eq!(top, format!("Page{}of{}", i + 1, pages));
+    }
+}
+
+#[test]
+fn footnotes_sit_at_the_bottom_of_their_page() {
+    let reference = Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![
+            RunContent::Text("claim".into()),
+            RunContent::FootnoteReference(7),
+        ],
+    });
+    let mut document = doc(vec![para_with(
+        ParagraphProperties::default(),
+        vec![reference],
+    )]);
+    document.footnotes.push(Note {
+        id: 7,
+        kind: NoteKind::Footnote,
+        blocks: vec![para_with(
+            ParagraphProperties::default(),
+            vec![Inline::Run(Run {
+                properties: RunProperties::default(),
+                content: vec![
+                    RunContent::NoteNumber,
+                    RunContent::Text(" the source".into()),
+                ],
+            })],
+        )],
+    });
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let mark = runs
+        .iter()
+        .find(|r| r.text.ends_with('1') && r.baseline < 100.0)
+        .expect("reference mark");
+    assert!(mark.size < 10.0, "the mark is superscript");
+    let note = runs
+        .iter()
+        .find(|r| r.text.contains("source"))
+        .expect("footnote text");
+    assert!(note.baseline > 792.0 - 72.0 - 30.0, "{}", note.baseline);
+}
+
+#[test]
+fn list_paragraphs_get_labels_at_the_hanging_indent() {
+    let numbering = Numbering {
+        abstracts: vec![AbstractNumbering {
+            id: 0,
+            levels: vec![Level {
+                format: NumberFormat::Decimal,
+                text: "%1.".into(),
+                paragraph: ParagraphProperties {
+                    indentation: Indentation {
+                        left: Some(720),
+                        hanging: Some(360),
+                        ..Indentation::default()
+                    },
+                    ..ParagraphProperties::default()
+                },
+                ..Level::default()
+            }],
+        }],
+        instances: vec![NumberingInstance {
+            num_id: 1,
+            abstract_id: 0,
+            ..NumberingInstance::default()
+        }],
+    };
+    let item = || ParagraphProperties {
+        numbering: Some(NumberingRef {
+            num_id: 1,
+            level: 0,
+        }),
+        ..ParagraphProperties::default()
+    };
+    let mut document = doc(vec![
+        para_with(item(), vec![run("first")]),
+        para_with(item(), vec![run("second")]),
+    ]);
+    document.numbering = numbering;
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let label = runs
+        .iter()
+        .find(|r| r.text.starts_with("2."))
+        .expect("second label");
+    assert!((label.glyphs[0].x - (72.0 + 18.0)).abs() < 0.01);
+    let body = label
+        .glyphs
+        .iter()
+        .zip(label.text.chars())
+        .find(|(_, c)| *c == 's')
+        .map(|(g, _)| g.x);
+    let body =
+        body.unwrap_or_else(|| runs.iter().find(|r| r.text == "second").unwrap().glyphs[0].x);
+    assert!((body - (72.0 + 36.0)).abs() < 0.01, "{body}");
+}
+
+#[test]
+fn justified_lines_reach_the_right_margin() {
+    let props = ParagraphProperties {
+        justification: Some(Justification::Both),
+        ..ParagraphProperties::default()
+    };
+    let layout = laid(&doc(vec![para_with(
+        props,
+        vec![run(&"justify these words ".repeat(20))],
+    )]));
+    let runs = runs(&layout, 0);
+    let first_line = runs[0].baseline;
+    let end = runs
+        .iter()
+        .filter(|r| r.baseline == first_line)
+        .flat_map(|r| r.glyphs.iter())
+        .map(|g| g.x + ADVANCE)
+        .fold(0.0, f32::max);
+    assert!((end - (612.0 - 72.0)).abs() < 0.05, "{end}");
+}
+
+#[test]
+fn right_tabs_align_text_to_the_stop() {
+    let props = ParagraphProperties {
+        tabs: vec![TabStop {
+            position: 7200,
+            alignment: TabAlignment::Right,
+            leader: TabLeader::Dot,
+        }],
+        ..ParagraphProperties::default()
+    };
+    let content = Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![
+            RunContent::Text("Intro".into()),
+            RunContent::Tab,
+            RunContent::Text("12".into()),
+        ],
+    });
+    let layout = laid(&doc(vec![para_with(props, vec![content])]));
+    let runs = runs(&layout, 0);
+    let digits = runs
+        .iter()
+        .flat_map(|r| r.text.chars().zip(r.glyphs.iter()))
+        .filter(|(c, _)| c.is_ascii_digit());
+    let end = digits.map(|(_, g)| g.x + ADVANCE).fold(0.0, f32::max);
+    assert!((end - (72.0 + 360.0)).abs() < 0.05, "{end}");
+    let dots = runs
+        .iter()
+        .flat_map(|r| r.text.chars())
+        .filter(|&c| c == '.')
+        .count();
+    assert!(dots > 20, "{dots} leader dots");
+}
+
+#[test]
+fn two_columns_fill_left_then_right() {
+    let mut document = doc((0..130).map(|i| para(&format!("c{i}"))).collect());
+    document.sections[0].properties.columns.count = 2;
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let xs: Vec<f32> = runs.iter().map(|r| r.glyphs[0].x).collect();
+    let middle = 306.0;
+    assert!(xs.iter().any(|&x| x < middle) && xs.iter().any(|&x| x > middle));
+    let first_right = runs.iter().position(|r| r.glyphs[0].x > middle).unwrap();
+    assert!(runs[..first_right].iter().all(|r| r.glyphs[0].x < middle));
+}
+
+#[test]
+fn keep_with_next_moves_a_heading_to_the_next_page() {
+    let heading = ParagraphProperties {
+        keep_next: Some(true),
+        ..ParagraphProperties::default()
+    };
+    let mut blocks: Vec<Block> = Vec::new();
+    let per_page = {
+        let probe = laid(&doc((0..200).map(|i| para(&format!("{i}"))).collect()));
+        probe.pages[0].glyph_runs().count()
+    };
+    blocks.extend((0..per_page - 1).map(|i| para(&format!("{i}"))));
+    blocks.push(para_with(heading, vec![run("Heading")]));
+    blocks.push(para("body"));
+    let layout = laid(&doc(blocks));
+    assert_eq!(layout.pages.len(), 2);
+    assert!(layout.pages[1].text().starts_with("Heading"));
+}
+
+#[test]
+fn a_tall_row_splits_across_pages() {
+    let lines: Vec<Block> = (0..120).map(|i| para(&format!("row line {i}"))).collect();
+    let table = Table {
+        grid: vec![9360],
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                blocks: lines,
+                ..TableCell::default()
+            }],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    assert!(layout.pages.len() >= 2);
+    let all: String = layout.pages.iter().map(|p| p.text()).collect();
+    assert!(all.contains("line119"));
+    for page in &layout.pages {
+        assert!(page.glyph_runs().all(|r| r.baseline <= 792.0 - 72.0 + 0.01));
+    }
+}

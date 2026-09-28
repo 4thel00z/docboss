@@ -32,7 +32,7 @@ pub use inline::{
     RunContent,
 };
 pub use media::{sniff_image, FontEntry, Media, MediaId};
-pub use numbering::{AbstractNumbering, Level, NumberFormat, Numbering, NumberingInstance};
+pub use numbering::{AbstractNumbering, Level, NumberFormat, Numbering, NumberingCounter, NumberingInstance};
 pub use props::{
     Border, BorderStyle, Borders, Color, FontSlots, Highlight, Indentation, Justification,
     LineRule, NumberingRef, ParagraphProperties, RunProperties, Shading, Spacing, TabAlignment,

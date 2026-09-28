@@ -1,5 +1,6 @@
 [package]
 name = "docboss-layout"
+description = "Page layout for docboss: line breaking, tables, sections, headers, footers and footnotes over the document model"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,12 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+docboss-font = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "layout"
+harness = false
