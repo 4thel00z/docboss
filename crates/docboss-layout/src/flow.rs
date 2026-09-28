@@ -77,6 +77,8 @@ pub(crate) struct Ctx<'a> {
     pub current_note: Option<String>,
     /// The style of the table whose cell is being laid out.
     pub table_style: Option<String>,
+    /// The fill behind the blocks being laid out, such as a cell's shading.
+    pub background: Option<docboss_model::Color>,
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -672,6 +674,7 @@ pub(crate) fn run(
         depth: 0,
         note_labels: labels,
         table_style: None,
+        background: None,
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {

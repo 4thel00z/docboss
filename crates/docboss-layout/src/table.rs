@@ -330,7 +330,11 @@ fn layout_table_rows(
             let (content, trailing) = if continues {
                 (Vec::new(), 0.0)
             } else {
-                layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0))
+                let behind = fill.or(ctx.background);
+                let outer = std::mem::replace(&mut ctx.background, behind);
+                let laid = layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0));
+                ctx.background = outer;
+                laid
             };
             let own = cell.properties.borders.unwrap_or_default();
             let edge_h = |outer: bool| {

@@ -35,7 +35,36 @@ pub(crate) struct RunStyle {
     pub hidden: bool,
 }
 
+/// The color `auto` text takes over a background: white over a dark fill,
+/// black otherwise, as Word and LibreOffice draw it (ECMA-376 Part 1
+/// §17.3.2.6 leaves the choice to the consumer).
+pub(crate) fn automatic_color(background: Option<Color>) -> Color {
+    let Some(Color(r, g, b)) = background else {
+        return Color::BLACK;
+    };
+    let luminance = 0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b);
+    if luminance < 128.0 {
+        return Color::WHITE;
+    }
+    Color::BLACK
+}
+
 impl RunStyle {
+    /// Replaces an `auto` text color with the one that reads over the run's
+    /// own shading or highlight, else over `background`.
+    pub(crate) fn with_background(
+        mut self,
+        p: &RunProperties,
+        background: Option<Color>,
+    ) -> RunStyle {
+        if p.color.flatten().is_some() {
+            return self;
+        }
+        let behind = self.shading.or(self.highlight).or(background);
+        self.color = automatic_color(behind);
+        self
+    }
+
     /// ECMA-376 Part 1 §17.3.2: run properties to drawing parameters;
     /// superscript and subscript draw at two thirds of the size, raised by
     /// a third or lowered by a seventh of the em.

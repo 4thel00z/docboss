@@ -148,6 +148,7 @@ fn field_kind(instruction: &str) -> String {
 struct Flattener<'c, 'd> {
     ctx: &'c mut Ctx<'d>,
     paragraph_style: Option<String>,
+    background: Option<docboss_model::Color>,
     styles: Vec<RunStyle>,
     elems: Vec<Elem>,
 }
@@ -167,7 +168,7 @@ impl Flattener<'_, '_> {
             props,
             self.ctx.table_style.as_deref(),
         );
-        RunStyle::from_properties(&resolved)
+        RunStyle::from_properties(&resolved).with_background(&resolved, self.background)
     }
 
     fn push_text(&mut self, text: &str, style: usize) {
@@ -294,10 +295,13 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         &paragraph.mark,
         table_style.as_deref(),
     );
-    let mark_style = RunStyle::from_properties(&mark_resolved);
+    let background = props.shading.and_then(|s| s.fill).or(ctx.background);
+    let mark_style =
+        RunStyle::from_properties(&mark_resolved).with_background(&mark_resolved, background);
     let mut flat = Flattener {
         ctx,
         paragraph_style,
+        background,
         styles: vec![mark_style],
         elems: Vec::new(),
     };
@@ -313,7 +317,8 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         if let Some(label) = label.filter(|l| !l.is_empty()) {
             let mut label_props = mark_resolved.clone();
             label_props.apply(&level_run);
-            let label_style = RunStyle::from_properties(&label_props);
+            let label_style =
+                RunStyle::from_properties(&label_props).with_background(&label_props, background);
             let index = flat.style_index(label_style);
             flat.push_text(&label, index);
             flat.elems.push(Elem::Tab(index));

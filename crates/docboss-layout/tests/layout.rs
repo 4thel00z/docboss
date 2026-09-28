@@ -628,3 +628,52 @@ fn table_style_paragraph_spacing_applies_inside_cells() {
     };
     assert!(baseline("two") - baseline("one") > 30.0);
 }
+
+/// ECMA-376 Part 1 §17.3.2.6: `auto` text is drawn white over a dark cell
+/// fill and black over a light one.
+#[test]
+fn automatic_text_color_follows_the_cell_fill() {
+    let dark = docboss_model::Color(0xC0, 0, 0);
+    let light = docboss_model::Color(0x9C, 0xC2, 0xE5);
+    let document = doc(vec![
+        one_cell_table(None, Some(dark), &["dark"]),
+        one_cell_table(None, Some(light), &["light"]),
+    ]);
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let color = |text: &str| runs.iter().find(|r| r.text == text).unwrap().color;
+    assert_eq!(color("dark"), docboss_model::Color::WHITE);
+    assert_eq!(color("light"), docboss_model::Color::BLACK);
+}
+
+/// A list label in a dark cell turns white with its text.
+#[test]
+fn list_labels_in_dark_cells_turn_white_too() {
+    let dark = docboss_model::Color(0xC0, 0, 0);
+    let mut document = doc(vec![one_cell_table(None, Some(dark), &["item"])]);
+    document.numbering = Numbering {
+        abstracts: vec![AbstractNumbering {
+            id: 0,
+            levels: vec![Level::default()],
+        }],
+        instances: vec![NumberingInstance {
+            num_id: 1,
+            abstract_id: 0,
+            ..NumberingInstance::default()
+        }],
+    };
+    let Block::Table(table) = &mut document.sections[0].blocks[0] else {
+        unreachable!()
+    };
+    let Block::Paragraph(paragraph) = &mut table.rows[0].cells[0].blocks[0] else {
+        unreachable!()
+    };
+    paragraph.properties.numbering = Some(NumberingRef {
+        num_id: 1,
+        level: 0,
+    });
+    let layout = laid(&document);
+    let runs = runs(&layout, 0);
+    let label = runs.iter().find(|r| r.text.starts_with("1.")).unwrap();
+    assert_eq!(label.color, docboss_model::Color::WHITE);
+}
