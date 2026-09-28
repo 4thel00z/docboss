@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use docboss_cfb::CompoundFile;
 use docboss_model::{
-    Comment, Diagnostic, Document, HeaderFooter, HeaderFooterKind, Note, NoteKind, Paragraph, Run,
-    RunContent, Section, SectionProperties, Settings, SourceFormat,
+    Block, Comment, Diagnostic, Document, HeaderFooter, HeaderFooterKind, Inline, Note, NoteKind,
+    Paragraph, Run, RunContent, Section, SectionProperties, Settings, SourceFormat,
 };
 
 use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
@@ -14,7 +14,7 @@ use crate::fib::{slot, Fib};
 use crate::picture::{blip, children, record, shape_blip_index, shape_containers, shape_id};
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
-use crate::text::{compressed_char, PieceTable};
+use crate::text::PieceTable;
 use crate::{crypt, fkp, lists, sttb, styles, Error, Result};
 
 /// The start CP of each document part ([MS-DOC] §2.3): main text, then
@@ -31,9 +31,9 @@ impl Parts {
     fn of(fib: &Fib) -> Parts {
         let c = fib.counts;
         let footnotes = c.text;
-        let headers = footnotes + c.footnotes;
-        let comments = headers + c.headers;
-        let endnotes = comments + c.comments;
+        let headers = footnotes.saturating_add(c.footnotes);
+        let comments = headers.saturating_add(c.headers);
+        let endnotes = comments.saturating_add(c.comments);
         Parts {
             main: 0,
             footnotes,
@@ -50,6 +50,9 @@ fn table_range<'t>(table: &'t [u8], fib: &Fib, which: usize) -> &'t [u8] {
 }
 
 pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
+    if bytes.starts_with(&[0xDB, 0xA5]) {
+        return Ok(word2(bytes));
+    }
     let file = CompoundFile::parse(bytes)?;
     let mut diagnostics = Vec::new();
     let word_stream = file
@@ -80,6 +83,10 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         false => (word_stream, table_stream, data_stream),
         true => decrypt(&fib, &word_stream, &table_stream, &data_stream, password)?,
     };
+    let fib = match fib.encrypted {
+        false => fib,
+        true => Fib::parse(&word)?,
+    };
     let mut document = assemble(&word, &table, &data, &fib, &mut diagnostics);
     document.metadata = metadata;
     document.diagnostics = file.diagnostics().into_iter().chain(diagnostics).collect();
@@ -104,6 +111,11 @@ fn decrypt<'a>(
         return Err(Error::Encrypted);
     };
     let (cipher, header) = crypt::open(table, password)?;
+    let header = if fib.key == 0 {
+        header
+    } else {
+        fib.key as usize
+    };
     Ok((
         Cow::Owned(cipher.decrypt_stream(word, 68)),
         Cow::Owned(cipher.decrypt_stream(table, header)),
@@ -199,12 +211,19 @@ fn assemble(
         .collect();
     let comments = comments(&context, table, fib, parts.comments);
     let (sections, headers_footers) = sections(&context, word, table, fib, &parts);
-    if fib.counts.textboxes + fib.counts.header_textboxes > 0 {
+    if fib
+        .counts
+        .textboxes
+        .saturating_add(fib.counts.header_textboxes)
+        > 0
+    {
         diagnostics.push(Diagnostic::dropped(
             "WordDocument",
             format!(
                 "{} text box characters are not read",
-                fib.counts.textboxes + fib.counts.header_textboxes
+                fib.counts
+                    .textboxes
+                    .saturating_add(fib.counts.header_textboxes)
             ),
         ));
     }
@@ -254,8 +273,8 @@ fn notes(
                 NoteKind::Endnote => Reference::Endnote(id),
             };
             context.references.insert(references[i], reference);
-            let start = base + *texts.get(i)?;
-            let end = base + *texts.get(i + 1)?;
+            let start = base.saturating_add(*texts.get(i)?);
+            let end = base.saturating_add(*texts.get(i + 1)?);
             Some((id, start, end))
         })
         .collect()
@@ -311,8 +330,8 @@ fn comments(context: &Context<'_>, table: &[u8], fib: &Fib, base: u32) -> Vec<Co
         .iter()
         .enumerate()
         .filter_map(|(i, atrd)| {
-            let start = base + *texts.get(i)?;
-            let end = base + *texts.get(i + 1)?;
+            let start = base.saturating_add(*texts.get(i)?);
+            let end = base.saturating_add(*texts.get(i + 1)?);
             let initials_length = usize::from(u16_at(atrd, 0).unwrap_or(0)).min(9);
             let initials = utf16(atrd, 2, initials_length);
             let owner = u16_at(atrd, 20)
@@ -354,7 +373,9 @@ fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
 }
 
 /// Floating shapes ([MS-DOC] §2.8.27 PlcfSpa) and the pictures behind them
-/// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent).
+/// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent: the
+/// drawing group, then one OfficeArtWordDrawing per story, each a dgglbl
+/// byte and a drawing container, §2.9.172).
 fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib) {
     let (cps, spas) = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
     for (cp, spa) in cps.iter().zip(&spas) {
@@ -406,7 +427,20 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib) {
         })
         .collect();
     let mut containers = Vec::new();
-    shape_containers(table, dgg.body + dgg.length, end, 0, &mut containers);
+    let mut at = dgg.body + dgg.length;
+    while at + 9 <= end {
+        let Some(drawing) = record(table, at + 1).filter(|r| r.kind == 0xF002) else {
+            break;
+        };
+        shape_containers(
+            table,
+            drawing.body,
+            drawing.body + drawing.length,
+            0,
+            &mut containers,
+        );
+        at = drawing.body + drawing.length;
+    }
     for container in containers {
         let (Some(id), Some(pib)) = (
             shape_id(table, &container),
@@ -471,8 +505,8 @@ fn sections(
         };
         let guard = u32::from(story_end > story_start + 1);
         let blocks = context.story(
-            parts.headers + story_start,
-            parts.headers + story_end - guard,
+            parts.headers.saturating_add(story_start),
+            parts.headers.saturating_add(story_end - guard),
             StoryKind::HeaderFooter,
         );
         parts_out.push(HeaderFooter {
@@ -510,54 +544,147 @@ fn sections(
     (sections, parts_out)
 }
 
-/// Word 6 and Word 95 files: the text between fcMin and fcMac read as
-/// Windows-1252, one paragraph per carriage return, with no formatting.
+/// The Windows code page of 8-bit text in a language, for Word 6 and 95
+/// files, which store text in the code page of FibBase.lid.
+fn code_page(lid: u16) -> u32 {
+    match lid & 0x03FF {
+        0x05 | 0x15 | 0x0E | 0x1B | 0x24 | 0x1A | 0x18 | 0x1C => 1250,
+        0x19 | 0x22 | 0x02 | 0x23 | 0x2F => 1251,
+        0x08 => 1253,
+        0x1F => 1254,
+        0x0D => 1255,
+        0x01 | 0x20 | 0x29 => 1256,
+        0x25..=0x27 => 1257,
+        0x2A => 1258,
+        0x1E => 874,
+        0x11 => 932,
+        0x04 => {
+            if lid == 0x0804 {
+                936
+            } else {
+                950
+            }
+        }
+        0x12 => 949,
+        _ => 1252,
+    }
+}
+
+/// Word for Windows 2.0 files, which are a bare FIB and text rather than a
+/// compound file: the text between fcMin and fcMac.
+fn word2(bytes: &[u8]) -> Document {
+    let fib = Fib {
+        n_fib: u16_at(bytes, 2).unwrap_or(0),
+        lid: u16_at(bytes, 6).unwrap_or(0x0409),
+        complex: false,
+        encrypted: false,
+        which_table_1: false,
+        obfuscated: false,
+        key: 0,
+        counts: Default::default(),
+        fc_lcb: Vec::new(),
+        fc_min: u32_at(bytes, 24).unwrap_or(0),
+        fc_mac: u32_at(bytes, 28).unwrap_or(0),
+    };
+    let mut document = legacy(bytes, &fib);
+    document.diagnostics[0] = Diagnostic::approximated(
+        "WordDocument",
+        format!(
+            "Word 2 file (nFib {:#x}): text only, formatting not read",
+            fib.n_fib
+        ),
+    );
+    document
+}
+
+/// A guess at the code page of 8-bit Cyrillic text stored without one: in
+/// Russian text nearly every letter is a byte from 0xC0 up, in Western and
+/// Central European text most are ASCII.
+fn guess_code_page(bytes: &[u8], stated: u32) -> u32 {
+    if stated != 1252 {
+        return stated;
+    }
+    let high = bytes.iter().filter(|&&b| b >= 0xC0).count();
+    let ascii = bytes.iter().filter(|b| b.is_ascii_alphabetic()).count();
+    if high > ascii && high > 16 {
+        return 1251;
+    }
+    stated
+}
+
+/// The 8-bit text of a Word 6 or 95 file: through its piece table when
+/// the file is complex (fcClx at FIB offset 0x160), else fcMin to fcMac.
+fn legacy_bytes(word: &[u8], fib: &Fib) -> Vec<u8> {
+    let clx_at = crate::bytes::u32_at(word, 0x160).unwrap_or(0) as usize;
+    let clx_size = crate::bytes::u32_at(word, 0x164).unwrap_or(0) as usize;
+    let pieces = match fib.complex && clx_size > 0 {
+        true => PieceTable::parse(slice(word, clx_at, clx_size)).map(PieceTable::eight_bit),
+        false => None,
+    };
+    let Some(pieces) = pieces.filter(|p| !p.pieces.is_empty()) else {
+        let length = fib.fc_mac.saturating_sub(fib.fc_min);
+        return slice(word, fib.fc_min as usize, length as usize).to_vec();
+    };
+    let count = (fib.counts.text as usize).min(word.len());
+    pieces
+        .decode(word)
+        .into_iter()
+        .take(count)
+        .map(|unit| unit as u8)
+        .collect()
+}
+
+/// Word 6 and Word 95 files: the text in the code page of the document
+/// language (or Cyrillic when the bytes say so), one paragraph per carriage
+/// return, with no formatting.
 fn legacy(word: &[u8], fib: &Fib) -> Document {
-    let length = fib
-        .fc_mac
-        .saturating_sub(fib.fc_min)
-        .min(fib.counts.text.max(fib.fc_mac - fib.fc_min.min(fib.fc_mac)));
-    let bytes = slice(word, fib.fc_min as usize, length as usize);
-    let text: String = bytes
-        .iter()
-        .map(|&b| char::from_u32(u32::from(compressed_char(b))).unwrap_or('\u{FFFD}'))
-        .collect();
+    let bytes = legacy_bytes(word, fib);
+    let stated = code_page(fib.lid);
+    let code_page = guess_code_page(&bytes, stated);
+    let (text, fidelity) = docboss_cfb::codepage::decode(code_page, &bytes);
     let blocks = text
-        .split('\r')
+        .split(['\r', '\u{7}'])
         .map(|line| {
             let cleaned: String = line.chars().filter(|c| *c >= ' ' || *c == '\t').collect();
-            let content = if cleaned.is_empty() {
-                Vec::new()
-            } else {
-                vec![RunContent::Text(cleaned)]
-            };
-            let inlines = if content.is_empty() {
-                Vec::new()
-            } else {
-                vec![docboss_model::Inline::Run(Run {
-                    content,
+            let inlines = match cleaned.is_empty() {
+                true => Vec::new(),
+                false => vec![Inline::Run(Run {
+                    content: vec![RunContent::Text(cleaned)],
                     ..Run::default()
-                })]
+                })],
             };
-            docboss_model::Block::Paragraph(Paragraph {
+            Block::Paragraph(Paragraph {
                 inlines,
                 ..Paragraph::default()
             })
         })
         .collect();
+    let mut diagnostics = vec![Diagnostic::approximated(
+        "WordDocument",
+        format!(
+            "Word 6/95 file (nFib {:#x}): text only, formatting not read",
+            fib.n_fib
+        ),
+    )];
+    if code_page != stated {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            format!("text decoded as code page {code_page}, guessed from its bytes"),
+        ));
+    }
+    if fidelity == docboss_cfb::codepage::Fidelity::Approximated {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            format!("code page {code_page} is not supported; text read as ISO 8859-1"),
+        ));
+    }
     Document {
         format: SourceFormat::Doc,
         sections: vec![Section {
             properties: default_section(),
             blocks,
         }],
-        diagnostics: vec![Diagnostic::approximated(
-            "WordDocument",
-            format!(
-                "Word 6/95 file (nFib {:#x}): text only, formatting not read",
-                fib.n_fib
-            ),
-        )],
+        diagnostics,
         ..Document::default()
     }
 }

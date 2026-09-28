@@ -276,3 +276,30 @@ fn damage_is_survivable() {
         }
     }
 }
+
+/// [MS-DOC] §2.2.6.2 RC4 and §2.2.6.3 RC4 CryptoAPI: the right password
+/// decrypts, a wrong one and none are refused.
+#[test]
+fn encrypted_documents() {
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/fixtures/{name}.doc",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let cryptoapi = read("encrypted-cryptoapi");
+    let document = docboss_doc::read_with_password(&cryptoapi, "password").unwrap();
+    assert_eq!(plain_text(&document).trim(), "This is a test");
+    assert!(matches!(
+        docboss_doc::read(&cryptoapi),
+        Err(docboss_doc::Error::Encrypted)
+    ));
+    assert!(matches!(
+        docboss_doc::read_with_password(&cryptoapi, "nope"),
+        Err(docboss_doc::Error::WrongPassword)
+    ));
+    let rc4 = read("encrypted-rc4");
+    let document = docboss_doc::read_with_password(&rc4, "tika").unwrap();
+    assert!(plain_text(&document).contains("This is an encrypted Word 2007 File."));
+}

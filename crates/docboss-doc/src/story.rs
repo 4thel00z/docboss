@@ -80,6 +80,7 @@ pub struct Context<'a> {
     pub media: RefCell<Vec<Media>>,
     pub diagnostics: RefCell<Vec<Diagnostic>>,
     base_cache: RefCell<HashMap<(u16, Option<String>), RunProperties>>,
+    media_index: RefCell<HashMap<u64, Vec<MediaId>>>,
 }
 
 struct ParagraphInfo {
@@ -302,6 +303,7 @@ impl<'a> Context<'a> {
             media: RefCell::new(Vec::new()),
             diagnostics: RefCell::new(Vec::new()),
             base_cache: RefCell::new(HashMap::new()),
+            media_index: RefCell::new(HashMap::new()),
         }
     }
 
@@ -440,8 +442,25 @@ impl<'a> Context<'a> {
         })
     }
 
+    /// Adds an image to the media list, reusing the entry of an identical
+    /// image drawn earlier.
     fn add_media(&self, image: Image) -> MediaId {
+        let key = image
+            .data
+            .iter()
+            .fold(0xCBF2_9CE4_8422_2325u64, |hash, &b| {
+                (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01B3)
+            });
         let mut media = self.media.borrow_mut();
+        let mut seen = self.media_index.borrow_mut();
+        let candidates = seen.entry(key).or_default();
+        if let Some(&existing) = candidates
+            .iter()
+            .find(|id: &&MediaId| *media[id.0 as usize].data == image.data[..])
+        {
+            return existing;
+        }
+        candidates.push(MediaId(media.len() as u32));
         let extension = image
             .content_type
             .rsplit(['/', '-'])

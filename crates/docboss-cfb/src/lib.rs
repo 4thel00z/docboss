@@ -446,22 +446,33 @@ impl<'a> CompoundFile<'a> {
     }
 
     /// Every stream path in the file, depth first, with its size.
+    /// Each entry is visited once, so a directory whose trees point back at
+    /// an ancestor still yields a finite list.
     pub fn walk(&self) -> Vec<(String, u64)> {
         let mut out = Vec::new();
-        self.walk_into(0, "", &mut out, 0);
+        let mut visited = vec![false; self.entries.len()];
+        visited[0] = true;
+        self.walk_into(0, "", &mut out, &mut visited);
         out
     }
 
-    fn walk_into(&self, storage: usize, prefix: &str, out: &mut Vec<(String, u64)>, depth: usize) {
-        if depth > 64 {
-            return;
-        }
+    fn walk_into(
+        &self,
+        storage: usize,
+        prefix: &str,
+        out: &mut Vec<(String, u64)>,
+        visited: &mut [bool],
+    ) {
         for index in self.children(storage) {
+            if visited[index] {
+                continue;
+            }
+            visited[index] = true;
             let entry = &self.entries[index];
             let path = format!("{prefix}{}", entry.name);
             match entry.kind {
                 EntryKind::Stream => out.push((path, entry.size)),
-                EntryKind::Storage => self.walk_into(index, &format!("{path}/"), out, depth + 1),
+                EntryKind::Storage => self.walk_into(index, &format!("{path}/"), out, visited),
                 _ => {}
             }
         }

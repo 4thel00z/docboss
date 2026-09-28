@@ -6,7 +6,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .ok_or("usage: dump <file.doc> [--debug]")?;
     let bytes = std::fs::read(&path)?;
-    let document = docboss_doc::read(&bytes)?;
+    let password = std::env::args().skip_while(|a| a != "--password").nth(1);
+    let document = match password {
+        Some(password) => docboss_doc::read_with_password(&bytes, &password)?,
+        None => docboss_doc::read(&bytes)?,
+    };
     if std::env::args().any(|a| a == "--debug") {
         println!("{document:#?}");
         return Ok(());

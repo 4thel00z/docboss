@@ -45,6 +45,8 @@ pub struct Counts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fib {
     pub n_fib: u16,
+    /// The language of the document's text, FibBase.lid.
+    pub lid: u16,
     pub complex: bool,
     pub encrypted: bool,
     pub which_table_1: bool,
@@ -65,13 +67,15 @@ impl Fib {
         if word.len() < 32 {
             return Err(Error::NotWord("WordDocument stream shorter than FibBase"));
         }
-        if u16_at(word, 0) != Some(0xA5EC) && u16_at(word, 0) != Some(0xA5DC) {
+        let ident = u16_at(word, 0).unwrap_or(0);
+        let n_fib = u16_at(word, 2).unwrap_or(0);
+        if ident != 0xA5EC && !(0x0065..0x00C0).contains(&n_fib) {
             return Err(Error::NotWord("FibBase.wIdent is not 0xA5EC"));
         }
-        let n_fib = u16_at(word, 2).unwrap_or(0);
         let flags = u16_at(word, 10).unwrap_or(0);
         let mut fib = Fib {
             n_fib,
+            lid: u16_at(word, 6).unwrap_or(0x0409),
             complex: flags & 0x0004 != 0,
             encrypted: flags & 0x0100 != 0,
             which_table_1: flags & 0x0200 != 0,

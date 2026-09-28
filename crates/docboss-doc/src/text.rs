@@ -27,7 +27,10 @@ impl Piece {
     }
 
     pub fn fc_of(&self, cp: u32) -> u32 {
-        self.fc + (cp - self.cp_start) * self.char_size()
+        self.fc.saturating_add(
+            cp.saturating_sub(self.cp_start)
+                .saturating_mul(self.char_size()),
+        )
     }
 }
 
@@ -125,6 +128,15 @@ impl PieceTable {
             pieces: vec![piece],
             prcs: Vec::new(),
         }
+    }
+
+    /// Word 6 and 95 pieces: every piece holds 8-bit text at its stated
+    /// byte offset, and the compressed flag is not used.
+    pub fn eight_bit(mut self) -> PieceTable {
+        for piece in &mut self.pieces {
+            piece.compressed = true;
+        }
+        self
     }
 
     pub fn end(&self) -> u32 {
