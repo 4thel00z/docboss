@@ -167,6 +167,7 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             placement: DrawingPlacement::Inline,
             name: None,
             description: None,
+            text_box: Vec::new(),
         })
     };
     let mut doc = document(vec![

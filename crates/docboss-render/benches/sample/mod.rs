@@ -215,6 +215,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         placement: DrawingPlacement::Inline,
         name: None,
         description: None,
+        text_box: Vec::new(),
     });
     vec![
         paragraph(
