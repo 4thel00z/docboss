@@ -15,6 +15,7 @@ docboss-model = { workspace = true }
 docboss-docx = { workspace = true }
 docboss-doc = { workspace = true }
 docboss-cfb = { workspace = true }
+docboss-crypt = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

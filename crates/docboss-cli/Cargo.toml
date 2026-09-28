@@ -23,6 +23,8 @@ docboss-layout = { workspace = true }
 docboss-render = { workspace = true }
 docboss-write = { workspace = true }
 docboss-tui = { workspace = true }
+docboss-aio = { workspace = true, features = ["http"] }
+tokio = { version = "1", features = ["rt", "net", "time"] }
 clap = { version = "4", features = ["derive"] }
 serde_json = { workspace = true }
 jaq-core = "3"

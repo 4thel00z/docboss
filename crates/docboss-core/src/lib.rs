@@ -20,6 +20,8 @@ pub enum Error {
     Doc(#[from] docboss_doc::Error),
     #[error("the document is encrypted and needs a password")]
     Encrypted,
+    #[error("encrypted package: {0}")]
+    Crypt(#[from] docboss_crypt::Error),
     #[error("unsupported format: {0}")]
     Unsupported(&'static str),
 }
@@ -68,7 +70,7 @@ pub fn detect(bytes: &[u8]) -> Format {
 /// Options for [`read_with`].
 #[derive(Debug, Clone, Default)]
 pub struct Options {
-    /// The password to open an encrypted DOC.
+    /// The password to open an encrypted DOC or DOCX.
     pub password: Option<String>,
 }
 
@@ -85,7 +87,11 @@ pub fn read_with(bytes: &[u8], options: &Options) -> Result<Document> {
             Some(password) => Ok(docboss_doc::read_with_password(bytes, password)?),
             None => Ok(docboss_doc::read(bytes)?),
         },
-        Format::EncryptedDocx => Err(Error::Encrypted),
+        Format::EncryptedDocx => {
+            let password = options.password.as_deref().ok_or(Error::Encrypted)?;
+            let package = docboss_crypt::decrypt(bytes, password)?;
+            Ok(docboss_docx::read(&package)?)
+        }
         Format::Rtf => Err(Error::Unsupported("RTF")),
         Format::Unknown => Err(Error::Unsupported(
             "neither a ZIP package nor a Word compound file",

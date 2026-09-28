@@ -6,6 +6,7 @@ mod container;
 mod fonts;
 mod hexdump;
 mod q;
+mod remote;
 mod render;
 mod skill;
 mod xmlpretty;
@@ -61,9 +62,10 @@ struct Cli {
 /// A document to read.
 #[derive(Args)]
 struct Source {
-    /// Path to the .docx or .doc file; the format is detected from its bytes.
+    /// Path or http(s):// URL of the .docx or .doc file; the format is
+    /// detected from its bytes. A URL is read with range requests.
     file: PathBuf,
-    /// Password for an encrypted DOC.
+    /// Password for an encrypted DOC or DOCX.
     #[arg(long)]
     password: Option<String>,
 }
@@ -317,7 +319,7 @@ fn run(command: Command) -> Result<(), Failure> {
             no_labels,
             out,
         } => {
-            let document = load(&source)?;
+            let document = load_text(&source)?;
             let options = TextOptions {
                 list_labels: !no_labels,
                 headers_footers: stories.headers_footers,
@@ -338,7 +340,10 @@ fn run(command: Command) -> Result<(), Failure> {
             page_breaks,
             out,
         } => {
-            let document = load(&source)?;
+            let document = match images.is_some() || embed_images {
+                true => load(&source)?,
+                false => load_text(&source)?,
+            };
             let mode = image_mode(&document, images.as_deref(), embed_images, ImageMode::Omit)?;
             let options = MarkdownOptions {
                 title,
@@ -379,7 +384,7 @@ fn run(command: Command) -> Result<(), Failure> {
             compact,
             out,
         } => {
-            let document = load(&source)?;
+            let document = load_text(&source)?;
             let mut json = json_of(&document, blocks, !compact)?;
             json.push('\n');
             emit(out.as_deref(), &json)
@@ -417,8 +422,10 @@ fn run(command: Command) -> Result<(), Failure> {
             width,
         } => cmd_hex(&file, part.as_deref(), offset, length, width),
         Command::Xml { file, part, raw } => {
-            let bytes = read_file(&file)?;
-            let data = container::part_bytes(&bytes, &part)?;
+            let data = match remote::url_of(&file) {
+                Some(url) => remote::part(url, &part).map_err(Failure::new)?,
+                None => container::part_bytes(&read_file(&file)?, &part)?,
+            };
             let text = docboss_xml::decode(&data);
             let text = if raw {
                 text.into_owned()
@@ -444,7 +451,10 @@ fn run(command: Command) -> Result<(), Failure> {
             Ok(())
         }
         Command::Diagnostics { source, layout } => {
-            let document = load(&source)?;
+            let document = match layout {
+                true => load(&source)?,
+                false => load_text(&source)?,
+            };
             let mut diagnostics = document.diagnostics.clone();
             if layout {
                 diagnostics.extend(docboss_layout::layout_document(&document).diagnostics);
@@ -474,11 +484,29 @@ fn cmd_tui(source: &Source) -> Result<(), Failure> {
     docboss_tui::run(document, bytes, target).map_err(|e| Failure::new(e.to_string()))
 }
 
+/// The bytes of a local file, or of a whole remote one.
 fn read_file(path: &Path) -> Result<Vec<u8>, Failure> {
+    if let Some(url) = remote::url_of(path) {
+        return remote::download(url).map_err(Failure::new);
+    }
     std::fs::read(path).map_err(|e| Failure::new(format!("{}: {e}", path.display())))
 }
 
+/// Reads a document with its images and embedded fonts.
 fn load(source: &Source) -> Result<Document, Failure> {
+    load_with(source, true)
+}
+
+/// Reads a document for text: over HTTP its images are not fetched.
+fn load_text(source: &Source) -> Result<Document, Failure> {
+    load_with(source, false)
+}
+
+fn load_with(source: &Source, media: bool) -> Result<Document, Failure> {
+    if let Some(url) = remote::url_of(&source.file) {
+        return remote::load(url, source.password.clone(), media)
+            .map_err(|e| Failure::new(format!("{url}: {e}")));
+    }
     let bytes = read_file(&source.file)?;
     let options = Options {
         password: source.password.clone(),
@@ -640,7 +668,7 @@ fn cmd_info(source: &Source) -> Result<(), Failure> {
 
 fn cmd_q(source: &Source, program: &str, raw: bool, blocks: bool) -> Result<(), Failure> {
     let program = q::compile_program(program).map_err(Failure::program)?;
-    let document = load(source)?;
+    let document = load_text(source)?;
     let json = json_of(&document, blocks, false)?;
     let value: serde_json::Value =
         serde_json::from_str(&json).map_err(|e| Failure::new(format!("json: {e}")))?;

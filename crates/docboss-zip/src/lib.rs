@@ -478,8 +478,24 @@ fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
         }
     }
     let base_shift = at as i64 - record.offset as i64;
-    let capacity = (record.entries as usize).min(data.len() / 46 + 1);
-    let mut entries = Vec::with_capacity(capacity);
+    let mut entries = central_headers(&data[at..])?;
+    for entry in &mut entries {
+        entry.local_header_offset = (entry.local_header_offset as i64 + base_shift).max(0) as u64;
+    }
+    if entries.is_empty() && record.entries > 0 {
+        return Err("the central directory holds no readable headers".into());
+    }
+    Ok(entries)
+}
+
+/// Parses the consecutive central directory headers (APPNOTE §4.3.12) at
+/// the start of `directory`, keeping the local header offsets as stored,
+/// ZIP64 extra fields applied (APPNOTE §4.5.3). A range reader that fetched
+/// only the central directory reads it with this.
+pub fn central_headers(directory: &[u8]) -> std::result::Result<Vec<Entry>, String> {
+    let data = directory;
+    let mut at = 0;
+    let mut entries = Vec::with_capacity(data.len() / 46 + 1);
     while u32_at(data, at) == Some(CENTRAL_SIG) {
         let field = |off: usize| u16_at(data, at + off);
         let (Some(flags), Some(method), Some(name_len), Some(extra_len), Some(comment_len)) =
@@ -515,12 +531,8 @@ fn central_directory(data: &[u8]) -> std::result::Result<Vec<Entry>, String> {
             sizes_known: true,
         };
         zip64_extra(extra, &mut entry, usize_raw, csize, offset);
-        entry.local_header_offset = (entry.local_header_offset as i64 + base_shift).max(0) as u64;
         entries.push(entry);
         at = end;
-    }
-    if entries.is_empty() && record.entries > 0 {
-        return Err("the central directory holds no readable headers".into());
     }
     Ok(entries)
 }
