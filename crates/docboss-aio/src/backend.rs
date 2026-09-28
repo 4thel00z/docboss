@@ -21,6 +21,14 @@ pub trait Backend: Send + Sync + 'static {
     /// number of bytes read. Implementations may only return a short count
     /// at end of input; anywhere else they must fill the buffer.
     fn read_at<'a>(&'a self, offset: u64, buf: &'a mut [u8]) -> BoxFuture<'a, io::Result<usize>>;
+
+    /// Bytes the backend actually received from its source, when that can
+    /// differ from what was asked for: a server that ignores `Range` sends
+    /// the whole resource for the first read. `None` means reads transfer
+    /// exactly what they ask for.
+    fn transferred(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// A byte source fully resident in memory. Used directly (uncached) by
@@ -154,6 +162,7 @@ pub struct HttpBackend {
     len: u64,
     full: std::sync::OnceLock<Bytes>,
     progress: Option<Arc<dyn Fn(u64, u64) + Send + Sync>>,
+    received: std::sync::atomic::AtomicU64,
 }
 
 #[cfg(feature = "http")]
@@ -194,6 +203,7 @@ impl HttpBackend {
             len,
             full: std::sync::OnceLock::new(),
             progress: None,
+            received: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -209,6 +219,11 @@ impl HttpBackend {
     ) -> HttpBackend {
         self.progress = Some(Arc::new(progress));
         self
+    }
+
+    fn count(&self, bytes: usize) {
+        self.received
+            .fetch_add(bytes as u64, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Collects a 200 response body (the whole resource) capped at the
@@ -236,6 +251,7 @@ impl HttpBackend {
                 None => break, // body ended short of the declared length
             };
             let take = (cap - collected.len()).min(chunk.len());
+            self.count(chunk.len());
             collected.extend_from_slice(&chunk[..take]);
             if let Some(progress) = &self.progress {
                 progress(collected.len() as u64, self.len);
@@ -255,6 +271,10 @@ fn http_io_error(marker: crate::error::TransportMarker) -> io::Error {
 
 #[cfg(feature = "http")]
 impl Backend for HttpBackend {
+    fn transferred(&self) -> Option<u64> {
+        Some(self.received.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
     fn len(&self) -> BoxFuture<'_, io::Result<u64>> {
         let total = self.len;
         Box::pin(async move { Ok(total) })
@@ -338,6 +358,7 @@ impl Backend for HttpBackend {
                     None => break, // body ended short of the requested range
                 };
                 let take = (buf.len() - filled).min(chunk.len());
+                self.count(chunk.len());
                 buf[filled..filled + take].copy_from_slice(&chunk[..take]);
                 filled += take;
             }

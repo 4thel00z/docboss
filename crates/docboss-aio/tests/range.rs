@@ -174,6 +174,7 @@ mod http {
         assert_eq!(docboss_core::plain_text(&read), sync_text(&bytes));
         assert_eq!(server.gets.load(Ordering::SeqCst), 1);
         assert_eq!(server.served.load(Ordering::SeqCst), bytes.len() as u64);
+        assert_eq!(document.bytes_fetched(), bytes.len() as u64);
     }
 
     #[tokio::test]

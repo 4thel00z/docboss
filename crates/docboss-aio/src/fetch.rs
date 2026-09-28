@@ -49,9 +49,13 @@ impl Fetcher {
         self.requests.lock().map(|r| r.clone()).unwrap_or_default()
     }
 
-    /// Bytes fetched from the backend so far.
+    /// Bytes fetched from the backend so far: what it received when it
+    /// reports that, such as a whole resource sent in answer to a range,
+    /// else the sum of the ranges requested.
     pub fn bytes_fetched(&self) -> u64 {
-        self.requests().iter().map(|(_, len)| len).sum()
+        self.backend
+            .transferred()
+            .unwrap_or_else(|| self.requests().iter().map(|(_, len)| len).sum())
     }
 
     fn clamp(&self, range: &Range<u64>) -> Range<u64> {
