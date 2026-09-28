@@ -1,0 +1,86 @@
+{
+  "kind": "doc",
+  "files": 100,
+  "largest": {
+    "name": "Bug61268.doc",
+    "bytes": 6239232
+  },
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "engines": {
+    "docboss": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 96,
+        "files": 100,
+        "baseline_mb": 23.26528,
+        "peak_mb": 43.679744,
+        "delta_mb": 20.414464
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 23.298048,
+        "peak_mb": 61.161472,
+        "delta_mb": 37.863424
+      }
+    },
+    "antiword": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 75,
+        "files": 100,
+        "baseline_mb": 22.642688,
+        "peak_mb": 23.691264,
+        "delta_mb": 1.048576,
+        "child_peak_mb": 2.53952
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 22.659072,
+        "peak_mb": 23.805952,
+        "delta_mb": 1.14688,
+        "child_peak_mb": 2.965504
+      }
+    },
+    "catdoc": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 96,
+        "files": 100,
+        "baseline_mb": 22.560768,
+        "peak_mb": 23.18336,
+        "delta_mb": 0.622592,
+        "child_peak_mb": 2.015232
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 22.642688,
+        "peak_mb": 23.92064,
+        "delta_mb": 1.277952,
+        "child_peak_mb": 2.850816
+      }
+    }
+  }
+}

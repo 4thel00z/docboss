@@ -1,0 +1,138 @@
+{
+  "kind": "docx",
+  "files": 100,
+  "largest": {
+    "name": "saut_page.docx",
+    "bytes": 2959626
+  },
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "engines": {
+    "docboss": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 99,
+        "files": 100,
+        "baseline_mb": 23.281664,
+        "peak_mb": 31.883264,
+        "delta_mb": 8.6016
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 23.18336,
+        "peak_mb": 34.308096,
+        "delta_mb": 11.124736
+      }
+    },
+    "python-docx": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 96,
+        "files": 100,
+        "baseline_mb": 34.603008,
+        "peak_mb": 58.5728,
+        "delta_mb": 23.969792
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 34.619392,
+        "peak_mb": 41.648128,
+        "delta_mb": 7.028736
+      }
+    },
+    "docx2python": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 97,
+        "files": 100,
+        "baseline_mb": 29.507584,
+        "peak_mb": 54.853632,
+        "delta_mb": 25.346048
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 29.589504,
+        "peak_mb": 30.326784,
+        "delta_mb": 0.73728
+      }
+    },
+    "mammoth": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 98,
+        "files": 100,
+        "baseline_mb": 30.949376,
+        "peak_mb": 82.16576,
+        "delta_mb": 51.216384
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 30.785536,
+        "peak_mb": 32.407552,
+        "delta_mb": 1.622016
+      }
+    },
+    "docx2txt": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 98,
+        "files": 100,
+        "baseline_mb": 24.49408,
+        "peak_mb": 30.14656,
+        "delta_mb": 5.65248
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 24.33024,
+        "peak_mb": 24.576,
+        "delta_mb": 0.24576
+      }
+    },
+    "pandoc": {
+      "sample": {
+        "outcome": "ok",
+        "handled": 98,
+        "files": 100,
+        "baseline_mb": 29.196288,
+        "peak_mb": 29.622272,
+        "delta_mb": 0.425984,
+        "child_peak_mb": 134.897664
+      },
+      "largest": {
+        "outcome": "ok",
+        "handled": 1,
+        "files": 1,
+        "baseline_mb": 28.983296,
+        "peak_mb": 29.212672,
+        "delta_mb": 0.229376,
+        "child_peak_mb": 140.005376
+      }
+    }
+  }
+}

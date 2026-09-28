@@ -1,0 +1,103 @@
+{
+  "kind": "doc",
+  "corpus": [
+    "poi",
+    "lo",
+    "doc"
+  ],
+  "files": 80,
+  "pages": 387,
+  "bytes": 9193974,
+  "repeat": 3,
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "operations": {
+    "text": {
+      "files_compared": 66,
+      "libraries": {
+        "docboss": {
+          "time_s": 0.022212995958398096,
+          "files": 66,
+          "pages": 353,
+          "pages_per_s": 15891.597903367952,
+          "files_per_s": 2971.2336023294188,
+          "mb_per_s": 393.75584528899174,
+          "median_ms": 0.06524949276354164,
+          "handled": 78,
+          "word_recall": 0.9764737485052598,
+          "word_recall_weighted": 0.9936757950002983,
+          "recall_files": 61
+        },
+        "antiword": {
+          "time_s": 0.2898171179695055,
+          "files": 66,
+          "pages": 353,
+          "pages_per_s": 1218.009489822967,
+          "files_per_s": 227.72981962695698,
+          "mb_per_s": 30.179366426935157,
+          "median_ms": 4.010124997876119,
+          "handled": 66,
+          "word_recall": 0.9478700788250789,
+          "word_recall_weighted": 0.3587580011421071,
+          "recall_files": 61
+        },
+        "catdoc": {
+          "time_s": 0.28863403902505524,
+          "files": 66,
+          "pages": 353,
+          "pages_per_s": 1223.0019757626626,
+          "files_per_s": 228.6632589244638,
+          "mb_per_s": 30.30306830595524,
+          "median_ms": 3.797000004851725,
+          "handled": 78,
+          "word_recall": 0.8880966860964942,
+          "word_recall_weighted": 0.34730283736906253,
+          "recall_files": 61
+        }
+      }
+    }
+  },
+  "recall_all_files": {
+    "docboss": {
+      "word_recall": 0.9573023403649024,
+      "word_recall_weighted": 0.9743413136384382,
+      "files": 72,
+      "failures": 0
+    },
+    "antiword": {
+      "word_recall": 0.9478700788250789,
+      "word_recall_weighted": 0.3587580011421071,
+      "files": 61,
+      "failures": 12
+    },
+    "catdoc": {
+      "word_recall": 0.8797207764509234,
+      "word_recall_weighted": 0.34343803161694536,
+      "files": 72,
+      "failures": 0
+    }
+  },
+  "libreoffice": {
+    "batch_files": 80,
+    "batch_time_s": 4.703073958997265,
+    "batch_files_per_s": 17.010151381301405,
+    "per_file_samples": 10,
+    "per_file_median_ms": 680.2823749967501
+  }
+}

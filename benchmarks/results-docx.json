@@ -1,0 +1,243 @@
+{
+  "kind": "docx",
+  "corpus": [
+    "lo",
+    "poi",
+    "pydocx"
+  ],
+  "files": 80,
+  "pages": 121,
+  "bytes": 1898513,
+  "repeat": 3,
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-09-28",
+  "operations": {
+    "open": {
+      "files_compared": 77,
+      "libraries": {
+        "docboss": {
+          "time_s": 0.020586088969139382,
+          "files": 77,
+          "pages": 117,
+          "pages_per_s": 5683.449642882374,
+          "files_per_s": 3740.389935914041,
+          "mb_per_s": 89.91571943436438,
+          "median_ms": 0.18383300630375743,
+          "handled": 80
+        },
+        "python-docx": {
+          "time_s": 0.056906039026216604,
+          "files": 77,
+          "pages": 117,
+          "pages_per_s": 2056.0208020470045,
+          "files_per_s": 1353.1077073300798,
+          "mb_per_s": 32.52753190478147,
+          "median_ms": 0.5976660031592473,
+          "handled": 77
+        }
+      }
+    },
+    "text": {
+      "files_compared": 76,
+      "libraries": {
+        "docboss": {
+          "time_s": 0.02144550003868062,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 5409.060166038293,
+          "files_per_s": 3543.867005335433,
+          "mb_per_s": 86.2489098721801,
+          "median_ms": 0.19083349616266787,
+          "handled": 80,
+          "word_recall": 0.904228042995449,
+          "recall_files": 57
+        },
+        "python-docx": {
+          "time_s": 0.10175474609422963,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 1139.9959653240999,
+          "files_per_s": 746.8939083157896,
+          "mb_per_s": 18.177540321186957,
+          "median_ms": 0.7834580101189204,
+          "handled": 77,
+          "word_recall": 0.847845516457464,
+          "recall_files": 57
+        },
+        "docx2python": {
+          "time_s": 0.58496887300862,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 198.30114960371685,
+          "files_per_s": 129.9214428438145,
+          "mb_per_s": 3.161964824704004,
+          "median_ms": 1.9121255027130246,
+          "handled": 77,
+          "word_recall": 0.9741460389743434,
+          "recall_files": 57
+        },
+        "mammoth": {
+          "time_s": 0.6295230890391394,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 184.26647412893846,
+          "files_per_s": 120.72631063620105,
+          "mb_per_s": 2.9381781736126302,
+          "median_ms": 4.835249994357582,
+          "handled": 79,
+          "word_recall": 0.9563141346096659,
+          "recall_files": 57
+        },
+        "docx2txt": {
+          "time_s": 0.09806279197800905,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 1182.915534630234,
+          "files_per_s": 775.0136261370499,
+          "mb_per_s": 18.861904323658162,
+          "median_ms": 0.3599995034164749,
+          "handled": 79,
+          "word_recall": 0.9737495808760389,
+          "recall_files": 57
+        },
+        "pandoc": {
+          "time_s": 10.115581377933268,
+          "files": 76,
+          "pages": 116,
+          "pages_per_s": 11.467457545549415,
+          "files_per_s": 7.513161840187548,
+          "mb_per_s": 0.18285167514295708,
+          "median_ms": 127.77597949752817,
+          "handled": 79,
+          "word_recall": 0.8935127937133193,
+          "recall_files": 57
+        }
+      }
+    },
+    "markdown": {
+      "files_compared": 79,
+      "libraries": {
+        "docboss": {
+          "time_s": 0.023919076935271733,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 4975.108375713249,
+          "files_per_s": 3302.803039339048,
+          "mb_per_s": 78.54517149989077,
+          "median_ms": 0.19866699585691094,
+          "handled": 80
+        },
+        "mammoth": {
+          "time_s": 0.733831210876815,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 162.1626311830119,
+          "files_per_s": 107.65418372653733,
+          "mb_per_s": 2.56016366182519,
+          "median_ms": 5.205208988627419,
+          "handled": 79
+        },
+        "pandoc": {
+          "time_s": 11.192661458000657,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 10.631966351035953,
+          "files_per_s": 7.0581961490070615,
+          "mb_per_s": 0.1678535536029334,
+          "median_ms": 135.52466699911747,
+          "handled": 79
+        }
+      }
+    },
+    "html": {
+      "files_compared": 79,
+      "libraries": {
+        "docboss": {
+          "time_s": 0.02231849799863994,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 5331.900023346181,
+          "files_per_s": 3539.6647213810784,
+          "mb_per_s": 84.17806610975734,
+          "median_ms": 0.2026250003837049,
+          "handled": 80
+        },
+        "mammoth": {
+          "time_s": 0.6972779950738186,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 170.6636389513509,
+          "files_per_s": 113.29770989207327,
+          "mb_per_s": 2.6943744292419627,
+          "median_ms": 5.075916997157037,
+          "handled": 79
+        },
+        "pandoc": {
+          "time_s": 10.943051130103413,
+          "files": 79,
+          "pages": 119,
+          "pages_per_s": 10.874480854123126,
+          "files_per_s": 7.219193172064932,
+          "mb_per_s": 0.17168228290844564,
+          "median_ms": 134.91125000291504,
+          "handled": 79
+        }
+      }
+    }
+  },
+  "recall_all_files": {
+    "docboss": {
+      "word_recall": 0.9018248324984282,
+      "files": 59,
+      "failures": 0
+    },
+    "python-docx": {
+      "word_recall": 0.8447217431852088,
+      "files": 58,
+      "failures": 2
+    },
+    "docx2python": {
+      "word_recall": 0.9745917969230615,
+      "files": 58,
+      "failures": 2
+    },
+    "mammoth": {
+      "word_recall": 0.9577950114025585,
+      "files": 59,
+      "failures": 0
+    },
+    "docx2txt": {
+      "word_recall": 0.9576902730497325,
+      "files": 59,
+      "failures": 0
+    },
+    "pandoc": {
+      "word_recall": 0.8914728120055231,
+      "files": 59,
+      "failures": 0
+    }
+  },
+  "libreoffice": {
+    "batch_files": 80,
+    "batch_time_s": 4.577973291990929,
+    "batch_files_per_s": 17.474981809080965,
+    "per_file_samples": 10,
+    "per_file_median_ms": 754.7014789888635
+  }
+}
