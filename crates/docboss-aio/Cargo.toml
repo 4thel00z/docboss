@@ -1,7 +1,30 @@
 [package]
 name = "docboss-aio"
+description = "Async, range-fetching DOCX and DOC reader: remote documents over HTTP without downloading them whole"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords = ["docx", "doc", "async", "http", "range-requests"]
+
+[features]
+# Remote documents over HTTP range requests.
+http = ["dep:reqwest"]
 
 [dependencies]
+docboss-core = { workspace = true }
+docboss-model = { workspace = true }
+docboss-zip = { workspace = true }
+docboss-cfb = { workspace = true }
+tokio = { version = "1", default-features = false, features = ["rt", "fs", "sync", "time"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+bytes = "1"
+thiserror = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "time"] }
+docboss-testkit = { workspace = true }
