@@ -1,5 +1,6 @@
 [package]
 name = "docboss-core"
+description = "Open DOCX and DOC files with one call: format detection over the docboss WordprocessingML and Word binary readers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,11 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+docboss-docx = { workspace = true }
+docboss-doc = { workspace = true }
+docboss-cfb = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+docboss-testkit = { workspace = true }

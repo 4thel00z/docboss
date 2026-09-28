@@ -213,6 +213,14 @@ version = "0.1.0"
 [[package]]
 name = "docboss-core"
 version = "0.1.0"
+dependencies = [
+ "docboss-cfb",
+ "docboss-doc",
+ "docboss-docx",
+ "docboss-model",
+ "docboss-testkit",
+ "thiserror",
+]
 
 [[package]]
 name = "docboss-doc"
