@@ -284,7 +284,7 @@ impl DrawingInfo {
     }
 }
 
-/// Picks the branch of `mc:AlternateContent` (ECMA-376 Part 3 §10.2) to
+/// Picks the branch of `mc:AlternateContent` (ECMA-376 Part 3 §9.3, §7.5) to
 /// read: the first `mc:Choice` whose required namespaces this reader
 /// understands, else `mc:Fallback`. Calls `f` with the chosen branch's start.
 fn alternate_content<'a>(reader: &mut Reader<'a>, mut f: impl FnMut(&mut Reader<'a>)) {
@@ -387,6 +387,10 @@ impl<'p> StoryParser<'p> {
             (Ns::MC, "AlternateContent") => alternate_content(reader, |reader| {
                 children(reader, |reader, e| self.block(reader, &e, sink))
             }),
+            (Ns::W, "altChunk") => self.diagnostics.push(Diagnostic::dropped(
+                self.ctx.part,
+                "an alternative format chunk (w:altChunk, ECMA-376 Part 1 §17.17.2.1) was not imported",
+            )),
             _ => {}
         }
     }
@@ -517,7 +521,13 @@ impl<'p> StoryParser<'p> {
             }
             self.run_content(reader, &e, &properties, &mut content, pieces);
         });
-        flush(&properties, &mut content, pieces);
+        if content.is_empty() {
+            return;
+        }
+        pieces.push(Piece::Inline(Inline::Run(Run {
+            properties,
+            content,
+        })));
     }
 
     fn run_content<'a>(
@@ -638,7 +648,8 @@ impl<'p> StoryParser<'p> {
         info.drawing.text_box.extend(blocks);
     }
 
-    /// The DrawingML picture inside `w:drawing` (ECMA-376 Part 1 §20.4).
+    /// The DrawingML picture inside `w:drawing` (ECMA-376 Part 1 §17.3.3.9,
+    /// §20.4).
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
@@ -706,7 +717,7 @@ impl<'p> StoryParser<'p> {
     }
 
     /// A VML picture or text box inside `w:pict` or `w:object` (ECMA-376
-    /// Part 4 §14.1).
+    /// Part 1 §17.3.3.19).
     fn vml(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
@@ -758,7 +769,7 @@ impl<'p> StoryParser<'p> {
         });
     }
 
-    /// `w:tbl` (ECMA-376 Part 1 §17.4.38).
+    /// `w:tbl` (ECMA-376 Part 1 §17.4.37).
     fn table(&mut self, reader: &mut Reader<'_>) -> Table {
         let mut table = Table::default();
         children(reader, |reader, e| {
@@ -788,7 +799,7 @@ impl<'p> StoryParser<'p> {
         }
     }
 
-    /// `w:tr` (ECMA-376 Part 1 §17.4.79).
+    /// `w:tr` (ECMA-376 Part 1 §17.4.78).
     fn row(&mut self, reader: &mut Reader<'_>) -> TableRow {
         let mut row = TableRow::default();
         children(reader, |reader, e| match e.local {

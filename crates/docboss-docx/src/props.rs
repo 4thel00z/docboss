@@ -14,7 +14,7 @@ use crate::xml::{
     attr, children, color, highlight, int_attr, on_off, twips, twips_attr, u32_attr, val,
 };
 
-/// The fonts of a theme's font scheme (ECMA-376 Part 1 §20.1.4.1): latin,
+/// The fonts of a theme's font scheme (ECMA-376 Part 1 §20.1.4.1.18): latin,
 /// east Asian and complex script faces of the major and minor fonts.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Theme {
@@ -334,7 +334,7 @@ fn margins(reader: &mut Reader<'_>) -> [i32; 4] {
     out
 }
 
-/// `w:tblPr` (ECMA-376 Part 1 §17.4.60).
+/// `w:tblPr` (ECMA-376 Part 1 §17.4.59).
 pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
     let mut p = TableProperties::default();
     children(reader, |reader, e| match e.local {
@@ -351,7 +351,7 @@ pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
     p
 }
 
-/// `w:trPr` (ECMA-376 Part 1 §17.4.82).
+/// `w:trPr` (ECMA-376 Part 1 §17.4.81).
 pub fn row_properties(reader: &mut Reader<'_>) -> TableRowProperties {
     let mut p = TableRowProperties::default();
     children(reader, |_, e| match e.local {
@@ -366,7 +366,7 @@ pub fn row_properties(reader: &mut Reader<'_>) -> TableRowProperties {
     p
 }
 
-/// `w:tcPr` (ECMA-376 Part 1 §17.4.70).
+/// `w:tcPr` (ECMA-376 Part 1 §17.4.69).
 pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
     let mut p = TableCellProperties {
         grid_span: 1,
@@ -397,7 +397,7 @@ pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
     p
 }
 
-/// `w:sectPr` (ECMA-376 Part 1 §17.6.17).
+/// `w:sectPr` (ECMA-376 Part 1 §17.6.18).
 pub fn section_properties(reader: &mut Reader<'_>) -> SectionProperties {
     let mut p = SectionProperties::default();
     children(reader, |reader, e| {

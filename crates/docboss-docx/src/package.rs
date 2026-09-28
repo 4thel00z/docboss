@@ -7,7 +7,7 @@ use docboss_model::Diagnostic;
 use docboss_xml::{decode, Event, Ns, Reader};
 use docboss_zip::Archive;
 
-/// One relationship of a part (ECMA-376 Part 2 §9.3).
+/// One relationship of a part (ECMA-376 Part 2 §6.5.3.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Relationship {
     pub id: String,
@@ -59,7 +59,7 @@ fn directory(part: &str) -> &str {
 }
 
 /// Resolves a relationship target against its source part (ECMA-376 Part 2
-/// §9.3.4, with the relative reference resolution of RFC 3986 §5.2).
+/// §6.4, with the relative reference resolution of RFC 3986 §5.2).
 pub fn resolve_target(source: &str, target: &str) -> String {
     let target = target
         .split(['#', '?'])
@@ -118,7 +118,7 @@ fn percent_decode(text: &str) -> String {
 
 /// The relationships part of a source part: `word/document.xml` gives
 /// `word/_rels/document.xml.rels`, and the package itself (`""`) gives
-/// `_rels/.rels` (ECMA-376 Part 2 §9.3.3).
+/// `_rels/.rels` (ECMA-376 Part 2 §6.5.2).
 pub fn rels_name(source: &str) -> String {
     let dir = directory(source);
     let file = &source[source.rfind('/').map_or(0, |i| i + 1)..];
@@ -170,7 +170,7 @@ impl<'a> Package<'a> {
         Some(data)
     }
 
-    /// Reads `[Content_Types].xml` (ECMA-376 Part 2 §10.1.2).
+    /// Reads `[Content_Types].xml` (ECMA-376 Part 2 §7.2.3.2).
     fn read_content_types(&mut self) {
         let mut diagnostics = Vec::new();
         let Some(data) = self.part_into("[Content_Types].xml", &mut diagnostics) else {
@@ -290,7 +290,7 @@ impl<'a> Package<'a> {
 mod tests {
     use super::*;
 
-    /// ECMA-376 Part 2 §9.3.4: targets resolve relative to the source
+    /// ECMA-376 Part 2 §6.4.3: targets resolve relative to the source
     /// part's directory; `..` climbs and a leading `/` is absolute.
     #[test]
     fn resolves_targets() {
@@ -317,7 +317,7 @@ mod tests {
         );
     }
 
-    /// ECMA-376 Part 2 §9.3.3: the relationships part of a source part.
+    /// ECMA-376 Part 2 §6.5.2: the relationships part of a source part.
     #[test]
     fn names_relationship_parts() {
         assert_eq!(rels_name(""), "_rels/.rels");

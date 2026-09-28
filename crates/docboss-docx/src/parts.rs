@@ -261,7 +261,7 @@ pub fn theme(text: &str) -> Theme {
     theme
 }
 
-/// Core properties (ECMA-376 Part 2 §11) and extended properties
+/// Core properties (ECMA-376 Part 2 §8.3) and extended properties
 /// (ECMA-376 Part 1 §22.2) merged into one set.
 pub fn properties(core: Option<&str>, app: Option<&str>) -> Metadata {
     let mut metadata = Metadata::default();

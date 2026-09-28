@@ -100,17 +100,27 @@ impl<'a> Element<'a> {
     /// The value of the attribute `ns:local`. An unprefixed attribute has
     /// no namespace, so `attr(Ns::NONE, "Id")` finds `Id="..."`.
     pub fn attr(&self, ns: Ns, local: &str) -> Option<Cow<'a, str>> {
-        self.attrs()
-            .find(|a| a.ns == ns && a.local == local)
-            .map(|a| a.value())
+        self.attr_raw(ns, local).map(|raw| unescape(raw, true))
     }
 
     /// The raw value of `ns:local` without unescaping, for values known to
     /// hold no entities such as numbers and ids.
     pub fn attr_raw(&self, ns: Ns, local: &str) -> Option<&'a str> {
-        self.attrs()
-            .find(|a| a.ns == ns && a.local == local)
-            .map(|a| a.raw_value)
+        let mut rest = self.raw;
+        while let Some((qname, raw_value)) = next_pair(&mut rest) {
+            let (prefix, name) = split_qname(qname);
+            if name != local || prefix == "xmlns" || qname == "xmlns" {
+                continue;
+            }
+            let found = match prefix {
+                "" => Ns::NONE,
+                _ => self.resolve_prefix(prefix).unwrap_or(Ns::NONE),
+            };
+            if found == ns {
+                return Some(raw_value);
+            }
+        }
+        None
     }
 }
 
@@ -222,6 +232,7 @@ pub struct Reader<'a> {
     unknown: Vec<String>,
     empty_pending: bool,
     close_to: Option<usize>,
+    last_prefix: (&'a str, Ns),
 }
 
 /// Elements nest no deeper than this; deeper start tags are skipped with
@@ -239,6 +250,7 @@ impl<'a> Reader<'a> {
             unknown: Vec::new(),
             empty_pending: false,
             close_to: None,
+            last_prefix: ("\u{0}", Ns::NONE),
         }
     }
 
@@ -280,6 +292,7 @@ impl<'a> Reader<'a> {
         if self.bindings.len() != open.bindings {
             self.bindings.truncate(open.bindings);
             self.scope = Rc::from(self.bindings.as_slice());
+            self.last_prefix = ("\u{0}", Ns::NONE);
         }
         Event::End(open.name)
     }
@@ -452,12 +465,18 @@ impl<'a> Reader<'a> {
             }
             if self.bindings.len() != bindings {
                 self.scope = Rc::from(self.bindings.as_slice());
+                self.last_prefix = ("\u{0}", Ns::NONE);
             }
         }
         let (prefix, local) = split_qname(qname);
         let ns = match prefix {
             "xml" => Ns::XML,
-            _ => resolve(&self.scope, prefix).unwrap_or(Ns::NONE),
+            _ if self.last_prefix.0 == prefix => self.last_prefix.1,
+            _ => {
+                let ns = resolve(&self.scope, prefix).unwrap_or(Ns::NONE);
+                self.last_prefix = (prefix, ns);
+                ns
+            }
         };
         let name = Name { ns, local };
         self.stack.push(Open {

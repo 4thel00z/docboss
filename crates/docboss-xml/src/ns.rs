@@ -1,5 +1,5 @@
 //! Namespace ids. The transitional and strict URIs of each Office Open XML
-//! namespace (ECMA-376 Part 1 §8 and Part 4) map to one id, so a reader
+//! namespace (the transitional and strict conformance classes) map to one id, so a reader
 //! matches `w:p` the same way in both conformance classes.
 
 /// A resolved namespace. Ids below [`Ns::FIRST_UNKNOWN`] are the known

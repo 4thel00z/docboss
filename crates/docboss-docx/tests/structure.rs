@@ -205,7 +205,7 @@ fn revisions() {
     assert_eq!(p.text(), "keep new");
 }
 
-/// ECMA-376 Part 3 §10.2: `mc:AlternateContent` reads the first understood
+/// ECMA-376 Part 3 §9.3: `mc:AlternateContent` reads the first understood
 /// choice, else the fallback; `w:sdt` content is unwrapped.
 #[test]
 fn markup_compatibility_and_content_controls() {
@@ -292,7 +292,7 @@ fn notes_and_comments() {
     assert!(matches!(p.inlines[0], Inline::CommentRangeStart(0)));
 }
 
-/// ECMA-376 Part 2 §11: core properties, and extended properties.
+/// ECMA-376 Part 2 §8.3: core properties, and extended properties.
 #[test]
 fn document_properties() {
     let core = r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><dc:title>Report</dc:title><dc:creator>Me</dc:creator><dcterms:created>2024-05-01T10:00:00Z</dcterms:created></cp:coreProperties>"#;
@@ -378,4 +378,15 @@ fn damaged_packages_never_panic() {
         flipped[i] ^= 0x5A;
         let _ = read(&flipped);
     }
+}
+
+/// ECMA-376 Part 1 §17.17.2.1: imported alternative format content is not
+/// read, and the loss is reported.
+#[test]
+fn alternative_format_chunks_are_reported() {
+    let doc = read(&Docx::new(r#"<w:altChunk r:id="rIdA"/><w:p/>"#).build()).unwrap();
+    assert!(doc
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("altChunk")));
 }
