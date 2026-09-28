@@ -228,6 +228,14 @@ dependencies = [
 [[package]]
 name = "docboss-docx"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "docboss-model",
+ "docboss-testkit",
+ "docboss-xml",
+ "docboss-zip",
+ "thiserror",
+]
 
 [[package]]
 name = "docboss-font"
@@ -280,6 +288,9 @@ dependencies = [
 [[package]]
 name = "docboss-testkit"
 version = "0.1.0"
+dependencies = [
+ "flate2",
+]
 
 [[package]]
 name = "docboss-write"
@@ -294,10 +305,20 @@ dependencies = [
 [[package]]
 name = "docboss-xml"
 version = "0.1.0"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "docboss-zip"
 version = "0.1.0"
+dependencies = [
+ "docboss-model",
+ "docboss-testkit",
+ "flate2",
+ "memchr",
+ "thiserror",
+]
 
 [[package]]
 name = "either"

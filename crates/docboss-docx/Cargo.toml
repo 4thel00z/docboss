@@ -1,5 +1,6 @@
 [package]
 name = "docboss-docx"
+description = "DOCX (ECMA-376 WordprocessingML) reader in pure Rust for docboss"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,15 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+docboss-zip = { workspace = true }
+docboss-xml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+docboss-testkit = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "read"
+harness = false

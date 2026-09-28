@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+<office:meta><dc:title>Fixture Document</dc:title><dc:creator>docboss tests</dc:creator></office:meta>
+<office:styles/>
+<office:automatic-styles>
+<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/><style:header-style/><style:footer-style/></style:page-layout>
+<style:style style:name="Bold" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>
+</office:automatic-styles>
+<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1"><style:header><text:p>Running header</text:p></style:header><style:footer><text:p>Page <text:page-number text:select-page="current">1</text:page-number></text:p></style:footer></style:master-page></office:master-styles>
+<office:body><office:text>
+<text:h text:outline-level="1">Fixture Heading</text:h>
+<text:p>Text with <text:span text:style-name="Bold">bold words</text:span> and a note<text:note text:id="n1" text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Footnote text.</text:p></text:note-body></text:note> here.</text:p>
+<text:p>Commented<office:annotation><dc:creator>Reviewer</dc:creator><dc:date>2024-03-01T12:00:00</dc:date><text:p>A comment body.</text:p></office:annotation> word.</text:p>
+<text:p>Picture: <draw:frame draw:name="Red" svg:width="4cm" svg:height="2cm" text:anchor-type="as-char"><draw:image><office:binary-data>iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAAEklEQVR4nGM4ISf3Hx9moL0CAI/kQGElaeV9AAAAAElFTkSuQmCC</office:binary-data></draw:image><svg:desc>a red box</svg:desc></draw:frame></text:p>
+<text:list><text:list-item><text:p>Item one</text:p></text:list-item><text:list-item><text:p>Item two</text:p></text:list-item></text:list>
+<table:table table:name="T"><table:table-column table:number-columns-repeated="2"/><table:table-row><table:table-cell><text:p>A1</text:p></table:table-cell><table:table-cell><text:p>B1</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell table:number-columns-spanned="2"><text:p>Span</text:p></table:table-cell><table:covered-table-cell/></table:table-row></table:table>
+<text:h text:outline-level="2">Endnote section</text:h>
+<text:p>Ends here<text:note text:id="e1" text:note-class="endnote"><text:note-citation>i</text:note-citation><text:note-body><text:p>Endnote text.</text:p></text:note-body></text:note>.</text:p>
+</office:text></office:body></office:document>

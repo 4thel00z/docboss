@@ -1,5 +1,6 @@
 [package]
 name = "docboss-zip"
+description = "ZIP container reader in pure Rust for docboss: central directory, ZIP64, stored and deflate entries, recovery from local headers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,11 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+thiserror = { workspace = true }
+memchr = { workspace = true }
+flate2 = { workspace = true }
+
+[dev-dependencies]
+docboss-testkit = { workspace = true }
+memchr = { workspace = true }
