@@ -570,3 +570,31 @@ fn vml_text_box_shape_format() {
     assert_eq!(drawing.shape.insets, Some([12_700, 25_400, 38_100, 50_800]));
     assert!(drawing.shape.auto_fit);
 }
+
+/// ECMA-376 Part 1 §20.1.2.2.37, §20.1.4.2.10, §20.1.4.2.19: a shape whose
+/// `wps:spPr` states no fill or line takes them from its `wps:style`
+/// references, theme slots resolved through the color scheme
+/// (§20.1.6.2) with `shade` and `lumMod` applied (§20.1.2.3.31,
+/// §20.1.2.3.20).
+#[test]
+fn text_box_colors_come_from_the_theme() {
+    let theme = r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="4472C4"/></a:accent1></a:clrScheme></a:themeElements></a:theme>"#;
+    let body = r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:style><a:lnRef idx="2"><a:schemeClr val="accent1"><a:shade val="50000"/></a:schemeClr></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"><a:lumMod val="50000"/></a:schemeClr></a:fillRef></wps:style><wps:txbx><w:txbxContent><w:p><w:r><w:t>themed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
+    let package = Docx::new(body)
+        .part(
+            "rIdTheme",
+            "theme",
+            "theme/theme1.xml",
+            "application/vnd.openxmlformats-officedocument.theme+xml",
+            theme.as_bytes(),
+        )
+        .build();
+    let shape = first_drawing(&read(&package).unwrap()).shape;
+    assert_eq!(shape.outline, Some(docboss_model::Color(0x22, 0x39, 0x62)));
+    assert_eq!(shape.outline_width, Some(12_700));
+    let fill = shape.fill.expect("fill from fillRef");
+    assert!(
+        fill.0 < 0x44 && fill.2 < 0xC4 && fill.2 > fill.0,
+        "{fill:?}"
+    );
+}

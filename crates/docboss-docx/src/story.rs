@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use docboss_model::{
     Block, Break, Color, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, MediaId,
     Paragraph, Revision, RevisionKind, Run, RunContent, RunProperties, Section, SectionProperties,
-    ShapeFormat, Table, TableCell, TableRow, VerticalAlign,
+    Table, TableCell, TableRow, VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -259,44 +259,156 @@ fn named_color(name: &str) -> Option<Color> {
     }
 }
 
-/// The color of an `a:solidFill` (ECMA-376 Part 1 §20.1.8.54): an sRGB
-/// value, a system color's last value, a preset or a theme slot.
-/// ECMA-376 Part 1 §20.1.2.3.32, §20.1.2.3.33, §20.1.2.3.22, §20.1.2.3.29.
-fn solid_fill(reader: &mut Reader<'_>) -> Option<Color> {
+/// Applies a color transform (ECMA-376 Part 1 §20.1.2.3): `shade` darkens
+/// towards black, `tint` lightens towards white, `lumMod` and `lumOff`
+/// scale and shift the HSL luminance. Values are in thousandths of a
+/// percent.
+/// ECMA-376 Part 1 §20.1.2.3.31, §20.1.2.3.34, §20.1.2.3.20, §20.1.2.3.21.
+fn transform(color: Color, kind: &str, value: f32) -> Color {
+    let channels = [color.0, color.1, color.2].map(|c| c as f32 / 255.0);
+    let apply = |f: &dyn Fn(f32) -> f32| {
+        let [r, g, b] = channels.map(|c| (f(c).clamp(0.0, 1.0) * 255.0).round() as u8);
+        Color(r, g, b)
+    };
+    match kind {
+        "shade" => apply(&|c| c * value),
+        "tint" => apply(&|c| c * value + (1.0 - value)),
+        "lumMod" | "lumOff" => {
+            let (h, s, l) = to_hsl(channels);
+            let l = match kind {
+                "lumMod" => l * value,
+                _ => l + value,
+            };
+            let [r, g, b] = from_hsl(h, s, l.clamp(0.0, 1.0)).map(|c| (c * 255.0).round() as u8);
+            Color(r, g, b)
+        }
+        _ => color,
+    }
+}
+
+fn to_hsl([r, g, b]: [f32; 3]) -> (f32, f32, f32) {
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let l = (max + min) / 2.0;
+    let d = max - min;
+    if d == 0.0 {
+        return (0.0, 0.0, l);
+    }
+    let s = d / (1.0 - (2.0 * l - 1.0).abs());
+    let h = match max {
+        m if m == r => ((g - b) / d).rem_euclid(6.0),
+        m if m == g => (b - r) / d + 2.0,
+        _ => (r - g) / d + 4.0,
+    };
+    (h * 60.0, s, l)
+}
+
+fn from_hsl(h: f32, s: f32, l: f32) -> [f32; 3] {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+    let m = l - c / 2.0;
+    let (r, g, b) = match (h / 60.0) as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    [r + m, g + m, b + m]
+}
+
+/// The first color element among the children: an sRGB value, a system
+/// color's last value, a preset, or a theme slot resolved through the
+/// theme, each with its transforms applied.
+/// ECMA-376 Part 1 §20.1.8.54, §20.1.2.3.32, §20.1.2.3.33, §20.1.2.3.22, §20.1.2.3.29.
+fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
     let mut color = None;
-    children(reader, |_, e| {
+    children(reader, |reader, e| {
         if e.ns != Ns::A || color.is_some() {
             return;
         }
-        color = match e.local {
+        let base = match e.local {
             "srgbClr" => e.attr_raw(Ns::NONE, "val").and_then(Color::from_hex),
             "sysClr" => e.attr_raw(Ns::NONE, "lastClr").and_then(Color::from_hex),
-            "prstClr" | "schemeClr" => e.attr_raw(Ns::NONE, "val").and_then(named_color),
-            _ => None,
+            "prstClr" => e.attr_raw(Ns::NONE, "val").and_then(named_color),
+            "schemeClr" => e
+                .attr_raw(Ns::NONE, "val")
+                .and_then(|slot| theme.color(slot).or_else(|| named_color(slot))),
+            _ => return,
         };
+        let Some(mut base) = base else {
+            return;
+        };
+        children(reader, |_, modifier| {
+            let value = modifier.attr_raw(Ns::NONE, "val").and_then(int);
+            if let Some(value) = value {
+                base = transform(base, modifier.local, value as f32 / 100_000.0);
+            }
+        });
+        color = Some(base);
     });
     color
 }
 
 /// A shape's fill and outline from `wps:spPr` (ECMA-376 Part 1 §20.4.2.35,
-/// §20.1.2.2.24 `a:ln`).
-fn shape_properties(reader: &mut Reader<'_>, shape: &mut ShapeFormat) {
+/// §20.1.2.2.24 `a:ln`), recording which of the two it states.
+fn shape_properties(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingInfo) {
     children(reader, |reader, e| {
         if e.ns != Ns::A {
             return;
         }
         match e.local {
-            "solidFill" => shape.fill = solid_fill(reader),
-            "noFill" => shape.fill = None,
+            "solidFill" => {
+                info.drawing.shape.fill = color_choice(reader, theme);
+                info.fill_stated = true;
+            }
+            "noFill" | "gradFill" | "blipFill" | "pattFill" => {
+                info.drawing.shape.fill = None;
+                info.fill_stated = e.local == "noFill";
+            }
             "ln" => {
-                shape.outline_width = e.attr_raw(Ns::NONE, "w").and_then(int);
-                let mut outline = None;
+                info.drawing.shape.outline_width = e.attr_raw(Ns::NONE, "w").and_then(int);
                 children(reader, |reader, fill| {
-                    if fill.ns == Ns::A && fill.local == "solidFill" {
-                        outline = solid_fill(reader);
+                    if fill.ns != Ns::A {
+                        return;
+                    }
+                    match fill.local {
+                        "solidFill" => {
+                            info.drawing.shape.outline = color_choice(reader, theme);
+                            info.line_stated = true;
+                        }
+                        "noFill" => {
+                            info.drawing.shape.outline = None;
+                            info.line_stated = true;
+                        }
+                        _ => {}
                     }
                 });
-                shape.outline = outline;
+            }
+            _ => {}
+        }
+    });
+}
+
+/// The fill and line a shape takes from its `wps:style` references when its
+/// `wps:spPr` states none (ECMA-376 Part 1 §20.1.2.2.37, §20.1.4.2.10,
+/// §20.1.4.2.19): index 0 means none, any other index the reference's
+/// color.
+fn shape_style(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingInfo) {
+    children(reader, |reader, e| {
+        let index = e.attr_raw(Ns::NONE, "idx").and_then(int).unwrap_or(0);
+        match e.local {
+            "fillRef" if !info.fill_stated => {
+                info.drawing.shape.fill =
+                    (index > 0).then(|| color_choice(reader, theme)).flatten();
+            }
+            "lnRef" if !info.line_stated => {
+                info.drawing.shape.outline =
+                    (index > 0).then(|| color_choice(reader, theme)).flatten();
+                if info.drawing.shape.outline_width.is_none() {
+                    info.drawing.shape.outline_width = Some(index.clamp(0, 3) * 6_350);
+                }
             }
             _ => {}
         }
@@ -323,6 +435,10 @@ fn vml_true(value: Option<&str>, default: bool) -> bool {
 
 struct DrawingInfo {
     drawing: Drawing,
+    /// Whether `wps:spPr` stated the fill and the line, so `wps:style` does
+    /// not override them.
+    fill_stated: bool,
+    line_stated: bool,
     anchored: bool,
     x: i64,
     y: i64,
@@ -343,6 +459,8 @@ impl DrawingInfo {
                 text_box: Vec::new(),
                 shape: Default::default(),
             },
+            fill_stated: false,
+            line_stated: false,
             anchored: false,
             x: 0,
             y: 0,
@@ -800,7 +918,11 @@ impl<'p> StoryParser<'p> {
                     return;
                 }
                 (Ns::WPS, "spPr") => {
-                    shape_properties(reader, &mut info.drawing.shape);
+                    shape_properties(reader, self.ctx.theme, info);
+                    return;
+                }
+                (Ns::WPS, "style") => {
+                    shape_style(reader, self.ctx.theme, info);
                     return;
                 }
                 (Ns::WPS, "bodyPr") => {
