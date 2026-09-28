@@ -253,7 +253,7 @@ fn grid_columns(table: &Table, props: &TableProperties, available: f32) -> Vec<f
         (Some(pct), _) if pct > 0 => Some(available * pct as f32 / 5000.0),
         _ => None,
     };
-    let target = wanted.or((!props.fixed_layout && total > available * 1.001).then_some(available));
+    let target = wanted;
     if let Some(target) = target.filter(|t| *t > 0.0 && total > 0.0) {
         grid.iter_mut().for_each(|w| *w *= target / total);
     }

@@ -853,3 +853,26 @@ fn vertically_merged_cells_have_no_inner_border() {
     assert!(inner.iter().all(|(x0, _)| *x0 >= 216.0 - 0.01), "{inner:?}");
     assert!(inner.iter().any(|(_, x1)| *x1 > 300.0), "{inner:?}");
 }
+
+/// ECMA-376 Part 1 §17.4.48: a table whose grid is wider than the text
+/// keeps its grid widths and extends past the right margin, as Word and
+/// LibreOffice draw it; only a percentage width scales the grid.
+#[test]
+fn wide_grids_keep_their_widths() {
+    let cell = |text: &str| TableCell {
+        blocks: vec![para(text)],
+        ..TableCell::default()
+    };
+    let table = Table {
+        grid: vec![5760, 5760],
+        rows: vec![TableRow {
+            cells: vec![cell("left"), cell("right")],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let right = runs.iter().find(|r| r.text == "right").unwrap().glyphs[0].x;
+    assert!((right - (72.0 + 288.0 + 5.4)).abs() < 0.01, "{right}");
+}
