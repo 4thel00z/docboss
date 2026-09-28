@@ -677,3 +677,47 @@ fn list_labels_in_dark_cells_turn_white_too() {
     let label = runs.iter().find(|r| r.text.starts_with("1.")).unwrap();
     assert_eq!(label.color, docboss_model::Color::WHITE);
 }
+
+/// ECMA-376 Part 1 §17.3.3.30: a bullet stored as a symbol font's code in
+/// the U+F000 range draws its Unicode form when that font is missing,
+/// instead of the missing-glyph box.
+#[test]
+fn symbol_font_bullets_draw_their_unicode_form() {
+    for (font, code) in [("starbats", '\u{F095}'), ("Symbol", '\u{F0B7}')] {
+        let mut level = Level {
+            format: NumberFormat::Bullet,
+            text: code.to_string(),
+            ..Level::default()
+        };
+        level.run.fonts.ascii = Some(font.into());
+        level.run.fonts.high_ansi = Some(font.into());
+        let mut document = doc(vec![para_with(
+            ParagraphProperties {
+                numbering: Some(NumberingRef {
+                    num_id: 1,
+                    level: 0,
+                }),
+                ..ParagraphProperties::default()
+            },
+            vec![run("item")],
+        )]);
+        document.numbering = Numbering {
+            abstracts: vec![AbstractNumbering {
+                id: 0,
+                levels: vec![level],
+            }],
+            instances: vec![NumberingInstance {
+                num_id: 1,
+                abstract_id: 0,
+                ..NumberingInstance::default()
+            }],
+        };
+        let layout = laid(&document);
+        let runs = runs(&layout, 0);
+        let label = runs.iter().find(|r| r.text.contains(code)).unwrap();
+        assert_ne!(
+            label.glyphs[0].id, 0,
+            "{font} bullet drew the missing glyph"
+        );
+    }
+}

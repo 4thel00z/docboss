@@ -242,11 +242,17 @@ impl<'a> Shaper<'a> {
             c
         };
         let primary = self.select(style.slot(shown), style.bold, style.italic);
-        let hit = primary.and_then(|f| self.lookup(f, shown).map(|g| (f, g)));
-        let hit = hit.or_else(|| {
-            let fallback = self.db.fallback(shown, style.bold, style.italic)?;
-            self.lookup(fallback, shown).map(|g| (fallback, g))
-        });
+        let mapped = style
+            .slot(shown)
+            .filter(|_| ('\u{F020}'..='\u{F0FF}').contains(&shown))
+            .and_then(|family| docboss_font::symbol_to_unicode(family, shown));
+        let hit = match mapped {
+            Some(mapped) => primary
+                .and_then(|f| self.lookup(f, shown).map(|g| (f, g)))
+                .or_else(|| self.find(primary, mapped, style))
+                .or_else(|| self.find(None, shown, style)),
+            None => self.find(primary, shown, style),
+        };
         let Some((font, (id, units))) = hit else {
             let font = primary.unwrap_or(FontId(u32::MAX));
             let upem = self
@@ -271,6 +277,21 @@ impl<'a> Shaper<'a> {
             advance: f32::from(units) * size / upem + style.spacing,
             size,
         }
+    }
+
+    /// A face and glyph for `c`: the selected face, else a fallback face
+    /// that has the character.
+    fn find(
+        &mut self,
+        primary: Option<FontId>,
+        c: char,
+        style: &RunStyle,
+    ) -> Option<(FontId, (u16, u16))> {
+        let hit = primary.and_then(|f| self.lookup(f, c).map(|g| (f, g)));
+        hit.or_else(|| {
+            let fallback = self.db.fallback(c, style.bold, style.italic)?;
+            self.lookup(fallback, c).map(|g| (fallback, g))
+        })
     }
 
     /// Pair kerning between two glyphs of one face, in points.
