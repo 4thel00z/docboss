@@ -16,6 +16,8 @@ const ZIP64_EOCD_SIG: u32 = 0x0606_4b50;
 const LOCAL_SIG: u32 = 0x0403_4b50;
 const EOCD_LEN: u64 = 22;
 const MAX_COMMENT: u64 = 0xFFFF;
+/// The first tail read; archives without a long comment end inside it.
+const FIRST_TAIL: u64 = 8 * 1024;
 
 fn u16_at(data: &[u8], at: usize) -> Option<u16> {
     let bytes = data.get(at..at.checked_add(2)?)?;
@@ -53,19 +55,30 @@ struct EndRecord {
 /// (APPNOTE §4.3.14, §4.3.15).
 async fn end_record(fetcher: &Fetcher) -> Result<EndRecord> {
     let len = fetcher.len();
-    let tail_start = len.saturating_sub(MAX_COMMENT + EOCD_LEN + 20);
-    let tail = fetcher.fetch_one(tail_start..len).await?;
-    let at = tail
-        .windows(4)
-        .enumerate()
-        .rev()
-        .filter(|(_, window)| *window == EOCD_SIG)
-        .map(|(at, _)| at)
-        .find(|&at| {
-            u16_at(&tail, at + 20)
-                .is_some_and(|comment| at + 22 + usize::from(comment) <= tail.len())
-        })
-        .ok_or_else(|| Error::Container("no end of central directory record".into()))?;
+    let mut found = None;
+    for window in [FIRST_TAIL, MAX_COMMENT + EOCD_LEN + 20] {
+        let tail_start = len.saturating_sub(window);
+        let tail = fetcher.fetch_one(tail_start..len).await?;
+        let at = tail
+            .windows(4)
+            .enumerate()
+            .rev()
+            .filter(|(_, bytes)| *bytes == EOCD_SIG)
+            .map(|(at, _)| at)
+            .find(|&at| {
+                u16_at(&tail, at + 20)
+                    .is_some_and(|comment| at + 22 + usize::from(comment) <= tail.len())
+            });
+        if let Some(at) = at {
+            found = Some((tail_start, tail, at));
+            break;
+        }
+        if tail_start == 0 {
+            break;
+        }
+    }
+    let (tail_start, tail, at) =
+        found.ok_or_else(|| Error::Container("no end of central directory record".into()))?;
     let field32 = |off: usize| u32_at(&tail, at + off).map(u64::from);
     let mut record = EndRecord {
         size: field32(12).unwrap_or(0),

@@ -10,6 +10,26 @@ use crate::fetch::{FetchObserver, Fetcher};
 use crate::zip::{self, ZipIndex};
 use crate::{Error, Result};
 
+/// The stack of the parsing thread: the readers recurse into nested
+/// tables, fields and text boxes, deeper than a runtime worker's stack.
+const PARSE_STACK: usize = 64 << 20;
+
+/// Runs the synchronous reader on its own thread so the runtime is never
+/// blocked, with a stack large enough for deeply nested documents.
+async fn parse(bytes: Vec<u8>, options: docboss_core::Options) -> Result<Document> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("docboss-parse".into())
+        .stack_size(PARSE_STACK)
+        .spawn(move || {
+            let _ = sender.send(docboss_core::read_with(&bytes, &options));
+        })?;
+    let result = receiver
+        .await
+        .map_err(|_| std::io::Error::other("the parsing thread panicked"))?;
+    Ok(result?)
+}
+
 /// What [`AsyncDocument::read`] fetches and how it opens the document.
 #[derive(Debug, Clone, Default)]
 pub struct ReadOptions {
@@ -207,10 +227,7 @@ impl AsyncDocument {
                 Vec::new(),
             ),
         };
-        let mut document =
-            tokio::task::spawn_blocking(move || docboss_core::read_with(&bytes, &core_options))
-                .await
-                .map_err(std::io::Error::other)??;
+        let mut document = parse(bytes, core_options).await?;
         if !skipped.is_empty() {
             document.diagnostics.retain(|d| {
                 !skipped

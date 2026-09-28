@@ -25,6 +25,10 @@ bytes = "1"
 thiserror = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"], optional = true }
 
+[[example]]
+name = "fetched"
+required-features = ["http"]
+
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "time"] }
 docboss-testkit = { workspace = true }

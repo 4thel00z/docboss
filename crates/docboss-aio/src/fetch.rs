@@ -136,13 +136,17 @@ impl Fetcher {
             .flat_map(|r| self.missing(r))
             .collect();
         gaps.sort_by_key(|r| r.start);
-        let merged = coalesce(gaps, COALESCE_GAP);
+        let merged = coalesce(gaps, COALESCE_GAP, |between| {
+            self.missing(between) == [between.clone()]
+        });
         let fetched: Vec<(u64, Bytes)> = stream::iter(merged.into_iter().map(|r| self.request(r)))
             .buffer_unordered(CONCURRENCY)
             .try_collect()
             .await?;
         if let Ok(mut spans) = self.spans.lock() {
-            spans.extend(fetched);
+            fetched
+                .into_iter()
+                .for_each(|(start, data)| insert_span(&mut spans, start, data));
         }
         Ok(wanted
             .iter()
@@ -174,12 +178,53 @@ impl Fetcher {
     }
 }
 
-/// Merges sorted ranges whose gaps are at most `gap` bytes.
-pub fn coalesce(sorted: Vec<Range<u64>>, gap: u64) -> Vec<Range<u64>> {
+/// Inserts a span, merging it with every span it overlaps or touches, so
+/// the cache stays a set of disjoint spans and a lookup finds the one span
+/// covering an offset.
+fn insert_span(spans: &mut BTreeMap<u64, Bytes>, start: u64, data: Bytes) {
+    let end = start + data.len() as u64;
+    let first = spans
+        .range(..=start)
+        .next_back()
+        .filter(|(&s, d)| s + d.len() as u64 >= start)
+        .map_or(start, |(&s, _)| s);
+    let touching: Vec<u64> = spans.range(first..=end).map(|(&s, _)| s).collect();
+    if touching.is_empty() {
+        spans.insert(start, data);
+        return;
+    }
+    let merged_end = touching
+        .iter()
+        .filter_map(|s| spans.get(s).map(|d| s + d.len() as u64))
+        .fold(end, u64::max);
+    let merged_start = first.min(start);
+    let mut merged = vec![0u8; (merged_end - merged_start) as usize];
+    for s in &touching {
+        if let Some(old) = spans.remove(s) {
+            let at = (s - merged_start) as usize;
+            merged[at..at + old.len()].copy_from_slice(&old);
+        }
+    }
+    let at = (start - merged_start) as usize;
+    merged[at..at + data.len()].copy_from_slice(&data);
+    spans.insert(merged_start, Bytes::from(merged));
+}
+
+/// Merges sorted ranges whose gaps are at most `gap` bytes, when `mergeable`
+/// accepts the bytes between them (the fetcher refuses cached bytes, so
+/// nothing is fetched twice).
+pub fn coalesce(
+    sorted: Vec<Range<u64>>,
+    gap: u64,
+    mergeable: impl Fn(&Range<u64>) -> bool,
+) -> Vec<Range<u64>> {
     let mut out: Vec<Range<u64>> = Vec::with_capacity(sorted.len());
     for range in sorted {
         if let Some(last) = out.last_mut() {
-            if range.start <= last.end.saturating_add(gap) {
+            let between = last.end..range.start;
+            if range.start <= last.end
+                || range.start <= last.end.saturating_add(gap) && mergeable(&between)
+            {
                 last.end = last.end.max(range.end);
                 continue;
             }
@@ -196,8 +241,10 @@ mod tests {
 
     #[test]
     fn coalesce_merges_close_ranges_only() {
-        let merged = coalesce(vec![0..10, 12..20, 100..110, 105..130], 4);
+        let merged = coalesce(vec![0..10, 12..20, 100..110, 105..130], 4, |_| true);
         assert_eq!(merged, vec![0..20, 100..130]);
+        let kept = coalesce(vec![0..10, 12..20], 4, |_| false);
+        assert_eq!(kept, vec![0..10, 12..20]);
     }
 
     #[tokio::test]
@@ -216,5 +263,19 @@ mod tests {
         let spanning = fetcher.fetch_one(15..40).await.unwrap();
         assert_eq!(spanning, data[15..40]);
         assert_eq!(fetcher.bytes_fetched(), 10 + 10 + 20);
+    }
+
+    #[test]
+    fn spans_merge_into_disjoint_runs() {
+        let mut spans = BTreeMap::new();
+        insert_span(&mut spans, 10, Bytes::from_static(b"aaaa"));
+        insert_span(&mut spans, 20, Bytes::from_static(b"bbbb"));
+        insert_span(&mut spans, 12, Bytes::from_static(b"cccccccccc"));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&spans[&10][..], b"aaccccccccccbb");
+        insert_span(&mut spans, 22, Bytes::from_static(b"dd"));
+        assert_eq!(spans.len(), 1);
+        insert_span(&mut spans, 40, Bytes::from_static(b"e"));
+        assert_eq!(spans.len(), 2);
     }
 }
