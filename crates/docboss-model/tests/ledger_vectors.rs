@@ -20,7 +20,10 @@ fn format(name: &str) -> NumberFormat {
 #[test]
 fn number_labels_match_the_reference() {
     let mut checked = 0;
-    for line in VECTORS.lines().filter(|line| !line.starts_with('#') && !line.is_empty()) {
+    for line in VECTORS
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.is_empty())
+    {
         let fields: Vec<&str> = line.split('\t').collect();
         let [name, number, label] = fields[..] else {
             panic!("malformed vector line {line:?}");
