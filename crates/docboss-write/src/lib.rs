@@ -9,6 +9,24 @@
 //! Output is deterministic: the same document produces identical bytes.
 //! The crate never reads clocks or randomness; ZIP entries carry a fixed
 //! 1980-01-01 timestamp and dates appear only when the metadata states them.
+//!
+//! ```
+//! use docboss_write::{DocumentBuilder, ListKind, Para, TableBuilder};
+//!
+//! let mut doc = DocumentBuilder::new();
+//! doc.title("Q3 Report").heading(1, "Summary");
+//! doc.paragraph(Para::new().text("Revenue grew ").bold("12%").text("."));
+//! doc.items(ListKind::Bullet, &["North", "South"]);
+//! let width = doc.text_width();
+//! doc.block(TableBuilder::new(2, width).header(&["Region", "Growth"]).row(&["North", "14%"]));
+//! let bytes = doc.to_bytes()?;
+//! assert!(bytes.starts_with(b"PK"));
+//!
+//! let options = docboss_write::markdown::Options::default();
+//! let from_markdown = docboss_write::markdown::to_docx("# Notes\n\n- one\n- two\n", &options)?;
+//! assert!(from_markdown.starts_with(b"PK"));
+//! # Ok::<(), docboss_write::Error>(())
+//! ```
 
 mod body;
 mod builder;
