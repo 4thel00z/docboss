@@ -1,5 +1,6 @@
 [package]
 name = "docboss-write"
+description = "DOCX writer for docboss: the document model, a composition API and Markdown to WordprocessingML, deterministic output"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,7 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+flate2 = { workspace = true }
+thiserror = { workspace = true }
+pulldown-cmark = { version = "0.13", default-features = false }
