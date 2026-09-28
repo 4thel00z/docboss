@@ -12,13 +12,17 @@ the Python bindings. Sister project of pdfboss; mirror its conventions.
   tokenizer, WordprocessingML reader (ECMA-376).
 - `crates/docboss-cfb`, `docboss-doc`: compound file ([MS-CFB]) and Word
   binary ([MS-DOC]) readers.
+- `crates/docboss-crypt`: password-protected DOCX ([MS-OFFCRYPTO] Agile and
+  Standard encryption).
 - `crates/docboss-core`: format sniffing and `Document::open` over both.
+- `crates/docboss-aio`: async reads over files or http(s) URLs that fetch only
+  the byte ranges they need.
 - `crates/docboss-output`: text, Markdown and JSON from the model.
 - `crates/docboss-font`, `docboss-layout`, `docboss-render`: font parsing,
   page layout, rasterization and image encoders.
 - `crates/docboss-write`: DOCX writer from the model.
-- `crates/docboss-cli`, `docboss-py`: the `docboss` binary and the Python
-  extension.
+- `crates/docboss-cli`, `docboss-py`, `docboss-tui`: the `docboss` binary,
+  the Python extension and the terminal explorer.
 - `ledger/`: the Lean conformance ledger and its gate.
 
 ## Specification citations
@@ -61,6 +65,11 @@ test citation.
 - Tests use real fixtures (committed small files, or files generated with
   `soffice --headless --convert-to`) and real components, not mocks.
 - Conventional commits: `feat(docx): ...`, terse body with verification.
+
+## Builds
+
+Build into the shared cargo target from `~/.cargo/config.toml`; never set
+`CARGO_TARGET_DIR` per worktree. Delete scratch renders after scoring them.
 
 ## Checks
 
