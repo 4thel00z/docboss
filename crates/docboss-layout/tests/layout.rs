@@ -798,3 +798,58 @@ fn page_fields_follow_the_section_number_format() {
         .collect();
     assert_eq!(tops, ["i/A", "ii/B"]);
 }
+
+/// ECMA-376 Part 1 §17.4.84: no border is drawn between the rows of a
+/// vertically merged cell, while the unmerged column keeps its rule.
+#[test]
+fn vertically_merged_cells_have_no_inner_border() {
+    let all = Borders {
+        top: Some(border()),
+        left: Some(border()),
+        bottom: Some(border()),
+        right: Some(border()),
+        inside_horizontal: Some(border()),
+        inside_vertical: Some(border()),
+    };
+    let cell = |text: &str, merge: Option<docboss_model::VerticalMerge>| TableCell {
+        properties: docboss_model::TableCellProperties {
+            vertical_merge: merge,
+            ..docboss_model::TableCellProperties::default()
+        },
+        blocks: vec![para(text)],
+    };
+    use docboss_model::VerticalMerge::{Continue, Restart};
+    let table = Table {
+        properties: TableProperties {
+            borders: Some(all),
+            ..TableProperties::default()
+        },
+        grid: vec![2880, 2880],
+        rows: vec![
+            TableRow {
+                cells: vec![cell("merged", Some(Restart)), cell("b1", None)],
+                ..TableRow::default()
+            },
+            TableRow {
+                cells: vec![cell("", Some(Continue)), cell("b2", None)],
+                ..TableRow::default()
+            },
+        ],
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let b2 = runs.iter().find(|r| r.text == "b2").unwrap().baseline;
+    let b1 = runs.iter().find(|r| r.text == "b1").unwrap().baseline;
+    let inner: Vec<(f32, f32)> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Line { from, to, .. } if from.1 == to.1 && from.1 > b1 && from.1 < b2 => {
+                Some((from.0.min(to.0), from.0.max(to.0)))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(inner.iter().all(|(x0, _)| *x0 >= 216.0 - 0.01), "{inner:?}");
+    assert!(inner.iter().any(|(_, x1)| *x1 > 300.0), "{inner:?}");
+}

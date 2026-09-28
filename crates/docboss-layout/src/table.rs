@@ -260,8 +260,27 @@ fn grid_columns(table: &Table, props: &TableProperties, available: f32) -> Vec<f
     grid
 }
 
+/// The cell of a row whose first grid column is `column`.
+fn cell_starting_at(
+    row: &docboss_model::TableRow,
+    column: usize,
+) -> Option<&docboss_model::TableCell> {
+    let mut at = 0usize;
+    for cell in &row.cells {
+        if at == column {
+            return Some(cell);
+        }
+        at += span(cell);
+        if at > column {
+            return None;
+        }
+    }
+    None
+}
+
 /// ECMA-376 Part 1 §17.4: lays out a table at `width` points as one slab
-/// per row.
+/// per row. Borders inside a vertically merged cell (§17.4.84) are not
+/// drawn.
 pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<Slab> {
     let props = effective_properties(ctx, table);
     let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
@@ -344,13 +363,22 @@ fn layout_table_rows(
                     borders.inside_horizontal
                 }
             };
+            let merged_below = table
+                .rows
+                .get(r + 1)
+                .and_then(|next| cell_starting_at(next, column - span))
+                .is_some_and(|below| {
+                    below.properties.vertical_merge == Some(VerticalMerge::Continue)
+                });
+            let top = own.top.or(if r == 0 { borders.top } else { edge_h(false) });
+            let bottom = own.bottom.or(if r + 1 == row_count {
+                borders.bottom
+            } else {
+                edge_h(false)
+            });
             let sides = Sides {
-                top: own.top.or(if r == 0 { borders.top } else { edge_h(false) }),
-                bottom: own.bottom.or(if r + 1 == row_count {
-                    borders.bottom
-                } else {
-                    edge_h(false)
-                }),
+                top: top.filter(|_| !continues),
+                bottom: bottom.filter(|_| !merged_below),
                 left: own.left.or(if c == 0 {
                     borders.left
                 } else {
