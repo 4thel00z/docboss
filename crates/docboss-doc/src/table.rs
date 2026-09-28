@@ -30,9 +30,17 @@ pub struct RowInfo {
     pub table: TableProperties,
 }
 
+/// A TC80 ([MS-DOC] §2.9.313). A zeroed border states nothing, so the
+/// cell keeps the table's border on that side (`sprmTTableBorders`), as
+/// Word draws it.
 fn tc80(bytes: &[u8]) -> CellFormat {
     let grf = u16_at(bytes, 0).unwrap_or(0);
-    let side = |at: usize| bytes.get(at..at + 4).and_then(brc80);
+    let side = |at: usize| {
+        bytes
+            .get(at..at + 4)
+            .filter(|b| *b != [0u8; 4])
+            .and_then(brc80)
+    };
     let borders = Borders {
         top: side(4),
         left: side(8),
@@ -242,5 +250,17 @@ mod tests {
             RowInfo::parse(&both).table.cell_margins,
             Some([0, 20, 0, 70])
         );
+    }
+
+    /// [MS-DOC] §2.9.313: a zeroed border in a TC80 leaves the side to the
+    /// table's borders; a set one is the cell's own.
+    #[test]
+    fn zeroed_tc80_borders_are_unstated() {
+        let mut tc = [0u8; 20];
+        assert_eq!(super::tc80(&tc).borders, None);
+        tc[12..16].copy_from_slice(&[4, 1, 1, 0]);
+        let borders = super::tc80(&tc).borders.unwrap();
+        assert!(borders.top.is_none());
+        assert_eq!(borders.bottom.unwrap().size, 4);
     }
 }

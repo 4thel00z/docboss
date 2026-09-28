@@ -6,9 +6,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Break, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, Media, MediaId,
-    Paragraph, ParagraphProperties, Revision, RevisionKind, Run, RunContent, RunProperties, Styles,
-    Table, TableCell, TableRow,
+    Block, Borders, Break, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, Media,
+    MediaId, Paragraph, ParagraphProperties, Revision, RevisionKind, Run, RunContent,
+    RunProperties, Styles, Table, TableCell, TableRow,
 };
 
 use crate::fkp::{find, FormatRun};
@@ -728,6 +728,7 @@ fn table(paragraphs: &mut Paragraphs, level: i32, context: &Context<'_>) -> Tabl
     let mut cells: Vec<TableCell> = Vec::new();
     let mut cell_blocks: Vec<Block> = Vec::new();
     let mut edges: Vec<Vec<i32>> = Vec::new();
+    let mut row_borders: Vec<Option<Borders>> = Vec::new();
     while let Some(next) = paragraphs.peek() {
         let depth = next.extra.depth();
         if depth < level {
@@ -749,6 +750,7 @@ fn table(paragraphs: &mut Paragraphs, level: i32, context: &Context<'_>) -> Tabl
             }
             let row = RowInfo::parse(&info.grpprl);
             edges.push(row.edges.clone());
+            row_borders.push(row.table.borders);
             out.rows.push(finish_row(std::mem::take(&mut cells), &row));
             if out.properties == Default::default() {
                 out.properties = row.table.clone();
@@ -777,9 +779,54 @@ fn table(paragraphs: &mut Paragraphs, level: i32, context: &Context<'_>) -> Tabl
         ));
         out.rows.push(finish_row(cells, &RowInfo::default()));
         edges.push(Vec::new());
+        row_borders.push(None);
     }
     apply_grid(&mut out, &edges);
+    if row_borders.windows(2).any(|pair| pair[0] != pair[1]) {
+        apply_row_borders(&mut out, &row_borders);
+    }
     out
+}
+
+/// Gives each cell its own row's table borders when the rows state
+/// different ones: `sprmTTableBorders` belongs to a row ([MS-DOC]
+/// §2.6.3), and a row without it has no borders beyond its cells' own.
+fn apply_row_borders(table: &mut Table, row_borders: &[Option<Borders>]) {
+    table.properties.borders = None;
+    let count = table.rows.len();
+    for (r, (row, borders)) in table.rows.iter_mut().zip(row_borders).enumerate() {
+        let Some(outer) = borders else {
+            continue;
+        };
+        let cells = row.cells.len();
+        for (c, cell) in row.cells.iter_mut().enumerate() {
+            let own = cell.properties.borders.unwrap_or_default();
+            let inherited = Borders {
+                top: own.top.or(if r == 0 {
+                    outer.top
+                } else {
+                    outer.inside_horizontal
+                }),
+                bottom: own.bottom.or(if r + 1 == count {
+                    outer.bottom
+                } else {
+                    outer.inside_horizontal
+                }),
+                left: own.left.or(if c == 0 {
+                    outer.left
+                } else {
+                    outer.inside_vertical
+                }),
+                right: own.right.or(if c + 1 == cells {
+                    outer.right
+                } else {
+                    outer.inside_vertical
+                }),
+                ..own
+            };
+            cell.properties.borders = Some(inherited);
+        }
+    }
 }
 
 fn finish_row(cells: Vec<TableCell>, row: &RowInfo) -> TableRow {
