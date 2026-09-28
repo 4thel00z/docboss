@@ -29,17 +29,17 @@
         "outcome": "ok",
         "handled": 96,
         "files": 100,
-        "baseline_mb": 23.26528,
-        "peak_mb": 43.679744,
-        "delta_mb": 20.414464
+        "baseline_mb": 23.18336,
+        "peak_mb": 42.303488,
+        "delta_mb": 19.120128
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
         "baseline_mb": 23.298048,
-        "peak_mb": 61.161472,
-        "delta_mb": 37.863424
+        "peak_mb": 61.554688,
+        "delta_mb": 38.25664
       }
     },
     "antiword": {
@@ -47,19 +47,19 @@
         "outcome": "ok",
         "handled": 75,
         "files": 100,
-        "baseline_mb": 22.642688,
-        "peak_mb": 23.691264,
-        "delta_mb": 1.048576,
+        "baseline_mb": 22.495232,
+        "peak_mb": 23.625728,
+        "delta_mb": 1.130496,
         "child_peak_mb": 2.53952
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 22.659072,
+        "baseline_mb": 22.642688,
         "peak_mb": 23.805952,
-        "delta_mb": 1.14688,
-        "child_peak_mb": 2.965504
+        "delta_mb": 1.163264,
+        "child_peak_mb": 2.94912
       }
     },
     "catdoc": {
@@ -68,18 +68,18 @@
         "handled": 96,
         "files": 100,
         "baseline_mb": 22.560768,
-        "peak_mb": 23.18336,
-        "delta_mb": 0.622592,
+        "peak_mb": 23.232512,
+        "delta_mb": 0.671744,
         "child_peak_mb": 2.015232
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 22.642688,
+        "baseline_mb": 22.675456,
         "peak_mb": 23.92064,
-        "delta_mb": 1.277952,
-        "child_peak_mb": 2.850816
+        "delta_mb": 1.245184,
+        "child_peak_mb": 2.883584
       }
     }
   }

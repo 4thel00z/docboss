@@ -29,17 +29,17 @@
         "outcome": "ok",
         "handled": 99,
         "files": 100,
-        "baseline_mb": 23.281664,
-        "peak_mb": 31.883264,
-        "delta_mb": 8.6016
+        "baseline_mb": 23.298048,
+        "peak_mb": 31.70304,
+        "delta_mb": 8.404992
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 23.18336,
-        "peak_mb": 34.308096,
-        "delta_mb": 11.124736
+        "baseline_mb": 23.150592,
+        "peak_mb": 34.340864,
+        "delta_mb": 11.190272
       }
     },
     "python-docx": {
@@ -47,16 +47,16 @@
         "outcome": "ok",
         "handled": 96,
         "files": 100,
-        "baseline_mb": 34.603008,
-        "peak_mb": 58.5728,
-        "delta_mb": 23.969792
+        "baseline_mb": 34.881536,
+        "peak_mb": 58.834944,
+        "delta_mb": 23.953408
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 34.619392,
-        "peak_mb": 41.648128,
+        "baseline_mb": 34.603008,
+        "peak_mb": 41.631744,
         "delta_mb": 7.028736
       }
     },
@@ -66,16 +66,16 @@
         "handled": 97,
         "files": 100,
         "baseline_mb": 29.507584,
-        "peak_mb": 54.853632,
-        "delta_mb": 25.346048
+        "peak_mb": 55.066624,
+        "delta_mb": 25.55904
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
         "baseline_mb": 29.589504,
-        "peak_mb": 30.326784,
-        "delta_mb": 0.73728
+        "peak_mb": 30.294016,
+        "delta_mb": 0.704512
       }
     },
     "mammoth": {
@@ -84,16 +84,16 @@
         "handled": 98,
         "files": 100,
         "baseline_mb": 30.949376,
-        "peak_mb": 82.16576,
-        "delta_mb": 51.216384
+        "peak_mb": 82.24768,
+        "delta_mb": 51.298304
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 30.785536,
-        "peak_mb": 32.407552,
-        "delta_mb": 1.622016
+        "baseline_mb": 30.932992,
+        "peak_mb": 32.620544,
+        "delta_mb": 1.687552
       }
     },
     "docx2txt": {
@@ -101,9 +101,9 @@
         "outcome": "ok",
         "handled": 98,
         "files": 100,
-        "baseline_mb": 24.49408,
-        "peak_mb": 30.14656,
-        "delta_mb": 5.65248
+        "baseline_mb": 24.461312,
+        "peak_mb": 30.06464,
+        "delta_mb": 5.603328
       },
       "largest": {
         "outcome": "ok",
@@ -120,18 +120,18 @@
         "handled": 98,
         "files": 100,
         "baseline_mb": 29.196288,
-        "peak_mb": 29.622272,
-        "delta_mb": 0.425984,
-        "child_peak_mb": 134.897664
+        "peak_mb": 29.671424,
+        "delta_mb": 0.475136,
+        "child_peak_mb": 134.88128
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
         "baseline_mb": 28.983296,
-        "peak_mb": 29.212672,
-        "delta_mb": 0.229376,
-        "child_peak_mb": 140.005376
+        "peak_mb": 29.229056,
+        "delta_mb": 0.24576,
+        "child_peak_mb": 139.91936
       }
     }
   }

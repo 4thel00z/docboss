@@ -6,7 +6,7 @@
     "pydocx"
   ],
   "files": 80,
-  "pages": 121,
+  "pages": 120,
   "bytes": 1898513,
   "repeat": 3,
   "machine": {
@@ -32,23 +32,23 @@
       "files_compared": 77,
       "libraries": {
         "docboss": {
-          "time_s": 0.020586088969139382,
+          "time_s": 0.030754627048736438,
           "files": 77,
           "pages": 117,
-          "pages_per_s": 5683.449642882374,
-          "files_per_s": 3740.389935914041,
-          "mb_per_s": 89.91571943436438,
-          "median_ms": 0.18383300630375743,
+          "pages_per_s": 3804.305603010295,
+          "files_per_s": 2503.688302835835,
+          "mb_per_s": 60.18648826619568,
+          "median_ms": 0.2229590027127415,
           "handled": 80
         },
         "python-docx": {
-          "time_s": 0.056906039026216604,
+          "time_s": 0.09051566800917499,
           "files": 77,
           "pages": 117,
-          "pages_per_s": 2056.0208020470045,
-          "files_per_s": 1353.1077073300798,
-          "mb_per_s": 32.52753190478147,
-          "median_ms": 0.5976660031592473,
+          "pages_per_s": 1292.5938964306208,
+          "files_per_s": 850.681453206477,
+          "mb_per_s": 20.449641931741308,
+          "median_ms": 0.8163330057868734,
           "handled": 77
         }
       }
@@ -57,75 +57,81 @@
       "files_compared": 76,
       "libraries": {
         "docboss": {
-          "time_s": 0.02144550003868062,
+          "time_s": 0.028400878043612465,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 5409.060166038293,
-          "files_per_s": 3543.867005335433,
-          "mb_per_s": 86.2489098721801,
-          "median_ms": 0.19083349616266787,
+          "pages_per_s": 4084.3807653365534,
+          "files_per_s": 2675.973604875673,
+          "mb_per_s": 65.1265428188407,
+          "median_ms": 0.23068749578669667,
           "handled": 80,
-          "word_recall": 0.904228042995449,
+          "word_recall": 0.9919473412410631,
+          "word_recall_weighted": 0.9967216276154662,
           "recall_files": 57
         },
         "python-docx": {
-          "time_s": 0.10175474609422963,
+          "time_s": 0.13581866498861928,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 1139.9959653240999,
-          "files_per_s": 746.8939083157896,
-          "mb_per_s": 18.177540321186957,
-          "median_ms": 0.7834580101189204,
+          "pages_per_s": 854.0799602891109,
+          "files_per_s": 559.5696291549347,
+          "mb_per_s": 13.618533212316501,
+          "median_ms": 0.9252710078726523,
           "handled": 77,
           "word_recall": 0.847845516457464,
+          "word_recall_weighted": 0.9777263523286086,
           "recall_files": 57
         },
         "docx2python": {
-          "time_s": 0.58496887300862,
+          "time_s": 0.6811963789805304,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 198.30114960371685,
-          "files_per_s": 129.9214428438145,
-          "mb_per_s": 3.161964824704004,
-          "median_ms": 1.9121255027130246,
+          "pages_per_s": 170.28863273407893,
+          "files_per_s": 111.5684145499138,
+          "mb_per_s": 2.7152977571139814,
+          "median_ms": 2.190479004639201,
           "handled": 77,
           "word_recall": 0.9741460389743434,
+          "word_recall_weighted": 0.992671873493395,
           "recall_files": 57
         },
         "mammoth": {
-          "time_s": 0.6295230890391394,
+          "time_s": 0.7318053358758334,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 184.26647412893846,
-          "files_per_s": 120.72631063620105,
-          "mb_per_s": 2.9381781736126302,
-          "median_ms": 4.835249994357582,
+          "pages_per_s": 158.51209920623197,
+          "files_per_s": 103.85275465235887,
+          "mb_per_s": 2.527517782835398,
+          "median_ms": 5.290000495733693,
           "handled": 79,
           "word_recall": 0.9563141346096659,
+          "word_recall_weighted": 0.9919004917558577,
           "recall_files": 57
         },
         "docx2txt": {
-          "time_s": 0.09806279197800905,
+          "time_s": 0.11471228903974406,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 1182.915534630234,
-          "files_per_s": 775.0136261370499,
-          "mb_per_s": 18.861904323658162,
-          "median_ms": 0.3599995034164749,
+          "pages_per_s": 1011.2255711313527,
+          "files_per_s": 662.527098327438,
+          "mb_per_s": 16.12426197300584,
+          "median_ms": 0.4245000018272549,
           "handled": 79,
           "word_recall": 0.9737495808760389,
+          "word_recall_weighted": 0.9905505737151673,
           "recall_files": 57
         },
         "pandoc": {
-          "time_s": 10.115581377933268,
+          "time_s": 11.544278453002335,
           "files": 76,
           "pages": 116,
-          "pages_per_s": 11.467457545549415,
-          "files_per_s": 7.513161840187548,
-          "mb_per_s": 0.18285167514295708,
-          "median_ms": 127.77597949752817,
+          "pages_per_s": 10.048267674090253,
+          "files_per_s": 6.583347786472925,
+          "mb_per_s": 0.16022231337628198,
+          "median_ms": 131.45985399751225,
           "handled": 79,
           "word_recall": 0.8935127937133193,
+          "word_recall_weighted": 0.9711696075595411,
           "recall_files": 57
         }
       }
@@ -134,33 +140,33 @@
       "files_compared": 79,
       "libraries": {
         "docboss": {
-          "time_s": 0.023919076935271733,
+          "time_s": 0.02494945708895102,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 4975.108375713249,
-          "files_per_s": 3302.803039339048,
-          "mb_per_s": 78.54517149989077,
-          "median_ms": 0.19866699585691094,
+          "pages_per_s": 4769.642865403259,
+          "files_per_s": 3166.4015661080457,
+          "mb_per_s": 75.30135799355743,
+          "median_ms": 0.20058300287928432,
           "handled": 80
         },
         "mammoth": {
-          "time_s": 0.733831210876815,
+          "time_s": 0.7484796620119596,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 162.1626311830119,
-          "files_per_s": 107.65418372653733,
-          "mb_per_s": 2.56016366182519,
-          "median_ms": 5.205208988627419,
+          "pages_per_s": 158.98895593251078,
+          "files_per_s": 105.54729007284328,
+          "mb_per_s": 2.5100588504300343,
+          "median_ms": 5.263624989311211,
           "handled": 79
         },
         "pandoc": {
-          "time_s": 11.192661458000657,
+          "time_s": 10.485909414011985,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 10.631966351035953,
-          "files_per_s": 7.0581961490070615,
-          "mb_per_s": 0.1678535536029334,
-          "median_ms": 135.52466699911747,
+          "pages_per_s": 11.348562656948392,
+          "files_per_s": 7.533919747049772,
+          "mb_per_s": 0.1791669111207003,
+          "median_ms": 125.24141601170413,
           "handled": 79
         }
       }
@@ -169,33 +175,33 @@
       "files_compared": 79,
       "libraries": {
         "docboss": {
-          "time_s": 0.02231849799863994,
+          "time_s": 0.022370626000338234,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 5331.900023346181,
-          "files_per_s": 3539.6647213810784,
-          "mb_per_s": 84.17806610975734,
-          "median_ms": 0.2026250003837049,
+          "pages_per_s": 5319.475637302272,
+          "files_per_s": 3531.416599553609,
+          "mb_per_s": 83.98191449678674,
+          "median_ms": 0.18875001114793122,
           "handled": 80
         },
         "mammoth": {
-          "time_s": 0.6972779950738186,
+          "time_s": 0.7033391639706679,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 170.6636389513509,
-          "files_per_s": 113.29770989207327,
-          "mb_per_s": 2.6943744292419627,
-          "median_ms": 5.075916997157037,
+          "pages_per_s": 169.19291018602055,
+          "files_per_s": 112.32134373693802,
+          "mb_per_s": 2.6711551072937985,
+          "median_ms": 5.030083004385233,
           "handled": 79
         },
         "pandoc": {
-          "time_s": 10.943051130103413,
+          "time_s": 10.323701372981304,
           "files": 79,
           "pages": 119,
-          "pages_per_s": 10.874480854123126,
-          "files_per_s": 7.219193172064932,
-          "mb_per_s": 0.17168228290844564,
-          "median_ms": 134.91125000291504,
+          "pages_per_s": 11.526873521491147,
+          "files_per_s": 7.65229418653614,
+          "mb_per_s": 0.18198201712003378,
+          "median_ms": 125.82025000301655,
           "handled": 79
         }
       }
@@ -203,41 +209,47 @@
   },
   "recall_all_files": {
     "docboss": {
-      "word_recall": 0.9018248324984282,
+      "word_recall": 0.9865705952102926,
+      "word_recall_weighted": 0.9965317919075144,
       "files": 59,
       "failures": 0
     },
     "python-docx": {
       "word_recall": 0.8447217431852088,
+      "word_recall_weighted": 0.9775464970608075,
       "files": 58,
       "failures": 2
     },
     "docx2python": {
       "word_recall": 0.9745917969230615,
+      "word_recall_weighted": 0.9926739926739927,
       "files": 58,
       "failures": 2
     },
     "mammoth": {
       "word_recall": 0.9577950114025585,
+      "word_recall_weighted": 0.991907514450867,
       "files": 59,
       "failures": 0
     },
     "docx2txt": {
       "word_recall": 0.9576902730497325,
+      "word_recall_weighted": 0.9902697495183044,
       "files": 59,
       "failures": 0
     },
     "pandoc": {
       "word_recall": 0.8914728120055231,
+      "word_recall_weighted": 0.9710019267822736,
       "files": 59,
       "failures": 0
     }
   },
   "libreoffice": {
     "batch_files": 80,
-    "batch_time_s": 4.577973291990929,
-    "batch_files_per_s": 17.474981809080965,
+    "batch_time_s": 5.645741250002175,
+    "batch_files_per_s": 14.169972809145156,
     "per_file_samples": 10,
-    "per_file_median_ms": 754.7014789888635
+    "per_file_median_ms": 812.2370834971662
   }
 }

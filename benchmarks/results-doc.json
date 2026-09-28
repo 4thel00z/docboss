@@ -3,10 +3,11 @@
   "corpus": [
     "poi",
     "lo",
-    "doc"
+    "doc",
+    "poi"
   ],
   "files": 80,
-  "pages": 387,
+  "pages": 396,
   "bytes": 9193974,
   "repeat": 3,
   "machine": {
@@ -32,39 +33,39 @@
       "files_compared": 66,
       "libraries": {
         "docboss": {
-          "time_s": 0.022212995958398096,
+          "time_s": 0.02462970305350609,
           "files": 66,
-          "pages": 353,
-          "pages_per_s": 15891.597903367952,
-          "files_per_s": 2971.2336023294188,
-          "mb_per_s": 393.75584528899174,
-          "median_ms": 0.06524949276354164,
+          "pages": 362,
+          "pages_per_s": 14697.700545296202,
+          "files_per_s": 2679.691259639639,
+          "mb_per_s": 355.1198721721867,
+          "median_ms": 0.07160400855354965,
           "handled": 78,
           "word_recall": 0.9764737485052598,
           "word_recall_weighted": 0.9936757950002983,
           "recall_files": 61
         },
         "antiword": {
-          "time_s": 0.2898171179695055,
+          "time_s": 0.3685594970884267,
           "files": 66,
-          "pages": 353,
-          "pages_per_s": 1218.009489822967,
-          "files_per_s": 227.72981962695698,
-          "mb_per_s": 30.179366426935157,
-          "median_ms": 4.010124997876119,
+          "pages": 362,
+          "pages_per_s": 982.2023387261869,
+          "files_per_s": 179.07556451913905,
+          "mb_per_s": 23.731574058181153,
+          "median_ms": 5.181604501558468,
           "handled": 66,
           "word_recall": 0.9478700788250789,
           "word_recall_weighted": 0.3587580011421071,
           "recall_files": 61
         },
         "catdoc": {
-          "time_s": 0.28863403902505524,
+          "time_s": 0.35519487400597427,
           "files": 66,
-          "pages": 353,
-          "pages_per_s": 1223.0019757626626,
-          "files_per_s": 228.6632589244638,
-          "mb_per_s": 30.30306830595524,
-          "median_ms": 3.797000004851725,
+          "pages": 362,
+          "pages_per_s": 1019.1588519205693,
+          "files_per_s": 185.81349233910933,
+          "mb_per_s": 24.62450232278095,
+          "median_ms": 4.740978998597711,
           "handled": 78,
           "word_recall": 0.8880966860964942,
           "word_recall_weighted": 0.34730283736906253,
@@ -95,9 +96,9 @@
   },
   "libreoffice": {
     "batch_files": 80,
-    "batch_time_s": 4.703073958997265,
-    "batch_files_per_s": 17.010151381301405,
+    "batch_time_s": 5.0459591670078225,
+    "batch_files_per_s": 15.85427018971277,
     "per_file_samples": 10,
-    "per_file_median_ms": 680.2823749967501
+    "per_file_median_ms": 689.2558330073371
   }
 }
