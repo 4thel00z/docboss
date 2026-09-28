@@ -79,6 +79,9 @@ pub(crate) struct Ctx<'a> {
     pub table_style: Option<String>,
     /// The fill behind the blocks being laid out, such as a cell's shading.
     pub background: Option<docboss_model::Color>,
+    /// Whether the paragraph being laid out shares its borders with the
+    /// paragraph before it and the one after it.
+    pub border_group: (bool, bool),
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -149,10 +152,28 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
     let mut prev_after = 0.0;
     let mut prev_style: Option<Option<String>> = None;
     let mut prev_contextual = false;
-    for block in blocks {
+    let borders: Vec<Option<docboss_model::Borders>> = blocks
+        .iter()
+        .map(|block| match block {
+            Block::Paragraph(p) => ctx
+                .doc
+                .styles
+                .resolve_paragraph_in(p, &ctx.doc.numbering, ctx.table_style.as_deref())
+                .borders
+                .filter(|b| *b != docboss_model::Borders::default()),
+            Block::Table(_) => None,
+        })
+        .collect();
+    let joins = |a: usize, b: usize| borders[a].is_some() && borders[a] == borders[b];
+    for (index, block) in blocks.iter().enumerate() {
         match block {
             Block::Paragraph(p) => {
+                ctx.border_group = (
+                    index > 0 && joins(index, index - 1),
+                    index + 1 < blocks.len() && joins(index, index + 1),
+                );
                 let mut laid = layout_paragraph(ctx, p, width);
+                ctx.border_group = (false, false);
                 let same = prev_style.as_ref() == Some(&p.style_id);
                 let before = if laid.contextual && same {
                     0.0
@@ -675,6 +696,7 @@ pub(crate) fn run(
         note_labels: labels,
         table_style: None,
         background: None,
+        border_group: (false, false),
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {

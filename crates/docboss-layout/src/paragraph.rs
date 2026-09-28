@@ -404,7 +404,16 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
             &mut items,
         );
         if let Some(borders) = borders {
-            paragraph_borders(&borders, &geometry, height, index == 0, is_last, &mut items);
+            let (joins_previous, joins_next) = ctx.border_group;
+            paragraph_borders(
+                &borders,
+                &geometry,
+                height,
+                index == 0 && !joins_previous,
+                is_last && !joins_next,
+                is_last && joins_next,
+                &mut items,
+            );
         }
         let mut slab = Slab::new(height, items);
         slab.break_before = pending_break.take().filter(|b| *b != Break::Line);
@@ -442,12 +451,17 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     }
 }
 
+/// ECMA-376 Part 1 §17.3.1.24: paragraphs with identical borders form one
+/// group, with the top border above its first line, the bottom border
+/// below its last and the between border (§17.3.1.5) separating its
+/// paragraphs.
 fn paragraph_borders(
     borders: &docboss_model::Borders,
     g: &Geometry,
     height: f32,
     first: bool,
     last: bool,
+    between: bool,
     items: &mut Vec<Item>,
 ) {
     let (x0, x1) = (g.left, g.max_x());
@@ -462,6 +476,9 @@ fn paragraph_borders(
     }
     if last {
         edge(borders.bottom, (x0, height), (x1, height));
+    }
+    if between {
+        edge(borders.inside_horizontal, (x0, height), (x1, height));
     }
     edge(borders.left, (x0, 0.0), (x0, height));
     edge(borders.right, (x1, 0.0), (x1, height));

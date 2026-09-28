@@ -721,3 +721,40 @@ fn symbol_font_bullets_draw_their_unicode_form() {
         );
     }
 }
+
+fn bordered(text: &str) -> Block {
+    para_with(
+        ParagraphProperties {
+            borders: Some(Borders {
+                bottom: Some(border()),
+                ..Borders::default()
+            }),
+            ..ParagraphProperties::default()
+        },
+        vec![run(text)],
+    )
+}
+
+/// ECMA-376 Part 1 §17.3.1.24: three paragraphs with the same bottom border
+/// draw it once, under the last of them.
+#[test]
+fn paragraphs_with_equal_borders_share_one_bottom_border() {
+    let layout = laid(&doc(vec![
+        bordered("a"),
+        bordered("b"),
+        bordered("c"),
+        para("after"),
+    ]));
+    let horizontals: Vec<f32> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Line { from, to, .. } if from.1 == to.1 => Some(from.1),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(horizontals.len(), 1, "{horizontals:?}");
+    let runs = runs(&layout, 0);
+    let c = runs.iter().find(|r| r.text == "c").unwrap().baseline;
+    assert!(horizontals[0] > c);
+}
