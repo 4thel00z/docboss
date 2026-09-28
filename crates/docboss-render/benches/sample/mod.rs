@@ -308,14 +308,16 @@ pub fn document(chunks: usize) -> Document {
             )],
         });
     }
-    let mut first = SectionProperties::default();
-    first.headers = HeaderFooterRefs {
-        default: Some("h1".into()),
-        ..HeaderFooterRefs::default()
-    };
-    first.footers = HeaderFooterRefs {
-        default: Some("f1".into()),
-        ..HeaderFooterRefs::default()
+    let first = SectionProperties {
+        headers: HeaderFooterRefs {
+            default: Some("h1".into()),
+            ..HeaderFooterRefs::default()
+        },
+        footers: HeaderFooterRefs {
+            default: Some("f1".into()),
+            ..HeaderFooterRefs::default()
+        },
+        ..SectionProperties::default()
     };
     let mut columns = SectionProperties {
         start: SectionBreak::NextPage,
