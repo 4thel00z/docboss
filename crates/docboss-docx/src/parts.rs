@@ -66,7 +66,7 @@ pub fn styles(text: &str, theme: &Theme) -> Styles {
     Styles::new(default_paragraph, default_run, list)
 }
 
-fn number_format(value: &str) -> NumberFormat {
+pub(crate) fn number_format(value: &str) -> NumberFormat {
     match value {
         "decimal" => NumberFormat::Decimal,
         "decimalZero" => NumberFormat::DecimalZero,

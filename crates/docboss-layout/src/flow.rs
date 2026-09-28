@@ -73,6 +73,8 @@ pub(crate) struct Ctx<'a> {
     pub shaper: Shaper<'a>,
     pub counter: NumberingCounter<'a>,
     pub page_number: u32,
+    /// The format of the current section's page numbers.
+    pub page_format: Option<docboss_model::NumberFormat>,
     pub total_pages: Option<u32>,
     pub current_note: Option<String>,
     /// The style of the table whose cell is being laid out.
@@ -239,6 +241,7 @@ struct PageState {
     width: f32,
     height: f32,
     number: u32,
+    number_format: Option<docboss_model::NumberFormat>,
     text_left: f32,
     text_width: f32,
     header_top: f32,
@@ -346,6 +349,7 @@ impl Paginator<'_, '_> {
         let header = self.choose(&headers, number);
         let footer = self.choose(&footers, number);
         self.ctx.page_number = number;
+        self.ctx.page_format = props.page_number_format.clone();
         let header_h = self.story_height(header.as_deref(), text_width);
         let footer_h = self.story_height(footer.as_deref(), text_width);
         let header_top = twips_to_pt(m.header);
@@ -365,6 +369,7 @@ impl Paginator<'_, '_> {
             width,
             height,
             number,
+            number_format: props.page_number_format.clone(),
             text_left,
             text_width,
             header_top,
@@ -690,6 +695,7 @@ pub(crate) fn run(
         ),
         counter: document.numbering.counter(),
         page_number: 1,
+        page_format: None,
         total_pages: None,
         current_note: None,
         depth: 0,
@@ -775,6 +781,7 @@ fn finish_page(
     notes: &HashMap<i64, (Vec<Item>, f32)>,
 ) -> Page {
     ctx.page_number = state.number;
+    ctx.page_format = state.number_format.clone();
     let mut items = state.back;
     let doc = ctx.doc;
     if let Some(part) = state.header.as_deref().and_then(|id| doc.header_footer(id)) {

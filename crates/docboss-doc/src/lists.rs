@@ -14,7 +14,7 @@ const LVLF_SIZE: usize = 28;
 const LFO_SIZE: usize = 16;
 
 /// MSONFC ([MS-OSHARED] §2.2.1.3) as a model format.
-fn format(nfc: u8) -> NumberFormat {
+pub(crate) fn format(nfc: u8) -> NumberFormat {
     match nfc {
         0 => NumberFormat::Decimal,
         1 => NumberFormat::UpperRoman,

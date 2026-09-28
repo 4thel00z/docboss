@@ -108,7 +108,7 @@ fn tables() {
 /// the body's own `w:sectPr` describes the last one.
 #[test]
 fn sections_split_at_paragraph_section_properties() {
-    let body = r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:type w:val="continuous"/></w:sectPr></w:pPr><w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/><w:cols w:num="2" w:space="360"/><w:titlePg/><w:pgNumType w:start="3"/></w:sectPr>"#;
+    let body = r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:type w:val="continuous"/></w:sectPr></w:pPr><w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/><w:cols w:num="2" w:space="360"/><w:titlePg/><w:pgNumType w:fmt="lowerRoman" w:start="3"/></w:sectPr>"#;
     let doc = read(
         &Docx::new(body)
             .header(
@@ -128,6 +128,10 @@ fn sections_split_at_paragraph_section_properties() {
     assert_eq!(last.columns.count, 2);
     assert!(last.title_page);
     assert_eq!(last.page_number_start, Some(3));
+    assert_eq!(
+        last.page_number_format,
+        Some(docboss_model::NumberFormat::LowerRoman)
+    );
     assert_eq!(last.headers.default.as_deref(), Some("rIdH"));
     let header = doc.header_footer("rIdH").unwrap();
     assert_eq!(header.blocks.len(), 1);

@@ -544,6 +544,7 @@ pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
                 }
             }
             0x501C => section.page_number_start = Some(u32::from(prl.u16())),
+            0x300E => section.page_number_format = Some(crate::lists::format(prl.u8())),
             0x7044 => section.page_number_start = Some(prl.u32()),
             _ => {}
         }

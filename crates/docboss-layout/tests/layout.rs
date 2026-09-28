@@ -758,3 +758,43 @@ fn paragraphs_with_equal_borders_share_one_bottom_border() {
     let c = runs.iter().find(|r| r.text == "c").unwrap().baseline;
     assert!(horizontals[0] > c);
 }
+
+/// ECMA-376 Part 1 §17.6.12 and §17.16.4.3: `PAGE` shows the section's
+/// page number format, and a `\*` switch overrides it.
+#[test]
+fn page_fields_follow_the_section_number_format() {
+    let field = |instruction: &str| {
+        Inline::Field(Field {
+            instruction: instruction.into(),
+            result: vec![run("1")],
+        })
+    };
+    let header = HeaderFooter {
+        id: "rId1".into(),
+        kind: HeaderFooterKind::Header,
+        blocks: vec![para_with(
+            ParagraphProperties::default(),
+            vec![field(" PAGE "), run("/"), field(" PAGE \\* ALPHABETIC ")],
+        )],
+    };
+    let mut document = doc((0..120).map(|i| para(&format!("body {i}"))).collect());
+    document.sections[0].properties.headers = HeaderFooterRefs {
+        default: Some("rId1".into()),
+        ..HeaderFooterRefs::default()
+    };
+    document.sections[0].properties.page_number_format = Some(NumberFormat::LowerRoman);
+    document.headers_footers.push(header);
+    let layout = laid(&document);
+    let tops: Vec<String> = layout
+        .pages
+        .iter()
+        .take(2)
+        .map(|page| {
+            page.glyph_runs()
+                .filter(|r| r.baseline < 72.0)
+                .map(|r| r.text.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(tops, ["i/A", "ii/B"]);
+}

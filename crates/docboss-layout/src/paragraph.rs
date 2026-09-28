@@ -145,6 +145,29 @@ fn field_kind(instruction: &str) -> String {
         .to_ascii_uppercase()
 }
 
+/// The number format a field's `\*` switch names: `ROMAN`, `roman`,
+/// `ALPHABETIC`, `alphabetic`, `Arabic` or `Ordinal`.
+fn field_format(instruction: &str) -> Option<docboss_model::NumberFormat> {
+    use docboss_model::NumberFormat;
+    let mut words = instruction.split_whitespace();
+    while let Some(word) = words.next() {
+        if word != "\\*" {
+            continue;
+        }
+        let format = match words.next()? {
+            "ROMAN" => NumberFormat::UpperRoman,
+            "roman" => NumberFormat::LowerRoman,
+            "ALPHABETIC" => NumberFormat::UpperLetter,
+            "alphabetic" => NumberFormat::LowerLetter,
+            "Arabic" => NumberFormat::Decimal,
+            "Ordinal" | "ordinal" => NumberFormat::Ordinal,
+            _ => continue,
+        };
+        return Some(format);
+    }
+    None
+}
+
 struct Flattener<'c, 'd> {
     ctx: &'c mut Ctx<'d>,
     paragraph_style: Option<String>,
@@ -192,6 +215,8 @@ impl Flattener<'_, '_> {
 
     /// ECMA-376 Part 1 §17.16: `PAGE`, `NUMPAGES` and `SECTIONPAGES` are
     /// evaluated at layout time; every other field shows its cached result.
+    /// `PAGE` shows the section's page number format (§17.6.12) unless a
+    /// `\*` format switch names another (§17.16.4.3).
     fn field(&mut self, field: &docboss_model::Field) {
         let kind = field_kind(&field.instruction);
         let value = match kind.as_str() {
@@ -199,6 +224,11 @@ impl Flattener<'_, '_> {
             "NUMPAGES" | "SECTIONPAGES" => self.ctx.total_pages,
             _ => None,
         };
+        let format = field_format(&field.instruction).or_else(|| {
+            (kind == "PAGE")
+                .then(|| self.ctx.page_format.clone())
+                .flatten()
+        });
         let Some(value) = value else {
             self.inlines(&field.result);
             return;
@@ -212,7 +242,11 @@ impl Flattener<'_, '_> {
             return;
         }
         let index = self.style_index(style);
-        self.push_text(&value.to_string(), index);
+        let shown = match format {
+            Some(format) => docboss_model::number_label(&format, value),
+            None => value.to_string(),
+        };
+        self.push_text(&shown, index);
     }
 
     fn note_style(&mut self, props: &docboss_model::RunProperties) -> usize {
