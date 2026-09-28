@@ -1,5 +1,6 @@
 [package]
 name = "docboss-render"
+description = "Rasterizes docboss page layouts to RGBA pixmaps and encodes PNG, PPM, BMP and JPEG"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +11,18 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
+docboss-model = { workspace = true }
+docboss-font = { workspace = true }
+docboss-layout = { workspace = true }
+png = "0.18"
+jpeg-decoder = "0.3"
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "render"
+harness = false
+
+[[example]]
+name = "render_sample"
