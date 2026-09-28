@@ -63,6 +63,9 @@ version = "0.1.0"
 [[package]]
 name = "docboss-xml"
 version = "0.1.0"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "docboss-zip"
