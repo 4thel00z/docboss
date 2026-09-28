@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/docboss-model",
+    "crates/docboss-zip",
+    "crates/docboss-xml",
+    "crates/docboss-docx",
+    "crates/docboss-cfb",
+    "crates/docboss-doc",
+    "crates/docboss-core",
+    "crates/docboss-output",
+    "crates/docboss-font",
+    "crates/docboss-layout",
+    "crates/docboss-render",
+    "crates/docboss-write",
+    "crates/docboss-cli",
+    "crates/docboss-py",
+    "crates/docboss-testkit",
+]
+
+[workspace.package]
+version = "0.1.0" # x-release-please-version
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/4thel00z/docboss"
+homepage = "https://github.com/4thel00z/docboss"
+documentation = "https://github.com/4thel00z/docboss"
+readme = "README.md"
+keywords = ["docx", "doc", "word", "ecma-376", "ooxml"]
+
+[workspace.dependencies]
+docboss-model = { path = "crates/docboss-model", version = "0.1.0" } # x-release-please-version
+docboss-zip = { path = "crates/docboss-zip", version = "0.1.0" } # x-release-please-version
+docboss-xml = { path = "crates/docboss-xml", version = "0.1.0" } # x-release-please-version
+docboss-docx = { path = "crates/docboss-docx", version = "0.1.0" } # x-release-please-version
+docboss-cfb = { path = "crates/docboss-cfb", version = "0.1.0" } # x-release-please-version
+docboss-doc = { path = "crates/docboss-doc", version = "0.1.0" } # x-release-please-version
+docboss-core = { path = "crates/docboss-core", version = "0.1.0" } # x-release-please-version
+docboss-output = { path = "crates/docboss-output", version = "0.1.0" } # x-release-please-version
+docboss-font = { path = "crates/docboss-font", version = "0.1.0" } # x-release-please-version
+docboss-layout = { path = "crates/docboss-layout", version = "0.1.0" } # x-release-please-version
+docboss-render = { path = "crates/docboss-render", version = "0.1.0" } # x-release-please-version
+docboss-write = { path = "crates/docboss-write", version = "0.1.0" } # x-release-please-version
+docboss-testkit = { path = "crates/docboss-testkit" }
+thiserror = "2"
+memchr = "2"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+# Release builds trade compile time for cross-crate inlining and tighter
+# codegen on the CPU-bound parse/layout/raster paths. `panic` stays "unwind":
+# the Python extension turns Rust panics into Python exceptions.
+[profile.release]
+lto = "thin"
+codegen-units = 1

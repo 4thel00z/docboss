@@ -1,0 +1,21 @@
+/target
+.venv/
+__pycache__/
+.pytest_cache/
+*.so
+dist/
+
+# Local working documents: plans and specs stay untracked.
+docs/superpowers/
+
+# mdBook build output; the source lives in docs/src.
+docs/book/
+
+# Lean build output of the conformance ledger.
+ledger/.lake/
+
+# Downloaded specification texts used to regenerate the ledger outlines.
+ledger/specs/
+
+# Per-branch worktrees.
+/worktrees/
