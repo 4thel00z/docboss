@@ -10,7 +10,7 @@ use docboss_model::{
 use crate::breaks;
 use crate::flow::{Ctx, Floating, Slab};
 use crate::shape::{Glyph, RunStyle};
-use crate::textbox::layout_text_box;
+use crate::textbox::layout_drawing;
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{GlyphRun, Item, LineStyle, PositionedGlyph, Rect};
 
@@ -19,8 +19,8 @@ enum Elem {
     Char(char, usize),
     Tab(usize),
     Break(Break, usize),
-    Object(Drawing, usize),
-    Float(Drawing),
+    Object(Box<Drawing>, usize),
+    Float(Box<Drawing>),
     Note(i64),
 }
 
@@ -50,7 +50,7 @@ struct Atom {
     descent: f32,
     break_after: bool,
     style: usize,
-    object: Option<Drawing>,
+    object: Option<Box<Drawing>>,
     notes: Vec<i64>,
 }
 
@@ -634,12 +634,13 @@ fn build_atoms(
                 else {
                     continue;
                 };
-                let text_box = layout_text_box(ctx, drawing);
+                let text_box = layout_drawing(ctx, drawing);
                 let height = text_box
                     .as_ref()
                     .map_or(emu_to_pt(drawing.height), |text_box| text_box.height);
                 floats.push(Floating {
                     media: drawing.media,
+                    picture: drawing.media.is_some() || text_box.is_none(),
                     width: emu_to_pt(drawing.width),
                     height,
                     horizontal,
@@ -895,7 +896,7 @@ fn emit_line(
                     continue;
                 };
                 let h = emu_to_pt(drawing.height);
-                let text_box = layout_text_box(ctx, drawing);
+                let text_box = layout_drawing(ctx, drawing);
                 if drawing.media.is_some() || text_box.is_none() {
                     glyphs.push(Item::Image {
                         media: drawing.media,

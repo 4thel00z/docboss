@@ -3,12 +3,13 @@
 
 use docboss_model::{Drawing, VerticalAlign};
 
+use crate::drawn::shape_items;
 use crate::flow::{layout_blocks, stack_height, Ctx};
+use crate::geometry::outline;
 use crate::units::emu_to_pt;
-use crate::{Item, LineStyle, Rect};
+use crate::{Item, Rect};
 
 const DEFAULT_INSETS: [i64; 4] = [91_440, 45_720, 91_440, 45_720];
-const DEFAULT_OUTLINE: i64 = 9_525;
 
 /// A laid-out text box: its items relative to the drawing's top-left
 /// corner, and its height, which is its text's when the shape fits its
@@ -18,29 +19,57 @@ pub(crate) struct TextBox {
     pub height: f32,
 }
 
+/// Lays out what a drawing paints besides its picture: a text box with its
+/// shape, or a shape without text (ECMA-376 Part 1 §20.1.9). `None` for a
+/// picture, and for a text box without text.
+pub(crate) fn layout_drawing(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
+    if !drawing.text_box.is_empty() {
+        return layout_text_box(ctx, drawing);
+    }
+    drawing.geometry.as_ref()?;
+    let width = emu_to_pt(drawing.width).max(0.0);
+    let height = emu_to_pt(drawing.height).max(0.0);
+    let shape = shape_items(ctx, drawing, width, height);
+    let mut items = shape.under;
+    items.extend(shape.over);
+    Some(TextBox { items, height })
+}
+
 /// Lays out a drawing's text box. ECMA-376 Part 1 §20.4.2.38 (`txbxContent`)
 /// supplies the blocks and §20.4.2.22 (`wps:bodyPr`) the insets, the
 /// vertical anchor and `a:spAutoFit`, which sizes the shape to its text;
 /// the fill and outline come from
-/// `wps:spPr` (§20.4.2.35). Text that does not fit is cut off at the shape
-/// less its insets: Word and LibreOffice clip text box content whatever
-/// `vertOverflow` and `horzOverflow` say, so their `overflow` default is not
-/// followed. A box whose stated height leaves no room inside its insets is
-/// left unclipped.
-pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
-    if drawing.text_box.is_empty() {
-        return None;
-    }
+/// `wps:spPr` (§20.4.2.35), drawn along its geometry, whose text rectangle
+/// (§20.1.9.22) narrows the text further. Text that does not fit is cut
+/// off at the shape less its insets: Word and LibreOffice clip text box
+/// content whatever `vertOverflow` and `horzOverflow` say, so their
+/// `overflow` default is not followed. A box whose stated height leaves no
+/// room inside its insets is left unclipped.
+fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
     let shape = drawing.shape;
     let width = emu_to_pt(drawing.width).max(1.0);
+    let stated = emu_to_pt(drawing.height).max(0.0);
+    let geometry_text = drawing
+        .geometry
+        .as_ref()
+        .filter(|g| !g.is_rectangle())
+        .and_then(|g| outline(g, width, stated).0.text);
     let [left, top, right, bottom] = shape.insets.unwrap_or(DEFAULT_INSETS).map(emu_to_pt);
+    let [left, top, right, bottom] = match geometry_text {
+        Some([l, t, r, b]) => [
+            left + l.max(0.0),
+            top + t.max(0.0),
+            right + (width - r).max(0.0),
+            bottom + (stated - b).max(0.0),
+        ],
+        None => [left, top, right, bottom],
+    };
     let inner = (width - left - right).max(1.0);
     let behind = shape.fill.or(ctx.background);
     let outer = std::mem::replace(&mut ctx.background, behind);
     let (slabs, trailing) = layout_blocks(ctx, &drawing.text_box, inner);
     ctx.background = outer;
     let content = stack_height(&slabs) + trailing;
-    let stated = emu_to_pt(drawing.height).max(0.0);
     let height = match shape.auto_fit {
         true => content + top + bottom,
         false => stated,
@@ -51,13 +80,8 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
         Some(VerticalAlign::Bottom) => (room - content).max(0.0),
         _ => 0.0,
     };
-    let mut items = Vec::new();
-    if let Some(color) = shape.fill {
-        items.push(Item::Rect {
-            rect: Rect::new(0.0, 0.0, width, height),
-            color,
-        });
-    }
+    let drawn = shape_items(ctx, drawing, width, height);
+    let mut items = drawn.under;
     let text_width = width - left - right;
     let clipped = room > 0.0 && text_width > 0.0;
     if clipped {
@@ -75,17 +99,6 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
     if clipped {
         items.push(Item::ClipEnd);
     }
-    if let Some(color) = shape.outline {
-        let line = emu_to_pt(shape.outline_width.unwrap_or(DEFAULT_OUTLINE)).max(0.25);
-        let style = shape.outline_dash.map_or(LineStyle::Solid, LineStyle::Dash);
-        items.push(Item::Outline {
-            rect: Rect::new(0.0, 0.0, width, height),
-            width: line,
-            color,
-            style,
-            cap: shape.outline_cap,
-            join: shape.outline_join,
-        });
-    }
+    items.extend(drawn.over);
     Some(TextBox { items, height })
 }

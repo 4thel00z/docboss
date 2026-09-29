@@ -208,7 +208,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         }))
         .collect(),
     };
-    let image = RunContent::Drawing(Drawing {
+    let image = RunContent::Drawing(Box::new(Drawing {
         media: Some(MediaId(0)),
         width: 12700 * 180,
         height: 12700 * 90,
@@ -217,7 +217,8 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         description: None,
         text_box: Vec::new(),
         shape: Default::default(),
-    });
+        geometry: None,
+    }));
     vec![
         paragraph(
             Some("Heading1"),

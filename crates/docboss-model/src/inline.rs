@@ -103,6 +103,287 @@ pub struct Drawing {
     pub text_box: Vec<crate::Block>,
     /// How the shape around a text box is drawn.
     pub shape: ShapeFormat,
+    /// The outline of a drawn shape; `None` for a picture.
+    pub geometry: Option<Box<Geometry>>,
+}
+
+/// A shape's geometry (ECMA-376 Part 1 §20.1.9).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "snake_case"))]
+pub enum Geometry {
+    /// A preset shape by its `ST_ShapeType` name, such as `rightArrow`, and
+    /// the adjust values the document gives it by guide name.
+    Preset {
+        name: String,
+        adjust: Vec<(String, i64)>,
+    },
+    Custom(CustomGeometry),
+}
+
+impl Geometry {
+    /// The preset rectangle.
+    pub fn rectangle() -> Geometry {
+        Geometry::Preset {
+            name: "rect".into(),
+            adjust: Vec::new(),
+        }
+    }
+
+    /// Whether this is the plain preset rectangle.
+    pub fn is_rectangle(&self) -> bool {
+        matches!(self, Geometry::Preset { name, .. } if name == "rect")
+    }
+
+    /// The preset geometry of an [MS-ODRAW] §2.4.24 MSOSPT shape type, as
+    /// VML `o:spt` and the DOC shape records give it, with default adjust
+    /// values; `None` for custom, picture, WordArt and unmatched types.
+    pub fn from_shape_type(shape_type: u32) -> Option<Geometry> {
+        let name = match shape_type {
+            1 | 202 => "rect",
+            2 => "roundRect",
+            3 => "ellipse",
+            4 => "diamond",
+            5 => "triangle",
+            6 => "rtTriangle",
+            7 => "parallelogram",
+            9 => "hexagon",
+            10 => "octagon",
+            11 => "plus",
+            12 => "star5",
+            13 | 14 => "rightArrow",
+            15 => "homePlate",
+            16 => "cube",
+            17 | 62 => "wedgeRoundRectCallout",
+            18 | 59 => "star16",
+            19 => "arc",
+            20 => "line",
+            21 => "plaque",
+            22 => "can",
+            23 => "donut",
+            32 => "straightConnector1",
+            33 => "bentConnector2",
+            34 => "bentConnector3",
+            35 => "bentConnector4",
+            36 => "bentConnector5",
+            37 => "curvedConnector2",
+            38 => "curvedConnector3",
+            39 => "curvedConnector4",
+            40 => "curvedConnector5",
+            41 => "callout1",
+            42 => "callout2",
+            43 => "callout3",
+            44 => "accentCallout1",
+            45 => "accentCallout2",
+            46 => "accentCallout3",
+            47 => "borderCallout1",
+            48 => "borderCallout2",
+            49 => "borderCallout3",
+            50 => "accentBorderCallout1",
+            51 => "accentBorderCallout2",
+            52 => "accentBorderCallout3",
+            53 => "ribbon",
+            54 => "ribbon2",
+            55 => "chevron",
+            56 => "pentagon",
+            57 => "noSmoking",
+            58 => "star8",
+            60 => "star32",
+            61 => "wedgeRectCallout",
+            63 => "wedgeEllipseCallout",
+            64 => "wave",
+            65 => "foldedCorner",
+            66 => "leftArrow",
+            67 => "downArrow",
+            68 => "upArrow",
+            69 => "leftRightArrow",
+            70 => "upDownArrow",
+            71 => "irregularSeal1",
+            72 => "irregularSeal2",
+            73 => "lightningBolt",
+            74 => "heart",
+            76 => "quadArrow",
+            77 => "leftArrowCallout",
+            78 => "rightArrowCallout",
+            79 => "upArrowCallout",
+            80 => "downArrowCallout",
+            81 => "leftRightArrowCallout",
+            82 => "upDownArrowCallout",
+            83 => "quadArrowCallout",
+            84 => "bevel",
+            85 => "leftBracket",
+            86 => "rightBracket",
+            87 => "leftBrace",
+            88 => "rightBrace",
+            89 => "leftUpArrow",
+            90 => "bentUpArrow",
+            91 => "bentArrow",
+            92 => "star24",
+            93 => "stripedRightArrow",
+            94 => "notchedRightArrow",
+            95 => "blockArc",
+            96 => "smileyFace",
+            97 => "verticalScroll",
+            98 => "horizontalScroll",
+            99 => "circularArrow",
+            101 => "uturnArrow",
+            102 => "curvedRightArrow",
+            103 => "curvedLeftArrow",
+            104 => "curvedUpArrow",
+            105 => "curvedDownArrow",
+            106 => "cloudCallout",
+            107 => "ellipseRibbon",
+            108 => "ellipseRibbon2",
+            109 => "flowChartProcess",
+            110 => "flowChartDecision",
+            111 => "flowChartInputOutput",
+            112 => "flowChartPredefinedProcess",
+            113 => "flowChartInternalStorage",
+            114 => "flowChartDocument",
+            115 => "flowChartMultidocument",
+            116 => "flowChartTerminator",
+            117 => "flowChartPreparation",
+            118 => "flowChartManualInput",
+            119 => "flowChartManualOperation",
+            120 => "flowChartConnector",
+            121 => "flowChartPunchedCard",
+            122 => "flowChartPunchedTape",
+            123 => "flowChartSummingJunction",
+            124 => "flowChartOr",
+            125 => "flowChartCollate",
+            126 => "flowChartSort",
+            127 => "flowChartExtract",
+            128 => "flowChartMerge",
+            129 => "flowChartOfflineStorage",
+            130 => "flowChartOnlineStorage",
+            131 => "flowChartMagneticTape",
+            132 => "flowChartMagneticDisk",
+            133 => "flowChartMagneticDrum",
+            134 => "flowChartDisplay",
+            135 => "flowChartDelay",
+            176 => "flowChartAlternateProcess",
+            177 => "flowChartOffpageConnector",
+            182 => "leftRightUpArrow",
+            183 => "sun",
+            184 => "moon",
+            185 => "bracketPair",
+            186 => "bracePair",
+            187 => "star4",
+            188 => "doubleWave",
+            189 => "actionButtonBlank",
+            190 => "actionButtonHome",
+            191 => "actionButtonHelp",
+            192 => "actionButtonInformation",
+            193 => "actionButtonForwardNext",
+            194 => "actionButtonBackPrevious",
+            195 => "actionButtonEnd",
+            196 => "actionButtonBeginning",
+            197 => "actionButtonReturn",
+            198 => "actionButtonDocument",
+            199 => "actionButtonSound",
+            200 => "actionButtonMovie",
+            _ => return None,
+        };
+        Some(Geometry::Preset {
+            name: name.into(),
+            adjust: Vec::new(),
+        })
+    }
+}
+
+/// A shape guide: a name and its formula, as `a:gd` writes them, such as
+/// `*/ w adj 100000`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Guide {
+    pub name: String,
+    pub formula: String,
+}
+
+/// A geometry given by its own guides and paths (`a:custGeom`).
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct CustomGeometry {
+    /// Adjust values by guide name.
+    pub adjust: Vec<(String, i64)>,
+    pub guides: Vec<Guide>,
+    pub paths: Vec<GeometryPath>,
+}
+
+/// How a geometry path is filled.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum PathFill {
+    None,
+    #[default]
+    Normal,
+    Lighten,
+    LightenLess,
+    Darken,
+    DarkenLess,
+}
+
+/// One path of a geometry, in its own coordinate space of `width` by
+/// `height` (the shape's extent when zero).
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct GeometryPath {
+    pub width: i64,
+    pub height: i64,
+    pub fill: PathFill,
+    pub stroke: bool,
+    pub commands: Vec<PathCommand>,
+}
+
+/// A path command. Every value is a number or the name of a guide.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(tag = "type", content = "args", rename_all = "snake_case")
+)]
+pub enum PathCommand {
+    MoveTo([String; 2]),
+    LineTo([String; 2]),
+    /// Width radius, height radius, start angle and swing angle.
+    ArcTo([String; 4]),
+    /// Control point and end point.
+    QuadTo([String; 4]),
+    /// Two control points and the end point.
+    CubicTo([String; 6]),
+    Close,
+}
+
+/// The decoration at one end of a line (`a:headEnd`, `a:tailEnd`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct LineEnd {
+    pub kind: LineEndKind,
+    pub width: LineEndSize,
+    pub length: LineEndSize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum LineEndKind {
+    Triangle,
+    Stealth,
+    Diamond,
+    Oval,
+    /// An open arrowhead of two strokes.
+    Arrow,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum LineEndSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
 }
 
 /// Fill, outline and text frame of a shape. Every field is optional: an
@@ -125,6 +406,14 @@ pub struct ShapeFormat {
     pub text_anchor: Option<crate::VerticalAlign>,
     /// The shape grows to fit its text.
     pub auto_fit: bool,
+    /// Clockwise rotation about the shape's center, in 60000ths of a degree.
+    pub rotation: i32,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
+    /// The decoration at the start of an open outline.
+    pub head_end: Option<LineEnd>,
+    /// The decoration at the end of an open outline.
+    pub tail_end: Option<LineEnd>,
 }
 
 /// A repeating dash pattern: dash and space lengths, in hundredths of the
@@ -248,7 +537,7 @@ pub enum RunContent {
     CommentReference(i64),
     /// The automatic number of the note whose body contains this run.
     NoteNumber,
-    Drawing(Drawing),
+    Drawing(Box<Drawing>),
 }
 
 /// A run: content sharing one set of properties.
@@ -316,6 +605,25 @@ pub enum Inline {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [MS-ODRAW] §2.4.24: MSOSPT shape types map to the preset geometries
+    /// of the same shape.
+    #[test]
+    fn shape_types_name_presets() {
+        let name = |spt: u32| match Geometry::from_shape_type(spt) {
+            Some(Geometry::Preset { name, .. }) => Some(name),
+            _ => None,
+        };
+        assert_eq!(name(1).as_deref(), Some("rect"));
+        assert_eq!(name(5).as_deref(), Some("triangle"));
+        assert_eq!(name(13).as_deref(), Some("rightArrow"));
+        assert_eq!(name(58).as_deref(), Some("star8"));
+        assert_eq!(name(202).as_deref(), Some("rect"));
+        assert_eq!(name(0), None);
+        assert_eq!(name(75), None);
+        assert_eq!(name(136), None);
+        assert!(Geometry::rectangle().is_rectangle());
+    }
 
     /// ECMA-376 Part 1 §20.1.10.49 and [MS-ODRAW] §2.4.15: the preset
     /// dashes as strings of line-width dashes and spaces.

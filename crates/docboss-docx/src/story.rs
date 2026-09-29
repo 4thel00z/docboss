@@ -5,12 +5,13 @@ use std::collections::HashMap;
 
 use docboss_model::{
     Block, Break, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement, DrawingPosition,
-    Field, Hyperlink, Inline, LineCap, LineJoin, MediaId, Paragraph, PositionAlign, PositionBase,
-    Revision, RevisionKind, Run, RunContent, RunProperties, Section, SectionProperties, Table,
-    TableCell, TableRow, VerticalAlign,
+    Field, Geometry, Hyperlink, Inline, LineCap, LineJoin, MediaId, Paragraph, PositionAlign,
+    PositionBase, Revision, RevisionKind, Run, RunContent, RunProperties, Section,
+    SectionProperties, Table, TableCell, TableRow, VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
+use crate::geometry;
 use crate::package::Relationships;
 use crate::props::{
     cell_properties, paragraph_properties, row_properties, run_properties, section_properties,
@@ -355,7 +356,8 @@ fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
 /// A shape's fill and outline from `wps:spPr` (ECMA-376 Part 1 §20.4.2.35,
 /// §20.1.2.2.24 `a:ln`), recording which of the two it states: the dash
 /// (§20.1.8.48, §20.1.8.21), the cap (§20.1.10.31) and the join
-/// (§20.1.8.9, §20.1.8.43, §20.1.8.52). An outline without `cap` takes
+/// (§20.1.8.9, §20.1.8.43, §20.1.8.52), the line ends and, outside a group,
+/// the geometry and its rotation and flips (ECMA-376 Part 1 §20.1.7.6). An outline without `cap` takes
 /// round caps, as LibreOffice draws it, not the square the clause names.
 /// Returns a note when a preset dash is unknown or a custom dash has more
 /// stops than a pattern holds.
@@ -366,11 +368,31 @@ fn shape_properties(
 ) -> Option<String> {
     let mut note = None;
     info.drawing.shape.outline_cap = LineCap::Round;
+    if !info.in_group {
+        info.drawing.geometry = Some(Box::new(Geometry::rectangle()));
+    }
     children(reader, |reader, e| {
         if e.ns != Ns::A {
             return;
         }
         match e.local {
+            "xfrm" if !info.in_group => {
+                let shape = &mut info.drawing.shape;
+                shape.rotation = e
+                    .attr_raw(Ns::NONE, "rot")
+                    .and_then(int)
+                    .map_or(0, |r| r.rem_euclid(21_600_000) as i32);
+                shape.flip_horizontal = e.attr_raw(Ns::NONE, "flipH").is_some_and(xml_true);
+                shape.flip_vertical = e.attr_raw(Ns::NONE, "flipV").is_some_and(xml_true);
+            }
+            "prstGeom" if !info.in_group => {
+                info.drawing.geometry = Some(Box::new(geometry::preset(reader, &e)));
+            }
+            "custGeom" if !info.in_group => {
+                let (custom, dropped) = geometry::custom(reader);
+                info.drawing.geometry = Some(Box::new(custom));
+                note = dropped.or(note.take());
+            }
             "solidFill" => {
                 info.drawing.shape.fill = color_choice(reader, theme);
                 info.fill_stated = true;
@@ -421,6 +443,8 @@ fn shape_properties(
                             }
                             shape.outline_dash = DashPattern::new(&stops);
                         }
+                        "headEnd" => shape.head_end = geometry::line_end(&fill),
+                        "tailEnd" => shape.tail_end = geometry::line_end(&fill),
                         "round" => shape.outline_join = LineJoin::Round,
                         "bevel" => shape.outline_join = LineJoin::Bevel,
                         "miter" => shape.outline_join = LineJoin::Miter,
@@ -560,6 +584,82 @@ fn vml_color(value: &str) -> Option<Color> {
     Color::from_hex(hex)
 }
 
+/// The geometry of a VML shape element: `v:rect`, `v:roundrect` with its
+/// `arcsize`, `v:oval`, `v:line` between `from` and `to`, or a `v:shape`
+/// whose `type` or `o:spt` names a preset shape type ([MS-ODRAW] §2.4.24);
+/// with the `flip` and `rotation` of its style.
+fn vml_geometry(e: &Element<'_>, info: &mut DrawingInfo) {
+    let geometry = match e.local {
+        "rect" => Some(Geometry::rectangle()),
+        "oval" => Geometry::from_shape_type(3),
+        "line" => Geometry::from_shape_type(20),
+        "roundrect" => {
+            let arc = e
+                .attr_raw(Ns::NONE, "arcsize")
+                .and_then(vml_fraction)
+                .unwrap_or(0.2);
+            Some(Geometry::Preset {
+                name: "roundRect".into(),
+                adjust: vec![("adj".into(), (arc * 50_000.0).round() as i64)],
+            })
+        }
+        _ => e
+            .attr_raw(Ns::O, "spt")
+            .and_then(|spt| spt.trim().parse::<f64>().ok())
+            .map(|spt| spt as u32)
+            .or_else(|| {
+                e.attr_raw(Ns::NONE, "type")?
+                    .strip_prefix("#_x0000_t")?
+                    .parse()
+                    .ok()
+            })
+            .and_then(Geometry::from_shape_type),
+    };
+    info.drawing.geometry = geometry.map(Box::new);
+    let style = e.attr(Ns::NONE, "style").unwrap_or_default();
+    let shape = &mut info.drawing.shape;
+    if let Some(flip) = css_property(&style, "flip") {
+        shape.flip_horizontal = flip.contains('x');
+        shape.flip_vertical = flip.contains('y');
+    }
+    if let Some(rotation) =
+        css_property(&style, "rotation").and_then(|r| r.trim().parse::<f64>().ok())
+    {
+        shape.rotation = ((rotation * 60_000.0).round() as i64).rem_euclid(21_600_000) as i32;
+    }
+    if e.local != "line" {
+        return;
+    }
+    let point = |name: &str| -> Option<(i64, i64)> {
+        let (x, y) = e.attr_raw(Ns::NONE, name)?.split_once(',')?;
+        Some((css_length(x)?, css_length(y)?))
+    };
+    let (Some(from), Some(to)) = (point("from"), point("to")) else {
+        return;
+    };
+    info.drawing.width = (to.0 - from.0).abs();
+    info.drawing.height = (to.1 - from.1).abs();
+    info.horizontal.offset = info.horizontal.offset.saturating_add(from.0.min(to.0));
+    info.vertical.offset = info.vertical.offset.saturating_add(from.1.min(to.1));
+    shape.flip_horizontal ^= to.0 < from.0;
+    shape.flip_vertical ^= to.1 < from.1;
+}
+
+/// A VML fraction: `0.25`, `25%` or the 65536ths form `16384f`.
+fn vml_fraction(value: &str) -> Option<f64> {
+    let value = value.trim();
+    let fraction = match (value.strip_suffix('%'), value.strip_suffix('f')) {
+        (Some(percent), _) => percent.trim().parse::<f64>().ok()? / 100.0,
+        (_, Some(fixed)) => fixed.trim().parse::<f64>().ok()? / 65_536.0,
+        _ => value.parse::<f64>().ok()?,
+    };
+    fraction.is_finite().then_some(fraction.clamp(0.0, 1.0))
+}
+
+fn xml_true(value: &str) -> bool {
+    matches!(value, "1" | "true")
+}
+
 fn vml_true(value: Option<&str>, default: bool) -> bool {
     value.map_or(default, |v| !matches!(v.trim(), "f" | "false" | "0"))
 }
@@ -571,6 +671,8 @@ struct DrawingInfo {
     fill_stated: bool,
     line_stated: bool,
     anchored: bool,
+    /// Inside a group or canvas, whose children's geometry is not read.
+    in_group: bool,
     horizontal: DrawingPosition,
     vertical: DrawingPosition,
     behind: bool,
@@ -588,10 +690,12 @@ impl DrawingInfo {
                 description: None,
                 text_box: Vec::new(),
                 shape: Default::default(),
+                geometry: None,
             },
             fill_stated: false,
             line_stated: false,
             anchored: false,
+            in_group: false,
             horizontal: DrawingPosition::offset(PositionBase::Column, 0),
             vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind: false,
@@ -1007,13 +1111,16 @@ impl<'p> StoryParser<'p> {
             "drawing" => {
                 let mut info = DrawingInfo::new();
                 self.drawing_children(reader, &mut info);
-                content.push(RunContent::Drawing(info.finish()));
+                content.push(RunContent::Drawing(Box::new(info.finish())));
             }
             "pict" | "object" => {
                 let mut info = DrawingInfo::new();
                 self.vml(reader, &mut info);
-                if info.drawing.media.is_some() || !info.drawing.text_box.is_empty() {
-                    content.push(RunContent::Drawing(info.finish()));
+                let drawn = info.drawing.media.is_some()
+                    || !info.drawing.text_box.is_empty()
+                    || info.drawing.geometry.is_some();
+                if drawn {
+                    content.push(RunContent::Drawing(Box::new(info.finish())));
                 }
             }
             _ => {}
@@ -1172,6 +1279,10 @@ impl<'p> StoryParser<'p> {
                     alternate_content(reader, |reader| self.drawing_children(reader, info));
                     return;
                 }
+                (Ns::WPG, "wgp") | (_, "wpc") => {
+                    info.in_group = true;
+                    info.drawing.geometry = None;
+                }
                 _ => {}
             }
             self.drawing_children(reader, info);
@@ -1183,7 +1294,7 @@ impl<'p> StoryParser<'p> {
     fn vml(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
-                (Ns::V, "shape" | "rect" | "roundrect" | "oval") => {
+                (Ns::V, "shape" | "rect" | "roundrect" | "oval" | "line") => {
                     if let Some(style) = e.attr(Ns::NONE, "style") {
                         if info.drawing.width == 0 {
                             info.drawing.width = css_property(&style, "width")
@@ -1230,6 +1341,13 @@ impl<'p> StoryParser<'p> {
                             .unwrap_or(9_525),
                     );
                     shape.outline_cap = LineCap::Round;
+                    if !info.in_group {
+                        vml_geometry(&e, info);
+                    }
+                }
+                (Ns::V, "group") => {
+                    info.in_group = true;
+                    info.drawing.geometry = None;
                 }
                 (Ns::V, "stroke") => {
                     let shape = &mut info.drawing.shape;

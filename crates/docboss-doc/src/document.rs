@@ -13,7 +13,7 @@ use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
 use crate::fib::{slot, Fib};
 use crate::picture::{
     blip, children, record, shape_alignment, shape_blip_index, shape_containers, shape_format,
-    shape_id,
+    shape_geometry, shape_id,
 };
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
@@ -490,6 +490,9 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
             context
                 .shape_alignments
                 .insert(id, shape_alignment(table, &container));
+            if let Some(geometry) = shape_geometry(table, &container) {
+                context.shape_geometries.insert(id, geometry);
+            }
         }
         let (Some(id), Some(pib)) = (
             shape_id(table, &container),

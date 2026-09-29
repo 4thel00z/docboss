@@ -107,6 +107,8 @@ pub struct Context<'a> {
     pub shape_blips: HashMap<u32, usize>,
     /// Fill, line and text frame of each floating shape by shape id.
     pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
+    /// The preset geometry of each floating shape by shape id.
+    pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
     pub shape_alignments: HashMap<u32, ShapeAlignment>,
     /// Text box stories by shape id: the CP range of each.
@@ -335,6 +337,7 @@ impl<'a> Context<'a> {
             authors: Vec::new(),
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
+            shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
             text_boxes: HashMap::new(),
             blip_store: Vec::new(),
@@ -529,7 +532,7 @@ impl<'a> Context<'a> {
                 format!("picture at {location:#x} has no decodable BLIP"),
             ));
         }
-        Some(RunContent::Drawing(Drawing {
+        Some(RunContent::Drawing(Box::new(Drawing {
             media,
             width: i64::from(picture.width) * 635,
             height: i64::from(picture.height) * 635,
@@ -538,11 +541,12 @@ impl<'a> Context<'a> {
             description: None,
             text_box: Vec::new(),
             shape: Default::default(),
-        }))
+            geometry: None,
+        })))
     }
 
     /// A floating shape: its picture from the BLIP store, or its text box
-    /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt).
+    /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt), or a preset shape.
     fn floating(&self, cp: u32) -> Option<RunContent> {
         let anchor = self.anchors.get(&cp)?;
         let alignment = self
@@ -559,17 +563,26 @@ impl<'a> Context<'a> {
             Some(&(start, end)) => self.story(start, end, StoryKind::TextBox),
             None => Vec::new(),
         };
-        if media.is_none() && text_box.is_empty() {
+        let geometry = media
+            .is_none()
+            .then(|| {
+                self.shape_geometries
+                    .get(&anchor.shape_id)
+                    .cloned()
+                    .map(Box::new)
+            })
+            .flatten();
+        if media.is_none() && text_box.is_empty() && geometry.is_none() {
             self.report(Diagnostic::dropped(
                 "WordDocument",
                 format!(
-                    "shape {} at CP {cp} is neither a picture nor a text box",
+                    "shape {} at CP {cp} is neither a picture, a text box nor a preset shape",
                     anchor.shape_id
                 ),
             ));
             return None;
         }
-        Some(RunContent::Drawing(Drawing {
+        Some(RunContent::Drawing(Box::new(Drawing {
             media,
             width: i64::from(anchor.right - anchor.left) * 635,
             height: i64::from(anchor.bottom - anchor.top) * 635,
@@ -580,7 +593,7 @@ impl<'a> Context<'a> {
             },
             name: None,
             description: None,
-            shape: match text_box.is_empty() {
+            shape: match text_box.is_empty() && geometry.is_none() {
                 true => Default::default(),
                 false => self
                     .shape_formats
@@ -589,7 +602,8 @@ impl<'a> Context<'a> {
                     .unwrap_or_default(),
             },
             text_box,
-        }))
+            geometry,
+        })))
     }
 
     fn markers_in(&self, start: u32, end: u32) -> &[(u32, u8, Marker)] {

@@ -91,7 +91,7 @@ pub fn kitchen_sink() -> Document {
     builder.picture(tiny_png());
     let media = builder.image(tiny_png());
     builder.paragraph(Para::new().text("Anchored picture").content(
-        RunContent::Drawing(Drawing {
+        RunContent::Drawing(Box::new(Drawing {
             media: Some(media),
             width: 914400,
             height: 914400,
@@ -104,7 +104,8 @@ pub fn kitchen_sink() -> Document {
             description: Some("An anchored picture".into()),
             text_box: Vec::new(),
             shape: Default::default(),
-        }),
+            geometry: None,
+        })),
         RunProperties::default(),
     ));
     builder.paragraph(

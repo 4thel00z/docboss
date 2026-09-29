@@ -9,6 +9,7 @@
 //! damaged parts are skipped and reported in [`Document::diagnostics`].
 
 mod error;
+mod geometry;
 mod package;
 mod parts;
 mod props;

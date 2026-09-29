@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use docboss_font::FontId;
-use docboss_layout::{GlyphRun, Item, Layout, LineStyle, Rect};
+use docboss_font::{FontId, Seg};
+use docboss_layout::{GlyphRun, Item, Layout, LineStyle, Rect, Stroke};
 use docboss_model::{Color, DashPattern, Diagnostic, LineCap, LineJoin, MediaId};
 
 use crate::image::{decode, Decoded, ImageError};
-use crate::raster::{flatten, rasterize, Mask, Point, Polygons};
+use crate::raster::{flatten, polylines, rasterize, Mask, Point, Polygons};
 use crate::{Error, Pixmap, Result};
 
 const SUBPIXEL: f32 = 4.0;
@@ -91,6 +91,9 @@ impl Renderer {
                     *cap,
                     *join,
                 ),
+                Item::Path { segs, fill, stroke } => {
+                    canvas.path(segs, *fill, stroke.as_ref(), scale)
+                }
                 Item::ClipBegin(rect) => {
                     outer.push(clip);
                     clip = clip.intersect(scaled(*rect, scale));
@@ -477,6 +480,47 @@ impl Canvas<'_> {
         }
     }
 
+    /// Fills `segs`, in points, with the nonzero rule, then strokes each of
+    /// its subpaths: dashed ones through the dash walker, solid ones as one
+    /// coverage mask of their pieces, joins and caps.
+    fn path(&mut self, segs: &[Seg], fill: Option<Color>, stroke: Option<&Stroke>, scale: f32) {
+        let m = [scale, 0.0, 0.0, scale, 0.0, 0.0];
+        if let Some(color) = fill {
+            self.fill_polygons(&flatten(segs, m), color);
+        }
+        let Some(stroke) = stroke else {
+            return;
+        };
+        let width = (stroke.width * scale).max(0.5);
+        let mut polygons: Polygons = Vec::new();
+        for (points, closed) in polylines(segs, m) {
+            if let LineStyle::Dash(pattern) = stroke.style {
+                let points: Vec<(f32, f32)> = points.iter().map(|p| (p.x, p.y)).collect();
+                self.dashed_path(
+                    &points,
+                    closed,
+                    width,
+                    stroke.color,
+                    pattern,
+                    stroke.cap,
+                    Some(stroke.join),
+                );
+                continue;
+            }
+            stroke_polyline(
+                &mut polygons,
+                &points,
+                closed,
+                width,
+                stroke.cap,
+                stroke.join,
+            );
+        }
+        if !polygons.is_empty() {
+            self.fill_polygons(&polygons, stroke.color);
+        }
+    }
+
     /// A rectangle's outline, stroked clockwise from the top-left corner.
     fn outline(
         &mut self,
@@ -638,6 +682,142 @@ impl Canvas<'_> {
             }
         }
     }
+}
+
+/// The turn under which a solid stroke's vertex gets no join, in radians:
+/// a flattened curve's gaps there are well under a pixel.
+const MIN_JOIN_TURN: f32 = 0.035;
+
+/// Adds the polygons of a solid stroke along `points`, `width` pixels
+/// wide, closed back to the first point when `closed`: a quad per piece,
+/// `join` at each corner that turns and `cap` at each end of an open one.
+/// Every polygon winds the same way, so the nonzero rule unites them.
+fn stroke_polyline(
+    out: &mut Polygons,
+    points: &[Point],
+    closed: bool,
+    width: f32,
+    cap: LineCap,
+    join: LineJoin,
+) {
+    let mut points: Vec<(f32, f32)> = points.iter().map(|p| (p.x, p.y)).collect();
+    points.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3);
+    if closed && points.len() > 2 && points.first() == points.last() {
+        points.pop();
+    }
+    let n = points.len();
+    if n < 2 {
+        return;
+    }
+    let half = width / 2.0;
+    let pieces = if closed { n } else { n - 1 };
+    let point = |x: f32, y: f32| Point { x, y };
+    for i in 0..pieces {
+        let (p, q) = (points[i], points[(i + 1) % n]);
+        let u = direction(p, q);
+        let (nx, ny) = (-u.1 * half, u.0 * half);
+        push_wound(
+            out,
+            vec![
+                point(p.0 + nx, p.1 + ny),
+                point(q.0 + nx, q.1 + ny),
+                point(q.0 - nx, q.1 - ny),
+                point(p.0 - nx, p.1 - ny),
+            ],
+        );
+    }
+    let corners = if closed { 0..n } else { 1..n - 1 };
+    for i in corners {
+        let before = points[(i + n - 1) % n];
+        let (c, after) = (points[i], points[(i + 1) % n]);
+        let (a, b) = (direction(before, c), direction(c, after));
+        let turn = (a.0 * b.1 - a.1 * b.0).atan2(a.0 * b.0 + a.1 * b.1).abs();
+        if turn < MIN_JOIN_TURN {
+            continue;
+        }
+        push_wound(out, join_polygon(c, a, b, half, join));
+    }
+    if closed {
+        return;
+    }
+    let ends = [
+        (points[0], direction(points[1], points[0])),
+        (points[n - 1], direction(points[n - 2], points[n - 1])),
+    ];
+    for (end, outward) in ends {
+        match cap {
+            LineCap::Flat => {}
+            LineCap::Round => push_wound(out, disc(end, half)),
+            LineCap::Square => {
+                let (nx, ny) = (-outward.1 * half, outward.0 * half);
+                let (ex, ey) = (end.0 + outward.0 * half, end.1 + outward.1 * half);
+                push_wound(
+                    out,
+                    vec![
+                        point(end.0 + nx, end.1 + ny),
+                        point(ex + nx, ey + ny),
+                        point(ex - nx, ey - ny),
+                        point(end.0 - nx, end.1 - ny),
+                    ],
+                );
+            }
+        }
+    }
+}
+
+/// Adds a polygon wound counterclockwise on screen, reversing it if needed.
+fn push_wound(out: &mut Polygons, mut polygon: Vec<Point>) {
+    let area: f32 = (0..polygon.len())
+        .map(|i| {
+            let (p, q) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+            p.x * q.y - q.x * p.y
+        })
+        .sum();
+    if area < 0.0 {
+        polygon.reverse();
+    }
+    out.push(polygon);
+}
+
+/// The corner at `c` where a stroke `half` wide arriving along `a` leaves
+/// along `b`.
+fn join_polygon(
+    c: (f32, f32),
+    a: (f32, f32),
+    b: (f32, f32),
+    half: f32,
+    join: LineJoin,
+) -> Vec<Point> {
+    if join == LineJoin::Round && half >= 1.0 {
+        return disc(c, half);
+    }
+    let cross = a.0 * b.1 - a.1 * b.0;
+    let side = if cross > 0.0 { half } else { -half };
+    let pa = (c.0 + a.1 * side, c.1 - a.0 * side);
+    let pb = (c.0 + b.1 * side, c.1 - b.0 * side);
+    let point = |p: (f32, f32)| Point { x: p.0, y: p.1 };
+    let bevel = vec![point(c), point(pa), point(pb)];
+    let sharp = a.0 * b.0 + a.1 * b.1 < -0.75;
+    if join == LineJoin::Bevel || sharp || cross.abs() < 1e-4 {
+        return bevel;
+    }
+    let t = ((pb.0 - pa.0) * b.1 - (pb.1 - pa.1) * b.0) / cross;
+    let tip = (pa.0 + a.0 * t, pa.1 + a.1 * t);
+    vec![point(c), point(pa), point(tip), point(pb)]
+}
+
+/// A disc of `radius` about `c`.
+fn disc(c: (f32, f32), radius: f32) -> Vec<Point> {
+    let steps = ((radius * 3.0).ceil() as usize).clamp(8, 64);
+    (0..steps)
+        .map(|i| {
+            let angle = std::f32::consts::TAU * i as f32 / steps as f32;
+            Point {
+                x: c.0 + radius * angle.cos(),
+                y: c.1 + radius * angle.sin(),
+            }
+        })
+        .collect()
 }
 
 /// Halves an image until it is at most twice the target size, averaging

@@ -28,9 +28,10 @@ pub use block::{
 pub use diagnostic::{Diagnostic, Severity};
 pub use document::{Comment, Document, Metadata, Note, NoteKind, Settings, SourceFormat};
 pub use inline::{
-    Break, DashPattern, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink, Inline,
-    LineCap, LineJoin, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent,
-    ShapeFormat,
+    Break, CustomGeometry, DashPattern, Drawing, DrawingPlacement, DrawingPosition, Field,
+    Geometry, GeometryPath, Guide, Hyperlink, Inline, LineCap, LineEnd, LineEndKind, LineEndSize,
+    LineJoin, PathCommand, PathFill, PositionAlign, PositionBase, Revision, RevisionKind, Run,
+    RunContent, ShapeFormat,
 };
 pub use media::{sniff_image, FontEntry, Media, MediaId};
 pub use numbering::{

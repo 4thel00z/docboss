@@ -159,8 +159,12 @@ impl Para {
             description: None,
             text_box: Vec::new(),
             shape: Default::default(),
+            geometry: None,
         };
-        self.content(RunContent::Drawing(drawing), RunProperties::default())
+        self.content(
+            RunContent::Drawing(Box::new(drawing)),
+            RunProperties::default(),
+        )
     }
 
     /// Places the paragraph in a list created with [`DocumentBuilder::list`].

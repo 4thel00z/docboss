@@ -237,7 +237,7 @@ fn inline_picture() {
         .flat_map(|p| runs(p))
         .flat_map(|r| &r.content)
         .find_map(|c| match c {
-            RunContent::Drawing(d) => Some(d.clone()),
+            RunContent::Drawing(d) => Some(d.as_ref().clone()),
             _ => None,
         })
         .unwrap();
@@ -332,7 +332,7 @@ fn floating_picture_and_text_box() {
         .flat_map(|p| runs(p))
         .flat_map(|r| &r.content)
         .filter_map(|c| match c {
-            RunContent::Drawing(d) => Some(d.clone()),
+            RunContent::Drawing(d) => Some(d.as_ref().clone()),
             _ => None,
         })
         .collect();

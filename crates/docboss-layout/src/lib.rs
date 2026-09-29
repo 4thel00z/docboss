@@ -8,8 +8,11 @@
 //! headers, footers and footnotes.
 
 mod breaks;
+mod drawn;
 mod flow;
+mod geometry;
 mod paragraph;
+mod presets;
 mod shape;
 mod table;
 mod textbox;
@@ -17,7 +20,7 @@ mod units;
 
 use std::sync::Arc;
 
-use docboss_font::{FontDatabase, FontId};
+use docboss_font::{FontDatabase, FontId, Seg};
 use docboss_model::{Color, DashPattern, Diagnostic, Document, LineCap, LineJoin, Media, MediaId};
 
 pub use units::{emu_to_pt, twips_to_pt};
@@ -94,6 +97,17 @@ pub enum LineStyle {
     Wave,
 }
 
+/// How a path is stroked.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stroke {
+    /// Width in points.
+    pub width: f32,
+    pub color: Color,
+    pub style: LineStyle,
+    pub cap: LineCap,
+    pub join: LineJoin,
+}
+
 /// Something painted on a page.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
@@ -124,6 +138,14 @@ pub enum Item {
         cap: LineCap,
         join: LineJoin,
     },
+    /// An outline of lines and curves in page points, filled with the
+    /// nonzero rule and then stroked. Each subpath starts with a move; one
+    /// that ends in a close is stroked closed.
+    Path {
+        segs: Vec<Seg>,
+        fill: Option<Color>,
+        stroke: Option<Stroke>,
+    },
     /// Confines the items that follow, up to the matching [`Item::ClipEnd`],
     /// to a rectangle.
     ClipBegin(Rect),
@@ -144,6 +166,11 @@ impl Item {
             Item::Line { from, to, .. } => {
                 *from = (from.0 + dx, from.1 + dy);
                 *to = (to.0 + dx, to.1 + dy);
+            }
+            Item::Path { segs, .. } => {
+                for seg in segs.iter_mut() {
+                    *seg = seg.transformed([1.0, 0.0, 0.0, 1.0, dx, dy]);
+                }
             }
             Item::ClipEnd => {}
         }

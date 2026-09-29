@@ -17,7 +17,7 @@ fn drawings(document: &Document) -> Vec<&docboss_model::Drawing> {
             let Inline::Run(run) = inline else { continue };
             for content in &run.content {
                 if let RunContent::Drawing(d) = content {
-                    out.push(d);
+                    out.push(d.as_ref());
                 }
             }
         }

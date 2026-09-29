@@ -638,7 +638,7 @@ fn first_drawing(doc: &docboss_model::Document) -> docboss_model::Drawing {
         .iter()
         .find_map(|inline| match inline {
             Inline::Run(run) => run.content.iter().find_map(|content| match content {
-                RunContent::Drawing(drawing) => Some(drawing.clone()),
+                RunContent::Drawing(drawing) => Some(drawing.as_ref().clone()),
                 _ => None,
             }),
             _ => None,
@@ -775,4 +775,134 @@ fn text_box_colors_come_from_the_theme() {
         fill.0 < 0x44 && fill.2 < 0xC4 && fill.2 > fill.0,
         "{fill:?}"
     );
+}
+
+fn shape_drawing(sp_pr: &str) -> docboss_model::Drawing {
+    let body = format!(
+        r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:spPr>{sp_pr}</wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#
+    );
+    first_drawing(&read(&Docx::new(&body).build()).unwrap())
+}
+
+/// A shape's preset geometry with its adjust values, its rotation and
+/// flips, and the ends of its line.
+/// ECMA-376 Part 1 §20.1.9.18, §20.1.9.5, §20.1.7.6, §20.1.8.38, §20.1.8.57.
+/// ECMA-376 Part 1 §20.1.10.33, §20.1.10.34, §20.1.10.32.
+#[test]
+fn shape_preset_geometry_transform_and_line_ends() {
+    let drawing = shape_drawing(
+        r#"<a:xfrm rot="5400000" flipV="1"><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="rightArrow"><a:avLst><a:gd name="adj1" fmla="val 25000"/></a:avLst></a:prstGeom><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:headEnd type="none"/><a:tailEnd type="stealth" w="lg" len="sm"/></a:ln>"#,
+    );
+    assert_eq!(
+        drawing.geometry.as_deref(),
+        Some(&docboss_model::Geometry::Preset {
+            name: "rightArrow".into(),
+            adjust: vec![("adj1".into(), 25_000)],
+        })
+    );
+    assert_eq!(drawing.shape.rotation, 5_400_000);
+    assert!(drawing.shape.flip_vertical && !drawing.shape.flip_horizontal);
+    assert_eq!(drawing.shape.head_end, None);
+    assert_eq!(
+        drawing.shape.tail_end,
+        Some(docboss_model::LineEnd {
+            kind: docboss_model::LineEndKind::Stealth,
+            width: docboss_model::LineEndSize::Large,
+            length: docboss_model::LineEndSize::Small,
+        })
+    );
+    let plain = shape_drawing(r#"<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>"#);
+    assert_eq!(
+        plain.geometry.as_deref(),
+        Some(&docboss_model::Geometry::rectangle())
+    );
+}
+
+/// A custom geometry's guides and paths.
+/// ECMA-376 Part 1 §20.1.9.8, §20.1.9.12, §20.1.9.11, §20.1.9.16, §20.1.9.15, §20.1.9.20.
+/// ECMA-376 Part 1 §20.1.9.14, §20.1.9.13, §20.1.9.4, §20.1.9.21, §20.1.9.7, §20.1.9.6.
+#[test]
+fn shape_custom_geometry() {
+    let drawing = shape_drawing(
+        r#"<a:custGeom><a:avLst/><a:gdLst><a:gd name="half" fmla="*/ w 1 2"/></a:gdLst><a:pathLst><a:path w="100" h="50" fill="none" stroke="0"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="half" y="50"/></a:lnTo><a:arcTo wR="10" hR="20" stAng="0" swAng="5400000"/><a:quadBezTo><a:pt x="1" y="2"/><a:pt x="3" y="4"/></a:quadBezTo><a:cubicBezTo><a:pt x="1" y="2"/><a:pt x="3" y="4"/><a:pt x="5" y="6"/></a:cubicBezTo><a:close/></a:path></a:pathLst></a:custGeom>"#,
+    );
+    let Some(docboss_model::Geometry::Custom(custom)) = drawing.geometry.as_deref() else {
+        panic!("{:?}", drawing.geometry)
+    };
+    assert_eq!(custom.guides[0].formula, "*/ w 1 2");
+    let path = &custom.paths[0];
+    assert_eq!((path.width, path.height), (100, 50));
+    assert_eq!(path.fill, docboss_model::PathFill::None);
+    assert!(!path.stroke);
+    use docboss_model::PathCommand::*;
+    let s = |v: &str| v.to_string();
+    assert_eq!(
+        path.commands,
+        vec![
+            MoveTo([s("0"), s("0")]),
+            LineTo([s("half"), s("50")]),
+            ArcTo([s("10"), s("20"), s("0"), s("5400000")]),
+            QuadTo([s("1"), s("2"), s("3"), s("4")]),
+            CubicTo([s("1"), s("2"), s("3"), s("4"), s("5"), s("6")]),
+            Close,
+        ]
+    );
+}
+
+/// Shapes inside a group keep no geometry of their own, so the group is
+/// drawn as before.
+/// ECMA-376 Part 1 §20.4.2.32.
+#[test]
+fn group_children_keep_no_geometry() {
+    let body = r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wpg:wgp xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="ellipse"/></wps:spPr><wps:bodyPr/></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
+    let drawing = first_drawing(&read(&Docx::new(body).build()).unwrap());
+    assert_eq!(drawing.geometry, None);
+}
+
+/// VML shape elements take their preset geometry: an oval, a rounded
+/// rectangle's arcsize, a line between its end points and a shape type,
+/// with the style's flip and rotation.
+/// [MS-ODRAW] §2.4.24.
+#[test]
+fn vml_shape_geometry() {
+    let vml = |element: &str| {
+        let body = format!(
+            r#"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">{element}</w:pict></w:r></w:p>"#
+        );
+        first_drawing(&read(&Docx::new(&body).build()).unwrap())
+    };
+    let preset = |name: &str, adjust: Vec<(String, i64)>| {
+        Some(Box::new(docboss_model::Geometry::Preset {
+            name: name.into(),
+            adjust,
+        }))
+    };
+    let oval =
+        vml(r#"<v:oval style="position:absolute;width:10pt;height:10pt;rotation:90;flip:x"/>"#);
+    assert_eq!(oval.geometry, preset("ellipse", vec![]));
+    assert_eq!(oval.shape.rotation, 5_400_000);
+    assert!(oval.shape.flip_horizontal);
+    let round = vml(r#"<v:roundrect style="width:10pt;height:10pt" arcsize="10923f"/>"#);
+    assert_eq!(
+        round.geometry,
+        preset("roundRect", vec![("adj".into(), 8_334)])
+    );
+    let line = vml(r#"<v:line style="position:absolute" from="10pt,40pt" to="30pt,20pt"/>"#);
+    assert_eq!(line.geometry, preset("line", vec![]));
+    assert_eq!((line.width, line.height), (254_000, 254_000));
+    assert!(line.shape.flip_vertical && !line.shape.flip_horizontal);
+    let DrawingPlacement::Anchored {
+        horizontal,
+        vertical,
+        ..
+    } = line.placement
+    else {
+        panic!("{:?}", line.placement)
+    };
+    assert_eq!((horizontal.offset, vertical.offset), (127_000, 254_000));
+    let arrow = vml(r##"<v:shape type="#_x0000_t13" style="width:10pt;height:10pt"/>"##);
+    assert_eq!(arrow.geometry, preset("rightArrow", vec![]));
+    let custom = r#"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:shape style="width:10pt;height:10pt" path="m,l10,10e"/></w:pict></w:r></w:p>"#;
+    let doc = read(&Docx::new(custom).build()).unwrap();
+    assert!(!format!("{:?}", paragraphs(&doc)[0].inlines).contains("Drawing"));
 }

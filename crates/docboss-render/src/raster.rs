@@ -20,31 +20,46 @@ const MAX_SUBDIVISIONS: u32 = 64;
 /// Flattens outline segments under the map `(x, y) -> (a*x + c*y + e,
 /// b*x + d*y + f)` into polygons.
 pub(crate) fn flatten(segs: &[Seg], m: [f32; 6]) -> Polygons {
+    polylines(segs, m)
+        .into_iter()
+        .filter_map(|(points, _)| (points.len() > 2).then_some(points))
+        .collect()
+}
+
+/// Flattens outline segments under the map of [`flatten`] into one
+/// polyline per subpath, each with whether a close ends it.
+pub(crate) fn polylines(segs: &[Seg], m: [f32; 6]) -> Vec<(Vec<Point>, bool)> {
     let map = |x: f32, y: f32| Point {
         x: m[0] * x + m[2] * y + m[4],
         y: m[1] * x + m[3] * y + m[5],
     };
-    let mut out: Polygons = Vec::new();
+    let mut out: Vec<(Vec<Point>, bool)> = Vec::new();
     let mut current: Vec<Point> = Vec::new();
     let mut pen = Point { x: 0.0, y: 0.0 };
-    let close = |current: &mut Vec<Point>, out: &mut Polygons| {
-        if current.len() > 2 {
-            out.push(std::mem::take(current));
+    let finish = |current: &mut Vec<Point>, out: &mut Vec<(Vec<Point>, bool)>, closed: bool| {
+        if current.len() > 1 {
+            out.push((std::mem::take(current), closed));
         }
         current.clear();
     };
     for seg in segs {
         match *seg {
             Seg::Move(x, y) => {
-                close(&mut current, &mut out);
+                finish(&mut current, &mut out, false);
                 pen = map(x, y);
                 current.push(pen);
             }
             Seg::Line(x, y) => {
+                if current.is_empty() {
+                    current.push(pen);
+                }
                 pen = map(x, y);
                 current.push(pen);
             }
             Seg::Quad(cx, cy, x, y) => {
+                if current.is_empty() {
+                    current.push(pen);
+                }
                 let (c, e) = (map(cx, cy), map(x, y));
                 let steps = steps_for(
                     ((pen.x - 2.0 * c.x + e.x).abs() + (pen.y - 2.0 * c.y + e.y).abs()) / 4.0,
@@ -60,6 +75,9 @@ pub(crate) fn flatten(segs: &[Seg], m: [f32; 6]) -> Polygons {
                 pen = e;
             }
             Seg::Cubic(x1, y1, x2, y2, x, y) => {
+                if current.is_empty() {
+                    current.push(pen);
+                }
                 let (c1, c2, e) = (map(x1, y1), map(x2, y2), map(x, y));
                 let d1 = (pen.x - 2.0 * c1.x + c2.x).abs() + (pen.y - 2.0 * c1.y + c2.y).abs();
                 let d2 = (c1.x - 2.0 * c2.x + e.x).abs() + (c1.y - 2.0 * c2.y + e.y).abs();
@@ -75,10 +93,15 @@ pub(crate) fn flatten(segs: &[Seg], m: [f32; 6]) -> Polygons {
                 }
                 pen = e;
             }
-            Seg::Close => close(&mut current, &mut out),
+            Seg::Close => {
+                if let Some(first) = current.first() {
+                    pen = *first;
+                }
+                finish(&mut current, &mut out, true);
+            }
         }
     }
-    close(&mut current, &mut out);
+    finish(&mut current, &mut out, false);
     out
 }
 

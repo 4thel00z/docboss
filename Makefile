@@ -104,6 +104,12 @@ ledger-vectors: ## Regenerate the test vectors from the Lean reference implement
 ledger-outline: ## Regenerate the clause outlines from the specification texts in ledger/specs
 	python3 ledger/tools/outline.py ledger/specs ledger/Ledger/Outline
 
+##@ Generated code
+
+.PHONY: presets
+presets: ## Regenerate the DrawingML preset geometries from the ECMA-376 Part 1 zip in ledger/specs
+	python3 crates/docboss-layout/tools/presets.py ledger/specs/ECMA-376-1_5th_edition_december_2016.zip crates/docboss-layout/src/presets.rs
+
 ##@ Benchmarks
 
 .PHONY: bench

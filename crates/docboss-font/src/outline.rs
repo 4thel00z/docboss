@@ -14,7 +14,7 @@ pub enum Seg {
 
 impl Seg {
     /// Applies the linear map `[a b c d]` and translation `(tx, ty)`.
-    pub(crate) fn transformed(self, m: [f32; 6]) -> Seg {
+    pub fn transformed(self, m: [f32; 6]) -> Seg {
         let [a, b, c, d, tx, ty] = m;
         let f = |x: f32, y: f32| (a * x + c * y + tx, b * x + d * y + ty);
         match self {

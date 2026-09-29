@@ -952,7 +952,7 @@ fn text_box(
 ) -> Inline {
     Inline::Run(Run {
         properties: RunProperties::default(),
-        content: vec![RunContent::Drawing(docboss_model::Drawing {
+        content: vec![RunContent::Drawing(Box::new(docboss_model::Drawing {
             media: None,
             width: 2_540_000,
             height: 1_270_000,
@@ -961,7 +961,8 @@ fn text_box(
             description: None,
             text_box: blocks,
             shape,
-        })],
+            geometry: None,
+        }))],
     })
 }
 
@@ -1237,7 +1238,7 @@ fn header_text_boxes_are_painted() {
 fn auto_line_spacing_leaves_inline_pictures_unscaled() {
     let picture = Inline::Run(Run {
         properties: RunProperties::default(),
-        content: vec![RunContent::Drawing(docboss_model::Drawing {
+        content: vec![RunContent::Drawing(Box::new(docboss_model::Drawing {
             media: None,
             width: 1_270_000,
             height: 1_270_000,
@@ -1246,7 +1247,8 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             description: None,
             text_box: Vec::new(),
             shape: Default::default(),
-        })],
+            geometry: None,
+        }))],
     });
     let mut properties = ParagraphProperties::default();
     properties.spacing.line = Some(276);
@@ -1289,4 +1291,125 @@ fn auto_fit_text_boxes_shrink_to_their_text() {
         })
         .expect("fill");
     assert!(fill.height > 20.0 && fill.height < 40.0, "{fill:?}");
+}
+
+fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -> Block {
+    para_with(
+        ParagraphProperties::default(),
+        vec![Inline::Run(Run {
+            properties: RunProperties::default(),
+            content: vec![RunContent::Drawing(Box::new(docboss_model::Drawing {
+                media: None,
+                width: 1_270_000,
+                height: 635_000,
+                placement: anchored(914_400, 914_400),
+                name: None,
+                description: None,
+                text_box: Vec::new(),
+                shape,
+                geometry: Some(Box::new(geometry)),
+            }))],
+        })],
+    )
+}
+
+fn paths(layout: &Layout) -> Vec<&Item> {
+    layout.pages[0]
+        .items
+        .iter()
+        .filter(|item| matches!(item, Item::Path { .. }))
+        .collect()
+}
+
+/// A shape without text paints its preset geometry: the fill under the
+/// outline, no placeholder, and a rectangle keeps its rectangle items.
+/// ECMA-376 Part 1 §20.1.9.18, §20.1.10.56.
+#[test]
+fn shapes_without_text_paint_their_geometry() {
+    let triangle = docboss_model::Geometry::Preset {
+        name: "triangle".into(),
+        adjust: Vec::new(),
+    };
+    let layout = laid(&doc(vec![shape(triangle, framed())]));
+    let items = paths(&layout);
+    assert_eq!(items.len(), 2, "{:?}", layout.pages[0].items);
+    let Item::Path { segs, fill, stroke } = items[0] else {
+        unreachable!()
+    };
+    assert_eq!(*fill, Some(docboss_model::Color(255, 255, 0)));
+    assert!(stroke.is_none());
+    assert_eq!(segs[0], docboss_font::Seg::Move(144.0, 194.0));
+    assert_eq!(segs[1], docboss_font::Seg::Line(194.0, 144.0));
+    let Item::Path { fill, stroke, .. } = items[1] else {
+        unreachable!()
+    };
+    assert!(fill.is_none() && stroke.unwrap().width == 1.0);
+    assert!(!layout.pages[0]
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Image { .. })));
+    let layout = laid(&doc(vec![shape(
+        docboss_model::Geometry::rectangle(),
+        framed(),
+    )]));
+    assert!(paths(&layout).is_empty());
+    assert!(layout.pages[0]
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Outline { .. })));
+}
+
+/// A flipped, turned line with a triangle at its tail: the flip picks the
+/// other diagonal, the turn goes about the center, and the arrowhead
+/// sits at the end with the line pulled back under it.
+/// ECMA-376 Part 1 §20.1.7.6, §20.1.8.57, §20.1.10.33.
+#[test]
+fn lines_flip_turn_and_end_in_arrowheads() {
+    let line = docboss_model::Geometry::Preset {
+        name: "line".into(),
+        adjust: Vec::new(),
+    };
+    let format = docboss_model::ShapeFormat {
+        outline: Some(docboss_model::Color::BLACK),
+        outline_width: Some(12_700),
+        flip_vertical: true,
+        tail_end: Some(docboss_model::LineEnd {
+            kind: docboss_model::LineEndKind::Triangle,
+            width: docboss_model::LineEndSize::Medium,
+            length: docboss_model::LineEndSize::Medium,
+        }),
+        ..docboss_model::ShapeFormat::default()
+    };
+    let layout = laid(&doc(vec![shape(line.clone(), format)]));
+    let items = paths(&layout);
+    assert_eq!(items.len(), 2);
+    let Item::Path { segs, .. } = items[0] else {
+        unreachable!()
+    };
+    assert_eq!(segs[0], docboss_font::Seg::Move(144.0, 194.0));
+    let docboss_font::Seg::Line(x, y) = segs[1] else {
+        panic!("{segs:?}")
+    };
+    assert!(x < 244.0 && y > 144.0, "{x} {y}");
+    let Item::Path { segs, fill, .. } = items[1] else {
+        unreachable!()
+    };
+    assert_eq!(*fill, Some(docboss_model::Color::BLACK));
+    assert_eq!(segs[0], docboss_font::Seg::Move(244.0, 144.0));
+    let turned = docboss_model::ShapeFormat {
+        rotation: 5_400_000,
+        tail_end: None,
+        ..format
+    };
+    let layout = laid(&doc(vec![shape(line, turned)]));
+    let Item::Path { segs, .. } = paths(&layout)[0] else {
+        unreachable!()
+    };
+    let docboss_font::Seg::Move(x, y) = segs[0] else {
+        panic!("{segs:?}")
+    };
+    assert!(
+        (x - 169.0).abs() < 0.01 && (y - 119.0).abs() < 0.01,
+        "{x} {y}"
+    );
 }

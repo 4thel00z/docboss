@@ -161,7 +161,7 @@ fn table_borders_land_on_the_grid() {
 #[test]
 fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
     let drawing = |media: u32| {
-        RunContent::Drawing(Drawing {
+        RunContent::Drawing(Box::new(Drawing {
             media: Some(MediaId(media)),
             width: 12700 * 100,
             height: 12700 * 50,
@@ -170,7 +170,8 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             description: None,
             text_box: Vec::new(),
             shape: Default::default(),
-        })
+            geometry: None,
+        }))
     };
     let mut doc = document(vec![
         para(vec![Inline::Run(Run {
@@ -229,10 +230,11 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
             insets: Some([127_000; 4]),
             ..ShapeFormat::default()
         },
+        geometry: None,
     };
     let doc = document(vec![para(vec![Inline::Run(Run {
         properties: RunProperties::default(),
-        content: vec![RunContent::Drawing(drawing)],
+        content: vec![RunContent::Drawing(Box::new(drawing))],
     })])]);
     let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
     let not_yellow = |x0: u32, y0: u32, x1: u32, y1: u32| {
@@ -252,7 +254,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
 fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
     Inline::Run(Run {
         properties: RunProperties::default(),
-        content: vec![RunContent::Drawing(Drawing {
+        content: vec![RunContent::Drawing(Box::new(Drawing {
             media: None,
             width: 2_540_000,
             height: 1_270_000,
@@ -265,7 +267,8 @@ fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
             description: None,
             text_box: vec![para(vec![])],
             shape,
-        })],
+            geometry: None,
+        }))],
     })
 }
 
@@ -381,4 +384,71 @@ fn every_format_encodes() {
     let jpeg = pixmap.encode(Format::Jpeg { quality: 80 }).unwrap();
     assert!(jpeg.starts_with(&[0xFF, 0xD8]));
     assert!(render_page(&laid, 3, 1.0).is_err());
+}
+
+fn drawn_shape(x_pt: i64, name: &str, shape: ShapeFormat) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(Box::new(Drawing {
+            media: None,
+            width: 1_270_000,
+            height: 1_270_000,
+            placement: DrawingPlacement::Anchored {
+                horizontal: DrawingPosition::offset(PositionBase::Page, x_pt * 12_700),
+                vertical: DrawingPosition::offset(PositionBase::Page, 914_400),
+                behind_text: false,
+            },
+            name: None,
+            description: None,
+            text_box: Vec::new(),
+            shape,
+            geometry: Some(Box::new(docboss_model::Geometry::Preset {
+                name: name.into(),
+                adjust: Vec::new(),
+            })),
+        }))],
+    })
+}
+
+/// Preset geometries paint their own outline: an ellipse fills its
+/// middle but not its corners, a triangle's apex is outlined, and a line
+/// ends in a filled arrowhead.
+/// ECMA-376 Part 1 §20.1.9.18, §20.1.9.4, §20.1.8.57.
+#[test]
+fn preset_shapes_fill_and_stroke_their_outline() {
+    let filled = ShapeFormat {
+        fill: Some(Color(0, 0, 0)),
+        ..ShapeFormat::default()
+    };
+    let outlined = ShapeFormat {
+        outline: Some(Color::BLACK),
+        outline_width: Some(25_400),
+        ..ShapeFormat::default()
+    };
+    let arrow = ShapeFormat {
+        outline: Some(Color::BLACK),
+        outline_width: Some(12_700),
+        tail_end: Some(docboss_model::LineEnd {
+            kind: docboss_model::LineEndKind::Triangle,
+            width: docboss_model::LineEndSize::Large,
+            length: docboss_model::LineEndSize::Large,
+        }),
+        ..ShapeFormat::default()
+    };
+    let doc = document(vec![para(vec![
+        drawn_shape(72, "ellipse", filled),
+        drawn_shape(200, "triangle", outlined),
+        drawn_shape(350, "line", arrow),
+    ])]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    assert!(dark(&pixmap, 122, 122));
+    assert!(!dark(&pixmap, 75, 75));
+    assert!(!dark(&pixmap, 168, 168));
+    assert!(dark(&pixmap, 250, 73));
+    assert!(!dark(&pixmap, 250, 120));
+    assert!(!dark(&pixmap, 210, 80));
+    assert!(dark(&pixmap, 400, 122));
+    assert!(dark(&pixmap, 446, 164));
+    assert!(dark(&pixmap, 444, 168));
+    assert!(!dark(&pixmap, 441, 150));
 }

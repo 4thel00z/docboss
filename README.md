@@ -194,7 +194,7 @@ Pages rendered by docboss against LibreOffice's rendering of the same documents 
 | DOCX | 0.978 | 0.857 | 56 of 59 |
 | DOC | 0.948 | 0.634 | 25 of 29 |
 
-The low tail is what layout does not draw yet (shapes other than pictures and text boxes, SmartArt), tracked changes that LibreOffice shows with revision marks, and table row heights that differ from LibreOffice's. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
+The low tail is what layout does not draw yet (groups, gradient fills, SmartArt), tracked changes that LibreOffice shows with revision marks, and table row heights that differ from LibreOffice's. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
 
 ## What's inside
 
@@ -227,9 +227,9 @@ The low tail is what layout does not draw yet (shapes other than pictures and te
 
 The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` property in Python, the `diagnostics` field of `Document` in Rust) lists every item that was approximated or dropped. The largest gaps:
 
-- **Layout**: no right-to-left or bidirectional text and no complex-script shaping; no column balancing; text does not wrap around floating images; text boxes, shapes, SmartArt, charts and equations are not drawn; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
+- **Layout**: no right-to-left or bidirectional text and no complex-script shaping; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; DrawingML charts, SmartArt, math (OMML) and ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: XOR-obfuscated files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture nor a text box (lines, WordArt) are reported as dropped.
+- **DOC reading**: XOR-obfuscated files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.

@@ -26,6 +26,8 @@ const MAX_NESTING: usize = 24;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Floating {
     pub media: Option<MediaId>,
+    /// Painted as its picture, or as a placeholder when it has none.
+    pub picture: bool,
     pub width: f32,
     pub height: f32,
     pub horizontal: DrawingPosition,
@@ -118,11 +120,11 @@ impl Floating {
         Rect::new(x, y, self.width, self.height)
     }
 
-    /// The items the float paints on `frame`: the picture, unless the
-    /// float is a text box without one, then its content.
+    /// The items the float paints on `frame`: its picture, then its text
+    /// box or shape.
     fn items(&self, frame: &Frame) -> Vec<Item> {
         let rect = self.rect(frame);
-        let picture = (self.media.is_some() || self.content.is_empty()).then_some(Item::Image {
+        let picture = self.picture.then_some(Item::Image {
             media: self.media,
             rect,
         });

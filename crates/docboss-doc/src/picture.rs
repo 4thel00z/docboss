@@ -5,7 +5,8 @@
 use std::io::Read;
 
 use docboss_model::{
-    Color, DashPattern, LineCap, LineJoin, PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
+    Color, DashPattern, Geometry, LineCap, LineEnd, LineEndKind, LineEndSize, LineJoin,
+    PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
 };
 
 use crate::bytes::{i16_at, i32_at, slice, u16_at, u32_at, u8_at};
@@ -218,7 +219,9 @@ pub fn shape_blip_index(bytes: &[u8], container: &Record) -> Option<u32> {
 /// fill, a black 0.75 pt line, insets of 0.1 by 0.05 inch and text at the
 /// top. A color given as a scheme or system index is left unstated.
 /// [MS-ODRAW] §2.3.7.2, §2.3.7.43, §2.3.8.1, §2.3.8.14, §2.3.8.38, §2.3.21.2, §2.3.21.8, §2.3.21.15;
-/// the dash, join and cap from [MS-ODRAW] §2.3.8.17, §2.3.8.26, §2.3.8.27, §2.4.19 and §2.4.20.
+/// the dash, join and cap from [MS-ODRAW] §2.3.8.17, §2.3.8.26, §2.3.8.27, §2.4.19 and §2.4.20;
+/// the line ends from [MS-ODRAW] §2.3.8.20, §2.3.8.21, §2.3.8.22, §2.3.8.23, §2.3.8.24, §2.3.8.25;
+/// the rotation from [MS-ODRAW] §2.3.18.5 and the flips from the OfficeArtFSP ([MS-ODRAW] §2.2.40).
 pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
     let mut format = ShapeFormat {
         fill: Some(Color::WHITE),
@@ -230,13 +233,21 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
         insets: Some([91440, 45720, 91440, 45720]),
         text_anchor: None,
         auto_fit: false,
+        ..Default::default()
     };
-    let Some(options) = children(bytes, container.body, container.body + container.length)
-        .into_iter()
-        .find(|r| r.kind == 0xF00B)
-    else {
+    let records = children(bytes, container.body, container.body + container.length);
+    if let Some(flags) = records
+        .iter()
+        .find(|r| r.kind == 0xF00A)
+        .and_then(|fsp| u32_at(bytes, fsp.body + 4))
+    {
+        format.flip_horizontal = flags & 0x40 != 0;
+        format.flip_vertical = flags & 0x80 != 0;
+    }
+    let Some(options) = records.into_iter().find(|r| r.kind == 0xF00B) else {
         return format;
     };
+    let mut ends = [0u32, 0, 1, 1, 1, 1];
     let color = |value: u32| {
         let [r, g, b, flags] = value.to_le_bytes();
         (flags == 0).then_some(Color(r, g, b))
@@ -277,11 +288,54 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
                 }
             }
             0x01FF if value & 0x0008_0000 != 0 && value & 0x08 == 0 => format.outline = None,
+            0x0004 => {
+                let degrees = f64::from(value as i32) / 65_536.0;
+                format.rotation =
+                    ((degrees * 60_000.0).round() as i64).rem_euclid(21_600_000) as i32;
+            }
+            0x01D0..=0x01D5 => ends[usize::from((id & 0x3FFF) - 0x01D0)] = value,
             _ => {}
         }
     }
     format.insets = Some(insets);
+    format.head_end = line_end(ends[0], ends[2], ends[3]);
+    format.tail_end = line_end(ends[1], ends[4], ends[5]);
     format
+}
+
+/// [MS-ODRAW] §2.4.16, §2.4.17, §2.4.18: a line end from its MSOLINEEND,
+/// MSOLINEENDWIDTH and MSOLINEENDLENGTH values; `None` for no end or an
+/// ignored chevron.
+fn line_end(kind: u32, width: u32, length: u32) -> Option<LineEnd> {
+    let kind = match kind {
+        1 => LineEndKind::Triangle,
+        2 => LineEndKind::Stealth,
+        3 => LineEndKind::Diamond,
+        4 => LineEndKind::Oval,
+        5 => LineEndKind::Arrow,
+        _ => return None,
+    };
+    let size = |value: u32| match value {
+        0 => LineEndSize::Small,
+        2 => LineEndSize::Large,
+        _ => LineEndSize::Medium,
+    };
+    Some(LineEnd {
+        kind,
+        width: size(width),
+        length: size(length),
+    })
+}
+
+/// A shape's preset geometry from the shape type in its OfficeArtFSP
+/// header ([MS-ODRAW] §2.2.40, §2.4.24); `None` for a group, a picture
+/// frame, a custom shape or WordArt. Adjust values are not read: they
+/// follow the VML geometry, not DrawingML's.
+pub fn shape_geometry(bytes: &[u8], container: &Record) -> Option<Geometry> {
+    let fsp = children(bytes, container.body, container.body + container.length)
+        .into_iter()
+        .find(|r| r.kind == 0xF00A)?;
+    Geometry::from_shape_type(u32::from(fsp.instance))
 }
 
 /// [MS-ODRAW] §2.4.15: the pattern of an MSOLINEDASHING value, `None` for
@@ -390,9 +444,14 @@ mod tests {
     }
 
     fn container(properties: &[(u16, u32)]) -> Vec<u8> {
-        let fsp: Vec<u8> = header(2, 202, 0xF00A, 8)
+        shape(202, 0, properties)
+    }
+
+    fn shape(spt: u16, flags: u32, properties: &[(u16, u32)]) -> Vec<u8> {
+        let fsp: Vec<u8> = header(2, spt, 0xF00A, 8)
             .into_iter()
-            .chain([7, 0, 0, 0, 0, 0, 0, 0])
+            .chain([7, 0, 0, 0])
+            .chain(flags.to_le_bytes())
             .collect();
         let mut fopt = header(3, properties.len() as u16, 0xF00B, properties.len() * 6);
         for (id, value) in properties {
@@ -435,6 +494,48 @@ mod tests {
 
         let bytes = container(&[(0x01BF, 0x0010_0000)]);
         assert_eq!(shape_format(&bytes, &record(&bytes, 0).unwrap()).fill, None);
+    }
+
+    /// [MS-ODRAW] §2.2.40, §2.4.24: the shape type and flips of the
+    /// OfficeArtFSP; §2.3.18.5: the rotation; §2.3.8.20 to §2.3.8.25 and
+    /// §2.4.16 to §2.4.18: the line ends.
+    /// [MS-ODRAW] §2.3.8.20, §2.3.8.21, §2.3.8.22, §2.3.8.23, §2.3.8.24, §2.3.8.25.
+    /// [MS-ODRAW] §2.4.16, §2.4.17, §2.4.18, §2.2.40, §2.4.24, §2.3.18.5.
+    #[test]
+    fn shape_type_flips_rotation_and_line_ends() {
+        let bytes = shape(
+            20,
+            0x80 | 0x800,
+            &[
+                (0x0004, 90 << 16),
+                (0x01D1, 1),
+                (0x01D4, 2),
+                (0x01D5, 0),
+                (0x01D0, 6),
+            ],
+        );
+        let container = record(&bytes, 0).unwrap();
+        let format = shape_format(&bytes, &container);
+        assert!(format.flip_vertical && !format.flip_horizontal);
+        assert_eq!(format.rotation, 5_400_000);
+        assert_eq!(format.head_end, None);
+        assert_eq!(
+            format.tail_end,
+            Some(LineEnd {
+                kind: LineEndKind::Triangle,
+                width: LineEndSize::Large,
+                length: LineEndSize::Small,
+            })
+        );
+        assert_eq!(
+            shape_geometry(&bytes, &container),
+            Geometry::from_shape_type(20)
+        );
+        let bytes = shape(0, 0x1, &[]);
+        assert_eq!(shape_geometry(&bytes, &record(&bytes, 0).unwrap()), None);
+        let bytes = shape(1, 0, &[(0x0004, (-45i32 << 16) as u32)]);
+        let format = shape_format(&bytes, &record(&bytes, 0).unwrap());
+        assert_eq!(format.rotation, 18_900_000);
     }
 
     /// [MS-ODRAW] §2.3.8.17 and §2.4.15: lineDashing presets; §2.3.8.26,

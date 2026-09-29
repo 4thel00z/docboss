@@ -219,7 +219,7 @@ pub fn png(name: &str) -> Media {
 }
 
 pub fn drawing(media: u32, description: &str) -> Inline {
-    content(RunContent::Drawing(Drawing {
+    content(RunContent::Drawing(Box::new(Drawing {
         media: Some(MediaId(media)),
         width: 952500,
         height: 476250,
@@ -228,11 +228,12 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         description: Some(description.into()),
         text_box: Vec::new(),
         shape: Default::default(),
-    }))
+        geometry: None,
+    })))
 }
 
 pub fn text_box(blocks: Vec<Block>) -> Inline {
-    content(RunContent::Drawing(Drawing {
+    content(RunContent::Drawing(Box::new(Drawing {
         media: None,
         width: 1905000,
         height: 952500,
@@ -245,5 +246,6 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         description: None,
         text_box: blocks,
         shape: Default::default(),
-    }))
+        geometry: None,
+    })))
 }
