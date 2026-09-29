@@ -222,13 +222,13 @@ could not convert a fuzzer file and a password-protected one):
 
 | Format | Files | SSIM mean | SSIM median | SSIM p10 | MAD median | Page counts equal |
 |---|--:|--:|--:|--:|--:|--:|
-| DOCX | 59 | 0.939 | 0.975 | 0.857 | 0.82 | 56 |
-| DOC | 29 | 0.877 | 0.950 | 0.634 | 1.86 | 25 |
+| DOCX | 59 | 0.940 | 0.978 | 0.857 | 0.82 | 56 |
+| DOC | 29 | 0.876 | 0.948 | 0.634 | 1.86 | 25 |
 
 SSIM scores the whole page, and mostly white pages score high whatever their
-content, so read the p10 column as the honest one: a tenth of the DOC pages
+content, so read the p10 column as the honest one: a tenth of the DOC files
 score under 0.64. The low scores come from what layout does not draw yet
-(text boxes, shapes, SmartArt), from tracked changes that LibreOffice shows
+(shapes other than pictures and text boxes, SmartArt), from tracked changes that LibreOffice shows
 with revision marks and docboss as final text, and from table row heights
 that differ from LibreOffice's. `failure-modes/` records the fixes made so
 far, with before and after renders.

@@ -191,10 +191,10 @@ Pages rendered by docboss against LibreOffice's rendering of the same documents 
 
 | Format | SSIM median | SSIM p10 | Page counts equal |
 |---|--:|--:|--:|
-| DOCX | 0.975 | 0.857 | 56 of 59 |
-| DOC | 0.950 | 0.634 | 25 of 29 |
+| DOCX | 0.978 | 0.857 | 56 of 59 |
+| DOC | 0.948 | 0.634 | 25 of 29 |
 
-The low tail is what layout does not draw yet (text boxes, shapes, SmartArt), tracked changes that LibreOffice shows with revision marks, and table row heights that differ from LibreOffice's. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
+The low tail is what layout does not draw yet (shapes other than pictures and text boxes, SmartArt), tracked changes that LibreOffice shows with revision marks, and table row heights that differ from LibreOffice's. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
 
 ## What's inside
 
