@@ -596,6 +596,7 @@ impl<'a> Context<'a> {
             shape: Default::default(),
             geometry: None,
             members: Vec::new(),
+            data_text: Vec::new(),
         })))
     }
 

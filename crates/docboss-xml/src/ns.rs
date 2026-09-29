@@ -55,6 +55,12 @@ impl Ns {
     pub const XSI: Ns = Ns(24);
     /// WordprocessingML drawing canvases (`wpc:wpc`).
     pub const WPC: Ns = Ns(25);
+    /// DrawingML diagrams (`dgm:relIds`, `dgm:dataModel`).
+    pub const DGM: Ns = Ns(26);
+    /// The drawing Office saves beside a diagram (`dsp:drawing`).
+    pub const DSP: Ns = Ns(27);
+    /// DrawingML charts (`c:chartSpace`).
+    pub const C: Ns = Ns(28);
 
     pub const FIRST_UNKNOWN: u16 = 1000;
 }
@@ -152,6 +158,20 @@ const KNOWN: &[(&str, Ns)] = &[
         "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
         Ns::WPC,
     ),
+    (
+        "http://schemas.openxmlformats.org/drawingml/2006/diagram",
+        Ns::DGM,
+    ),
+    ("http://purl.oclc.org/ooxml/drawingml/diagram", Ns::DGM),
+    (
+        "http://schemas.microsoft.com/office/drawing/2008/diagram",
+        Ns::DSP,
+    ),
+    (
+        "http://schemas.openxmlformats.org/drawingml/2006/chart",
+        Ns::C,
+    ),
+    ("http://purl.oclc.org/ooxml/drawingml/chart", Ns::C),
 ];
 
 /// The id of a known namespace URI.

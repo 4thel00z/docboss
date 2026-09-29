@@ -963,6 +963,7 @@ fn text_box(
             shape,
             geometry: None,
             members: Vec::new(),
+            data_text: Vec::new(),
         }))],
     })
 }
@@ -1250,6 +1251,7 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             shape: Default::default(),
             geometry: None,
             members: Vec::new(),
+            data_text: Vec::new(),
         }))],
     });
     let mut properties = ParagraphProperties::default();
@@ -1311,6 +1313,7 @@ fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -
                 shape,
                 geometry: Some(Box::new(geometry)),
                 members: Vec::new(),
+                data_text: Vec::new(),
             }))],
         })],
     )

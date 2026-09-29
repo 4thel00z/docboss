@@ -131,6 +131,7 @@ fn parse_story(
         rels: &part.rels,
         media,
         theme,
+        package,
     };
     let mut parser = StoryParser::new(ctx);
     if root(&mut reader).is_none() {
@@ -377,9 +378,16 @@ pub fn read_with(data: &[u8], options: Options) -> Result<Document> {
             kind,
         });
     }
+    let drawing_rels: Vec<Relationships> = stories
+        .iter()
+        .flat_map(|story| story.rels.list.iter())
+        .filter(|rel| !rel.external && rel.kind.eq_ignore_ascii_case("diagramDrawing"))
+        .map(|rel| package.relationships(&rel.target, &mut diagnostics))
+        .collect();
     let mut media_names: Vec<String> = stories
         .iter()
         .flat_map(|story| story.rels.list.iter())
+        .chain(drawing_rels.iter().flat_map(|rels| rels.list.iter()))
         .filter(|rel| !rel.external && rel.kind.eq_ignore_ascii_case("image"))
         .map(|rel| rel.target.clone())
         .filter(|name| package.archive.contains(name))

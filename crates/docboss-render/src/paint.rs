@@ -103,7 +103,13 @@ impl Renderer {
                     canvas.line(p, q, (width * scale).max(0.5), *color, *style, *cap);
                 }
                 Item::Image { media, rect } => {
-                    self.image(layout, &mut canvas, *media, scaled(*rect, scale))
+                    self.image(layout, &mut canvas, *media, scaled(*rect, scale), None)
+                }
+                Item::Picture { segs, media, rect } => {
+                    let m = [scale, 0.0, 0.0, scale, 0.0, 0.0];
+                    let mask = rasterize(&flatten(segs, m), Some(canvas.clip.pixels()));
+                    let rect = scaled(*rect, scale);
+                    self.image(layout, &mut canvas, *media, rect, Some(&mask))
                 }
                 Item::Outline {
                     rect,
@@ -174,7 +180,9 @@ impl Renderer {
                 let q = apply(device, to.0, to.1);
                 canvas.line(p, q, (width * scale * unit).max(0.5), *color, *style, *cap);
             }
-            Item::Image { media, rect } => self.turned_image(layout, canvas, *media, *rect, device),
+            Item::Image { media, rect } | Item::Picture { media, rect, .. } => {
+                self.turned_image(layout, canvas, *media, *rect, device)
+            }
             Item::Outline {
                 rect,
                 width,
@@ -343,6 +351,7 @@ impl Renderer {
         canvas: &mut Canvas<'_>,
         media: Option<MediaId>,
         rect: Rect,
+        mask: Option<&Mask>,
     ) {
         let decoded = media.and_then(|id| {
             let data = layout.media.get(id.0 as usize)?;
@@ -358,7 +367,7 @@ impl Renderer {
             return;
         };
         match result.as_ref() {
-            Ok(image) => canvas.draw_image(image, rect),
+            Ok(image) => canvas.draw_image(image, rect, mask),
             Err(error) => {
                 let name = media
                     .and_then(|id| layout.media.get(id.0 as usize))
@@ -940,7 +949,9 @@ impl Canvas<'_> {
         }
     }
 
-    fn draw_image(&mut self, image: &Decoded, rect: Rect) {
+    /// Draws `image` scaled into `rect`, each pixel weighted by `mask`'s
+    /// coverage when one is given.
+    fn draw_image(&mut self, image: &Decoded, rect: Rect, mask: Option<&Mask>) {
         if rect.width <= 0.0 || rect.height <= 0.0 {
             return;
         }
@@ -973,7 +984,11 @@ impl Canvas<'_> {
                 }
                 let at = (py as usize * stride + px as usize) * 4;
                 let color = Color(rgba[0] as u8, rgba[1] as u8, rgba[2] as u8);
-                blend(&mut self.pixmap.data[at..at + 4], color, rgba[3] as u32);
+                let alpha = match mask {
+                    Some(mask) => rgba[3] as u32 * u32::from(mask.at(px as i32, py as i32)) / 255,
+                    None => rgba[3] as u32,
+                };
+                blend(&mut self.pixmap.data[at..at + 4], color, alpha);
             }
         }
     }

@@ -14,8 +14,10 @@ use docboss_xml::{Element, Ns, Reader};
 
 use crate::geometry;
 
+mod diagram;
 mod group;
-use crate::package::Relationships;
+mod text;
+use crate::package::{Package, Relationships};
 use crate::props::{
     cell_properties, paragraph_properties, row_properties, run_properties, section_properties,
     table_properties, Theme,
@@ -28,6 +30,9 @@ pub struct Context<'p> {
     pub rels: &'p Relationships,
     pub media: &'p HashMap<String, MediaId>,
     pub theme: &'p Theme,
+    /// The package, for the parts a drawing refers to, such as a
+    /// diagram's data and drawing.
+    pub package: &'p Package<'p>,
 }
 
 /// A paragraph's content before complex fields are folded.
@@ -217,6 +222,9 @@ pub struct StoryParser<'p> {
     ctx: Context<'p>,
     pub diagnostics: Vec<Diagnostic>,
     frames: Vec<Frame>,
+    /// The last diagram read had no saved drawing, so an
+    /// `mc:AlternateContent` fallback is read in its place.
+    diagram_missing: bool,
 }
 
 const EMU_PER_POINT: f64 = 12_700.0;
@@ -402,6 +410,9 @@ fn shape_properties(
                 info.drawing.shape.fill = None;
                 info.drawing.shape.gradient = None;
                 info.fill_stated = e.local == "noFill";
+                if e.local == "blipFill" {
+                    info.blip = blip_reference(reader);
+                }
             }
             "ln" => {
                 let shape = &mut info.drawing.shape;
@@ -458,6 +469,18 @@ fn shape_properties(
         }
     });
     note
+}
+
+/// The relationship id of the `a:blip` (ECMA-376 Part 1 §20.1.8.13) a
+/// picture fill (§20.1.8.14) embeds.
+fn blip_reference(reader: &mut Reader<'_>) -> Option<String> {
+    let mut found = None;
+    children(reader, |_, e| {
+        if e.ns == Ns::A && e.local == "blip" && found.is_none() {
+            found = e.attr(Ns::R, "embed").map(Into::into);
+        }
+    });
+    found
 }
 
 /// `a:xfrm` (ECMA-376 Part 1 §20.1.7.6): the rotation and flips of a shape
@@ -629,8 +652,14 @@ fn vml_dash(value: &str) -> Option<DashPattern> {
 /// The fill and line a shape takes from its `wps:style` references when its
 /// `wps:spPr` states none (ECMA-376 Part 1 §20.1.2.2.37, §20.1.4.2.10,
 /// §20.1.4.2.19): index 0 means none, any other index the reference's
-/// color.
-fn shape_style(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingInfo) {
+/// color. Returns the face and color of the font reference
+/// (§20.1.4.1.17), which a diagram's text takes.
+fn shape_style(
+    reader: &mut Reader<'_>,
+    theme: &Theme,
+    info: &mut DrawingInfo,
+) -> (Option<String>, Option<Color>) {
+    let mut font = (None, None);
     children(reader, |reader, e| {
         let index = e.attr_raw(Ns::NONE, "idx").and_then(int).unwrap_or(0);
         match e.local {
@@ -645,9 +674,18 @@ fn shape_style(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingInfo) {
                     info.drawing.shape.outline_width = Some(index.clamp(0, 3) * 6_350);
                 }
             }
+            "fontRef" => {
+                let face = match e.attr_raw(Ns::NONE, "idx") {
+                    Some("major") => theme.major[0].clone(),
+                    Some("minor") => theme.minor[0].clone(),
+                    _ => None,
+                };
+                font = (face, color_choice(reader, theme));
+            }
             _ => {}
         }
     });
+    font
 }
 
 /// A VML color: `#RRGGBB`, `#RGB` or a name, ignoring a trailing
@@ -885,6 +923,8 @@ struct DrawingInfo {
     anchored: bool,
     /// The box `a:xfrm` gives the shape in its group's coordinates.
     placed: Option<ChildBox>,
+    /// The relationship id of the picture that fills the shape.
+    blip: Option<String>,
     horizontal: DrawingPosition,
     vertical: DrawingPosition,
     behind: bool,
@@ -904,11 +944,13 @@ impl DrawingInfo {
                 shape: Default::default(),
                 geometry: None,
                 members: Vec::new(),
+                data_text: Vec::new(),
             },
             fill_stated: false,
             line_stated: false,
             anchored: false,
             placed: None,
+            blip: None,
             horizontal: DrawingPosition::offset(PositionBase::Column, 0),
             vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind: false,
@@ -1001,6 +1043,15 @@ fn position_align(value: &str) -> Option<PositionAlign> {
 /// read: the first `mc:Choice` whose required namespaces this reader
 /// understands, else `mc:Fallback`. Calls `f` with the chosen branch's start.
 fn alternate_content<'a>(reader: &mut Reader<'a>, mut f: impl FnMut(&mut Reader<'a>)) {
+    alternate_branches(reader, |reader| {
+        f(reader);
+        true
+    });
+}
+
+/// [`alternate_content`] where `f` returns whether the branch it read is
+/// usable; when it is not, the next branch that applies is read.
+fn alternate_branches<'a>(reader: &mut Reader<'a>, mut f: impl FnMut(&mut Reader<'a>) -> bool) {
     let mut chosen = false;
     children(reader, |reader, e| {
         if chosen || e.ns != Ns::MC {
@@ -1016,8 +1067,7 @@ fn alternate_content<'a>(reader: &mut Reader<'a>, mut f: impl FnMut(&mut Reader<
             _ => false,
         };
         if take {
-            chosen = true;
-            f(reader);
+            chosen = f(reader);
         }
     });
 }
@@ -1038,6 +1088,8 @@ fn understood(ns: Ns) -> bool {
         Ns::W10,
         Ns::M,
         Ns::R,
+        Ns::DGM,
+        Ns::DSP,
     ]
     .contains(&ns)
 }
@@ -1048,6 +1100,7 @@ impl<'p> StoryParser<'p> {
             ctx,
             diagnostics: Vec::new(),
             frames: Vec::new(),
+            diagram_missing: false,
         }
     }
 
@@ -1261,11 +1314,41 @@ impl<'p> StoryParser<'p> {
         pieces: &mut Vec<Piece>,
     ) {
         if e.ns == Ns::MC && e.local == "AlternateContent" {
-            alternate_content(reader, |reader| {
+            let mut unusable: Option<Vec<RunContent>> = None;
+            let mut read = false;
+            alternate_branches(reader, |reader| {
+                let start = content.len();
+                self.diagram_missing = false;
                 children(reader, |reader, e| {
                     self.run_content(reader, &e, properties, content, pieces)
-                })
+                });
+                read = !self.diagram_missing;
+                if !read {
+                    let branch = content.split_off(start);
+                    unusable.get_or_insert(branch);
+                }
+                read
             });
+            let Some(branch) = unusable else {
+                return;
+            };
+            if !read {
+                content.extend(branch);
+                return;
+            }
+            let text = branch.into_iter().find_map(|item| match item {
+                RunContent::Drawing(drawing) if !drawing.data_text.is_empty() => {
+                    Some(drawing.data_text)
+                }
+                _ => None,
+            });
+            let last = content.iter_mut().rev().find_map(|item| match item {
+                RunContent::Drawing(drawing) if drawing.data_text.is_empty() => Some(drawing),
+                _ => None,
+            });
+            if let (Some(text), Some(drawing)) = (text, last) {
+                drawing.data_text = text;
+            }
             return;
         }
         if e.ns != Ns::W {
@@ -1367,6 +1450,17 @@ impl<'p> StoryParser<'p> {
         found
     }
 
+    /// Loads the picture a shape's `a:blipFill` names, unless the drawing
+    /// has one already.
+    fn fill_picture(&mut self, info: &mut DrawingInfo) {
+        let Some(id) = info.blip.take() else {
+            return;
+        };
+        if info.drawing.media.is_none() {
+            info.drawing.media = self.media_for(&id);
+        }
+    }
+
     fn text_box(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         let frames = std::mem::take(&mut self.frames);
         let blocks = self.blocks(reader);
@@ -1461,6 +1555,7 @@ impl<'p> StoryParser<'p> {
                         self.diagnostics
                             .push(Diagnostic::approximated(self.ctx.part, note));
                     }
+                    self.fill_picture(info);
                     return;
                 }
                 (Ns::WPS, "style") => {
@@ -1468,45 +1563,23 @@ impl<'p> StoryParser<'p> {
                     return;
                 }
                 (Ns::WPS, "bodyPr") => {
-                    let inset = |name: &str, default: i64| {
-                        e.attr_raw(Ns::NONE, name).and_then(int).unwrap_or(default)
-                    };
-                    let shape = &mut info.drawing.shape;
-                    shape.insets = Some([
-                        inset("lIns", DEFAULT_INSETS[0]),
-                        inset("tIns", DEFAULT_INSETS[1]),
-                        inset("rIns", DEFAULT_INSETS[2]),
-                        inset("bIns", DEFAULT_INSETS[3]),
-                    ]);
-                    shape.text_upright = e.attr_raw(Ns::NONE, "upright").is_some_and(xml_true);
-                    let vert = e.attr_raw(Ns::NONE, "vert").unwrap_or("horz");
-                    shape.text_direction = match vert {
-                        "vert" | "eaVert" | "mongolianVert" => TextDirection::TopToBottom,
-                        "vert270" => TextDirection::BottomToTop,
-                        _ => TextDirection::LeftToRight,
-                    };
-                    if vert.starts_with("wordArtVert") {
-                        self.diagnostics.push(Diagnostic::approximated(
-                            self.ctx.part,
-                            format!("stacked text (vert=\"{vert}\") is laid out across"),
-                        ));
-                    }
-                    shape.text_anchor = match e.attr_raw(Ns::NONE, "anchor") {
-                        Some("ctr") => Some(VerticalAlign::Center),
-                        Some("b") => Some(VerticalAlign::Bottom),
-                        Some("t") => Some(VerticalAlign::Top),
-                        _ => None,
-                    };
-                    children(reader, |_, fit| {
-                        if fit.ns == Ns::A && fit.local == "spAutoFit" {
-                            shape.auto_fit = true;
-                        }
-                    });
+                    self.body_properties(reader, &e, info);
                     return;
                 }
                 (Ns::MC, "AlternateContent") => {
                     alternate_content(reader, |reader| self.drawing_children(reader, info));
                     return;
+                }
+                (Ns::A, "graphicData") => {
+                    let uri = e.attr_raw(Ns::NONE, "uri").unwrap_or_default();
+                    if uri.ends_with("/diagram") {
+                        children(reader, |_, rel| {
+                            if rel.ns == Ns::DGM && rel.local == "relIds" {
+                                self.diagram_missing = !self.diagram(&rel, info);
+                            }
+                        });
+                        return;
+                    }
                 }
                 (Ns::WPG, "wgp") | (Ns::WPC, "wpc") => {
                     self.group(reader, &e, info, &mut Vec::new());
@@ -1523,6 +1596,50 @@ impl<'p> StoryParser<'p> {
                 _ => {}
             }
             self.drawing_children(reader, info);
+        });
+    }
+
+    /// `wps:bodyPr` or `a:bodyPr` (ECMA-376 Part 1 §20.4.2.22,
+    /// §21.1.2.1.1): the insets, the text direction, `upright`, the
+    /// vertical anchor and `a:spAutoFit` (§21.1.2.1.4).
+    fn body_properties(
+        &mut self,
+        reader: &mut Reader<'_>,
+        e: &Element<'_>,
+        info: &mut DrawingInfo,
+    ) {
+        let inset =
+            |name: &str, default: i64| e.attr_raw(Ns::NONE, name).and_then(int).unwrap_or(default);
+        let shape = &mut info.drawing.shape;
+        shape.insets = Some([
+            inset("lIns", DEFAULT_INSETS[0]),
+            inset("tIns", DEFAULT_INSETS[1]),
+            inset("rIns", DEFAULT_INSETS[2]),
+            inset("bIns", DEFAULT_INSETS[3]),
+        ]);
+        shape.text_upright = e.attr_raw(Ns::NONE, "upright").is_some_and(xml_true);
+        let vert = e.attr_raw(Ns::NONE, "vert").unwrap_or("horz");
+        shape.text_direction = match vert {
+            "vert" | "eaVert" | "mongolianVert" => TextDirection::TopToBottom,
+            "vert270" => TextDirection::BottomToTop,
+            _ => TextDirection::LeftToRight,
+        };
+        if vert.starts_with("wordArtVert") {
+            self.diagnostics.push(Diagnostic::approximated(
+                self.ctx.part,
+                format!("stacked text (vert=\"{vert}\") is laid out across"),
+            ));
+        }
+        shape.text_anchor = match e.attr_raw(Ns::NONE, "anchor") {
+            Some("ctr") => Some(VerticalAlign::Center),
+            Some("b") => Some(VerticalAlign::Bottom),
+            Some("t") => Some(VerticalAlign::Top),
+            _ => None,
+        };
+        children(reader, |_, fit| {
+            if fit.ns == Ns::A && fit.local == "spAutoFit" {
+                shape.auto_fit = true;
+            }
         });
     }
 

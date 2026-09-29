@@ -131,6 +131,20 @@ pub(crate) struct Mask {
     pub coverage: Vec<u8>,
 }
 
+impl Mask {
+    /// The coverage at pixel `(x, y)`, zero outside the mask.
+    pub(crate) fn at(&self, x: i32, y: i32) -> u8 {
+        let (col, row) = (x - self.x, y - self.y);
+        if col < 0 || row < 0 || col as usize >= self.width || row as usize >= self.height {
+            return 0;
+        }
+        self.coverage
+            .get(row as usize * self.width + col as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
 /// Rasterizes polygons into a coverage mask sized to their bounds and
 /// clipped to the pixel rectangle `(left, top, right, bottom)` when given.
 pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) -> Mask {

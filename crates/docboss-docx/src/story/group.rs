@@ -16,7 +16,7 @@ const MAX_MEMBERS: usize = 10_000;
 /// parent's coordinates, its child offset and extent, its rotation and
 /// flips.
 /// ECMA-376 Part 1 §20.4.2.33, §20.1.7.5, §20.1.7.2, §20.1.7.1.
-fn group_transform(reader: &mut Reader<'_>, e: &Element<'_>, frame: &mut GroupFrame) {
+pub(super) fn group_transform(reader: &mut Reader<'_>, e: &Element<'_>, frame: &mut GroupFrame) {
     frame.rotation = e
         .attr_raw(Ns::NONE, "rot")
         .and_then(int)
@@ -183,7 +183,7 @@ impl StoryParser<'_> {
         }
     }
 
-    fn add_member(&mut self, info: &mut DrawingInfo, member: GroupMember) {
+    pub(super) fn add_member(&mut self, info: &mut DrawingInfo, member: GroupMember) {
         if info.drawing.members.len() >= MAX_MEMBERS {
             if info.drawing.members.len() == MAX_MEMBERS {
                 self.diagnostics.push(Diagnostic::dropped(

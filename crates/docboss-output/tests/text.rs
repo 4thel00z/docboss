@@ -201,3 +201,30 @@ fn text_box_content_follows_its_anchor() {
     let texts: Vec<&str> = views.iter().map(|view| view.text.as_str()).collect();
     assert_eq!(texts[..3], ["Anchor", "Inside the box", "After"]);
 }
+
+/// A drawing with data text, such as a diagram, is read as that text after
+/// its anchor, in place of its members' text boxes.
+#[test]
+fn data_text_stands_in_for_member_text_boxes() {
+    let Inline::Run(mut boxed) = text_box(vec![para(vec![run("drawn label")])]) else {
+        panic!()
+    };
+    let Some(RunContent::Drawing(member)) = boxed.content.pop() else {
+        panic!()
+    };
+    let Inline::Run(mut outer) = text_box(Vec::new()) else {
+        panic!()
+    };
+    let Some(RunContent::Drawing(mut diagram)) = outer.content.pop() else {
+        panic!()
+    };
+    diagram.members.push(docboss_model::GroupMember {
+        x: 0,
+        y: 0,
+        drawing: *member,
+    });
+    diagram.data_text = vec![para(vec![run("First")]), para(vec![run("Second")])];
+    outer.content.push(RunContent::Drawing(diagram));
+    let doc = document(vec![para(vec![run("Anchor"), Inline::Run(outer)])]);
+    assert_eq!(text(&doc), "Anchor\nFirst\nSecond\n");
+}

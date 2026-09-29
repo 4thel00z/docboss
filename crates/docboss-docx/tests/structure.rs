@@ -1101,3 +1101,102 @@ fn vml_adjust_values() {
         })
     );
 }
+
+const DIAGRAM_NS: &str = r#"xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
+
+fn diagram_data(drawing_rel: &str) -> String {
+    format!(
+        r#"<dgm:dataModel {DIAGRAM_NS}><dgm:ptLst><dgm:pt modelId="2"><dgm:t><a:bodyPr/><a:p><a:r><a:t>Second</a:t></a:r></a:p></dgm:t></dgm:pt><dgm:pt modelId="0" type="doc"/><dgm:pt modelId="1"><dgm:t><a:bodyPr/><a:p><a:r><a:t>First</a:t></a:r></a:p></dgm:t></dgm:pt><dgm:pt modelId="9" type="pres"><dgm:t><a:p><a:r><a:t>hidden</a:t></a:r></a:p></dgm:t></dgm:pt></dgm:ptLst><dgm:cxnLst><dgm:cxn modelId="5" srcId="0" destId="2" srcOrd="1"/><dgm:cxn modelId="6" srcId="0" destId="1" srcOrd="0"/><dgm:cxn modelId="7" type="presOf" srcId="1" destId="9"/></dgm:cxnLst><dgm:extLst><a:ext uri="x"><dsp:dataModelExt relId="{drawing_rel}"/></a:ext></dgm:extLst></dgm:dataModel>"#
+    )
+}
+
+const DIAGRAM_DRAWING: &str = r#"<dsp:spTree><dsp:nvGrpSpPr/><dsp:grpSpPr/><dsp:sp modelId="a"><dsp:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="1000" cy="500"/></a:xfrm><a:prstGeom prst="rightArrow"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="4F81BD"/></a:solidFill><a:ln><a:noFill/></a:ln></dsp:spPr><dsp:style><a:lnRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef><a:fillRef idx="1"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:fontRef idx="minor"><a:srgbClr val="FFFFFF"/></a:fontRef></dsp:style><dsp:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="2300"/><a:t>First</a:t></a:r></a:p></dsp:txBody><dsp:txXfrm><a:off x="150" y="250"/><a:ext cx="800" cy="400"/></dsp:txXfrm></dsp:sp><dsp:sp modelId="b"><dsp:spPr><a:xfrm><a:off x="1200" y="0"/><a:ext cx="300" cy="300"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom></dsp:spPr><dsp:txBody><a:bodyPr/><a:p><a:r><a:t>Second</a:t></a:r></a:p></dsp:txBody></dsp:sp></dsp:spTree>"#;
+
+fn diagram_document(run: &str, with_drawing: bool) -> docboss_model::Document {
+    let body = format!(r#"<w:p><w:r><w:t>Anchor</w:t></w:r>{run}</w:p>"#);
+    let data = diagram_data("rId9");
+    let mut docx = Docx::new(&body).part(
+        "rId5",
+        "diagramData",
+        "diagrams/data1.xml",
+        "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
+        data.as_bytes(),
+    );
+    if with_drawing {
+        let drawing = format!(r#"<dsp:drawing {DIAGRAM_NS}>{DIAGRAM_DRAWING}</dsp:drawing>"#);
+        docx = docx.part(
+            "rId9",
+            "diagramDrawing",
+            "diagrams/drawing1.xml",
+            "application/vnd.ms-office.drawingml.diagramDrawing+xml",
+            drawing.as_bytes(),
+        );
+    }
+    read(&docx.build()).unwrap()
+}
+
+const DIAGRAM_W_DRAWING: &str = r#"<w:drawing><wp:inline><wp:extent cx="2000" cy="1000"/><wp:docPr id="1" name="Diagram 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:relIds xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" r:dm="rId5" r:lo="rId6" r:qs="rId7" r:cs="rId8"/></a:graphicData></a:graphic></wp:inline></w:drawing>"#;
+
+/// A diagram's saved drawing gives its members: each `dsp:sp` is a shape
+/// with its geometry and fill, and a text box at its `dsp:txXfrm` box in
+/// the font reference's color; its data model gives its text in
+/// connection order, presentation points left out.
+/// ECMA-376 Part 1 §21.4.2.22, §21.4.2.10, §21.4.3.5, §21.4.3.2, §21.4.3.8, §21.1.2.2.6, §21.1.2.3.9.
+#[test]
+fn diagrams_draw_their_saved_drawing() {
+    let doc = diagram_document(&format!("<w:r>{DIAGRAM_W_DRAWING}</w:r>"), true);
+    let drawing = first_drawing(&doc);
+    let texts: Vec<String> = drawing
+        .data_text
+        .iter()
+        .map(|b| match b {
+            Block::Paragraph(p) => p.text(),
+            _ => String::new(),
+        })
+        .collect();
+    assert_eq!(texts, ["First", "Second"]);
+    assert_eq!(drawing.members.len(), 3);
+    let arrow = &drawing.members[0].drawing;
+    assert!(matches!(
+        arrow.geometry.as_deref(),
+        Some(docboss_model::Geometry::Preset { name, .. }) if name == "rightArrow"
+    ));
+    assert_eq!(arrow.shape.fill, Some(Color(0x4F, 0x81, 0xBD)));
+    assert!(arrow.text_box.is_empty());
+    let label = &drawing.members[1];
+    assert_eq!((label.x, label.y), (150, 250));
+    assert_eq!((label.drawing.width, label.drawing.height), (800, 400));
+    assert_eq!(label.drawing.shape.fill, None);
+    assert_eq!(label.drawing.shape.insets, Some([0, 0, 0, 0]));
+    let Block::Paragraph(p) = &label.drawing.text_box[0] else {
+        panic!()
+    };
+    assert_eq!(p.text(), "First");
+    let Inline::Run(run) = &p.inlines[0] else {
+        panic!()
+    };
+    assert_eq!(run.properties.size, Some(46));
+    assert_eq!(run.properties.color, Some(Some(Color::WHITE)));
+    assert_eq!(drawing.members[2].drawing.text_box.len(), 1);
+}
+
+/// A diagram without its saved drawing is reported; inside
+/// `mc:AlternateContent` the fallback is drawn in its place and keeps the
+/// diagram's text.
+/// ECMA-376 Part 3 §9.3, ECMA-376 Part 1 §21.4.2.22.
+#[test]
+fn diagrams_without_a_drawing_use_the_fallback() {
+    let doc = diagram_document(&format!("<w:r>{DIAGRAM_W_DRAWING}</w:r>"), false);
+    assert!(doc
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("without its saved drawing")));
+    assert!(first_drawing(&doc).members.is_empty());
+    let wrapped = format!(
+        r#"<w:r><mc:AlternateContent><mc:Choice xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" Requires="dgm">{DIAGRAM_W_DRAWING}</mc:Choice><mc:Fallback><w:pict><v:rect style="width:100pt;height:50pt" fillcolor="red"/></w:pict></mc:Fallback></mc:AlternateContent></w:r>"#
+    );
+    let doc = diagram_document(&wrapped, false);
+    let drawing = first_drawing(&doc);
+    assert_eq!(drawing.shape.fill, Some(Color(255, 0, 0)));
+    assert_eq!(drawing.data_text.len(), 2);
+}

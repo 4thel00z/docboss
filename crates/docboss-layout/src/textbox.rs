@@ -1,7 +1,7 @@
 //! Text boxes: the blocks a drawing carries, laid out inside its extent,
 //! over the shape's fill and under its outline.
 
-use docboss_model::{Drawing, TextDirection, VerticalAlign};
+use docboss_model::{Drawing, PathFill, TextDirection, VerticalAlign};
 
 use crate::drawn::{compose, shape_items, transform};
 use crate::flow::{layout_blocks, stack_height, Ctx};
@@ -60,8 +60,9 @@ fn layout_group(ctx: &mut Ctx<'_>, drawing: &Drawing) -> TextBox {
 }
 
 /// A drawing's picture relative to its top-left corner, flipped and
-/// turned about its center as `a:xfrm` says (ECMA-376 Part 1 §20.1.7.6);
-/// empty for a drawing without one.
+/// turned about its center as `a:xfrm` says (ECMA-376 Part 1 §20.1.7.6),
+/// and confined to the drawing's geometry when that is not a rectangle
+/// (a `a:blipFill` shape, §20.1.8.14); empty for a drawing without one.
 pub(crate) fn picture_items(drawing: &Drawing) -> Vec<Item> {
     if drawing.media.is_none() {
         return Vec::new();
@@ -70,9 +71,28 @@ pub(crate) fn picture_items(drawing: &Drawing) -> Vec<Item> {
         emu_to_pt(drawing.width).max(0.0),
         emu_to_pt(drawing.height).max(0.0),
     );
-    let image = Item::Image {
-        media: drawing.media,
-        rect: Rect::new(0.0, 0.0, width, height),
+    let rect = Rect::new(0.0, 0.0, width, height);
+    let outline = drawing
+        .geometry
+        .as_ref()
+        .filter(|g| !g.is_rectangle())
+        .and_then(|g| {
+            outline(g, width, height)
+                .0
+                .paths
+                .into_iter()
+                .find(|path| path.fill != PathFill::None)
+        });
+    let image = match outline {
+        Some(path) => Item::Picture {
+            segs: path.segs,
+            media: drawing.media,
+            rect,
+        },
+        None => Item::Image {
+            media: drawing.media,
+            rect,
+        },
     };
     let shape = drawing.shape;
     if shape.rotation == 0 && !shape.flip_horizontal && !shape.flip_vertical {

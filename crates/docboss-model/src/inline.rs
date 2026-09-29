@@ -109,6 +109,10 @@ pub struct Drawing {
     /// The drawings of a group or drawing canvas, in painting order; empty
     /// for any other drawing.
     pub members: Vec<crate::GroupMember>,
+    /// The text output reads for the drawing in place of its text boxes,
+    /// such as a diagram's text from its data model; empty for most
+    /// drawings.
+    pub data_text: Vec<crate::Block>,
 }
 
 /// A shape's geometry (ECMA-376 Part 1 §20.1.9).

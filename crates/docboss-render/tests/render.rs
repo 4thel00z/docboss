@@ -172,6 +172,7 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             shape: Default::default(),
             geometry: None,
             members: Vec::new(),
+            data_text: Vec::new(),
         }))
     };
     let mut doc = document(vec![
@@ -233,6 +234,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
         },
         geometry: None,
         members: Vec::new(),
+        data_text: Vec::new(),
     };
     let doc = document(vec![para(vec![Inline::Run(Run {
         properties: RunProperties::default(),
@@ -271,6 +273,7 @@ fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
             shape,
             geometry: None,
             members: Vec::new(),
+            data_text: Vec::new(),
         }))],
     })
 }
@@ -410,6 +413,7 @@ fn drawn_shape(x_pt: i64, name: &str, shape: ShapeFormat) -> Inline {
                 adjust: Vec::new(),
             })),
             members: Vec::new(),
+            data_text: Vec::new(),
         }))],
     })
 }
@@ -556,4 +560,27 @@ fn transforms_turn_rectangles_and_text() {
 
 fn layout_doc(doc: &Document) -> docboss_layout::Layout {
     layout(doc, &fonts())
+}
+
+/// A shape filled with a picture draws the picture inside its geometry:
+/// an ellipse's middle shows the picture and its corners stay blank.
+/// ECMA-376 Part 1 §20.1.8.14.
+#[test]
+fn picture_fills_are_confined_to_the_geometry() {
+    let Inline::Run(mut run) = drawn_shape(72, "ellipse", ShapeFormat::default()) else {
+        panic!()
+    };
+    if let Some(RunContent::Drawing(drawing)) = run.content.first_mut() {
+        drawing.media = Some(MediaId(0));
+    }
+    let mut doc = document(vec![para(vec![Inline::Run(run)])]);
+    doc.media = vec![Media {
+        name: "word/media/image1.png".into(),
+        content_type: "image/png".into(),
+        data: red_png().into(),
+    }];
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    assert_eq!(pixmap.pixel(122, 122), Some([255, 0, 0, 255]));
+    assert_eq!(pixmap.pixel(75, 75), Some([255, 255, 255, 255]));
+    assert_eq!(pixmap.pixel(168, 168), Some([255, 255, 255, 255]));
 }

@@ -271,7 +271,8 @@ fn field_tokens(text: &str) -> Vec<String> {
 
 /// The bodies of the text boxes a paragraph anchors, in order, from its
 /// flattened pieces, so hidden and deleted drawings stay out (ECMA-376
-/// Part 1 §20.4.2.38), a group's after its own in member order.
+/// Part 1 §20.4.2.38), a group's after its own in member order. A drawing
+/// with data text gives that in place of its own and its members' boxes.
 pub(crate) fn text_boxes<'a>(pieces: &[Piece<'a>]) -> Vec<&'a [Block]> {
     pieces
         .iter()
@@ -280,12 +281,16 @@ pub(crate) fn text_boxes<'a>(pieces: &[Piece<'a>]) -> Vec<&'a [Block]> {
             _ => None,
         })
         .flat_map(|drawing| {
-            std::iter::once(drawing.text_box.as_slice()).chain(
-                drawing
-                    .members
-                    .iter()
-                    .map(|m| m.drawing.text_box.as_slice()),
-            )
+            let own = match drawing.data_text.is_empty() {
+                true => drawing.text_box.as_slice(),
+                false => drawing.data_text.as_slice(),
+            };
+            let members = drawing
+                .members
+                .iter()
+                .filter(|_| drawing.data_text.is_empty())
+                .map(|m| m.drawing.text_box.as_slice());
+            std::iter::once(own).chain(members)
         })
         .filter(|blocks| !blocks.is_empty())
         .collect()

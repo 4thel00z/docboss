@@ -136,6 +136,13 @@ pub enum Item {
         media: Option<MediaId>,
         rect: Rect,
     },
+    /// An image drawn in `rect` and confined to an outline, as a shape
+    /// filled with a picture paints it.
+    Picture {
+        segs: Vec<Seg>,
+        media: Option<MediaId>,
+        rect: Rect,
+    },
     /// A rectangle's outline, stroked clockwise from its top-left corner
     /// with the dash pattern running on across the corners.
     Outline {
@@ -189,6 +196,12 @@ impl Item {
                 *to = (to.0 + dx, to.1 + dy);
             }
             Item::Path { segs, .. } => {
+                for seg in segs.iter_mut() {
+                    *seg = seg.transformed([1.0, 0.0, 0.0, 1.0, dx, dy]);
+                }
+            }
+            Item::Picture { segs, rect, .. } => {
+                *rect = rect.offset(dx, dy);
                 for seg in segs.iter_mut() {
                     *seg = seg.transformed([1.0, 0.0, 0.0, 1.0, dx, dy]);
                 }
