@@ -55,6 +55,8 @@ fn position(
 }
 
 const MAX_GROUP_DEPTH: usize = 16;
+/// The bytes at each end of an image that its media key hashes.
+const MEDIA_KEY_BYTES: usize = 4096;
 
 /// A group's frame: its box at the left and top of `anchor` of `extent` in
 /// its parent's coordinates, holding the coordinate space `space`
@@ -527,14 +529,22 @@ impl<'a> Context<'a> {
     }
 
     /// Adds an image to the media list, reusing the entry of an identical
-    /// image drawn earlier.
+    /// image drawn earlier. Images are bucketed by their length and a hash
+    /// of their first and last few kilobytes, and compared in full.
     fn add_media(&self, image: Image) -> MediaId {
-        let key = image
-            .data
-            .iter()
-            .fold(0xCBF2_9CE4_8422_2325u64, |hash, &b| {
-                (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01B3)
-            });
+        let data = &image.data;
+        let edge = data.len().min(MEDIA_KEY_BYTES);
+        let key = data[..edge]
+            .chunks(8)
+            .chain(data[data.len() - edge..].chunks(8))
+            .fold(
+                0xCBF2_9CE4_8422_2325u64 ^ data.len() as u64,
+                |hash, chunk| {
+                    let mut word = [0u8; 8];
+                    word[..chunk.len()].copy_from_slice(chunk);
+                    (hash ^ u64::from_le_bytes(word)).wrapping_mul(0x0100_0000_01B3)
+                },
+            );
         let mut media = self.media.borrow_mut();
         let mut seen = self.media_index.borrow_mut();
         let candidates = seen.entry(key).or_default();
