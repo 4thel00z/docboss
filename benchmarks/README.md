@@ -1,8 +1,9 @@
 # Benchmarks
 
-Seven scripts, because opening a corpus of small files, extracting one large
-document, parallel throughput, memory, malformed input and rendering quality
-are different workloads, and speed means nothing if the output is wrong:
+Eight scripts, because opening a corpus of small files, extracting one large
+document, parallel throughput, memory, malformed input, rendering speed and
+rendering quality are different workloads, and speed means nothing if the
+output is wrong:
 
 - `bench.py` times open + parse, text extraction, Markdown and HTML over a
   deterministic sample of a corpus, against every engine that produces the
@@ -22,6 +23,11 @@ are different workloads, and speed means nothing if the output is wrong:
   counts text returned, clean exceptions, crashes and hangs. It and
   `bench_memory.py` share a subprocess harness (`isolation.py`), so a crash is
   a data point instead of the end of the run.
+- `bench_render.py` times docboss's page rendering: a fixed, evenly spaced
+  sample of 60 DOCX and 30 DOC files, the first 3 pages of each rendered to
+  PNG at scale 1.5 through the Python bindings, in one process and one page
+  after another, best of 5 runs. It reports pages per second and the total
+  time for each format.
 - `bench_fidelity.py` scores docboss's page rendering against LibreOffice's.
 - `fetch_corpus.sh` downloads the corpora at pinned revisions.
 
@@ -241,6 +247,7 @@ uv run python benchmarks/bench_parallel.py docx corpus/ --sample 300
 uv run python benchmarks/bench_memory.py doc corpus/ --sample 100
 uv run python benchmarks/bench_robustness.py mutate docx damaged/docx corpus/ --count 150
 uv run python benchmarks/bench_robustness.py run docx damaged/docx
+uv run python benchmarks/bench_render.py corpus/
 uv run python benchmarks/bench_fidelity.py corpus/ --sample 90 --max-pages 5
 ```
 
