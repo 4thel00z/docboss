@@ -1,6 +1,6 @@
 use docboss_model::{
-    plain_text, Block, Document, DrawingPlacement, Inline, Justification, NoteKind, Paragraph,
-    RunContent, SourceFormat, Table, VerticalMerge,
+    plain_text, Block, Document, DrawingPlacement, DrawingPosition, Inline, Justification,
+    NoteKind, Paragraph, PositionBase, RunContent, SourceFormat, Table, VerticalMerge,
 };
 
 fn fixture(name: &str) -> Document {
@@ -321,7 +321,8 @@ fn encrypted_documents() {
 }
 
 /// [MS-DOC] §2.8.27 PlcfSpa anchors, [MS-ODRAW] §2.2.32 BLIP store and
-/// [MS-DOC] §2.8.32 PlcftxbxTxt: a floating picture and a text box.
+/// [MS-DOC] §2.8.32 PlcftxbxTxt: a floating picture and a text box, each
+/// placed from the column and paragraph its Spa bx and by name.
 /// [MS-DOC] §2.8.27, §2.9.253, §2.9.171, §2.9.172, §2.8.32, §2.3.6.
 #[test]
 fn floating_picture_and_text_box() {
@@ -336,10 +337,14 @@ fn floating_picture_and_text_box() {
         })
         .collect();
     assert_eq!(drawings.len(), 2);
-    assert!(matches!(
+    assert_eq!(
         drawings[0].placement,
-        DrawingPlacement::Anchored { .. }
-    ));
+        DrawingPlacement::Anchored {
+            horizontal: DrawingPosition::offset(PositionBase::Column, 2_602_865),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
+            behind_text: false,
+        }
+    );
     let media = document.media(drawings[0].media.unwrap()).unwrap();
     assert_eq!(media.content_type, "image/png");
     assert!(drawings[1].media.is_none());

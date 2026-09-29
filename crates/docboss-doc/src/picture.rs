@@ -4,7 +4,7 @@
 
 use std::io::Read;
 
-use docboss_model::{Color, ShapeFormat, VerticalAlign};
+use docboss_model::{Color, PositionAlign, PositionBase, ShapeFormat, VerticalAlign};
 
 use crate::bytes::{i16_at, i32_at, slice, u16_at, u32_at, u8_at};
 
@@ -263,6 +263,51 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
     format
 }
 
+/// A shape's alignment on each axis, horizontal then vertical: the posh
+/// and posrelh, posv and posrelv properties of its OfficeArtFOPT or
+/// OfficeArtTertiaryFOPT. None on an axis positioned by offset.
+/// [MS-ODRAW] §2.3.4.19, §2.3.4.20, §2.3.4.21, §2.3.4.22.
+pub fn shape_alignment(
+    bytes: &[u8],
+    container: &Record,
+) -> [Option<(PositionAlign, PositionBase)>; 2] {
+    let mut values = [0u32, 3, 0, 3];
+    let tables = children(bytes, container.body, container.body + container.length)
+        .into_iter()
+        .filter(|r| r.kind == 0xF00B || r.kind == 0xF122);
+    for options in tables {
+        for i in 0..usize::from(options.instance) {
+            let at = options.body + i * 6;
+            let (Some(id), Some(value)) = (u16_at(bytes, at), u32_at(bytes, at + 2)) else {
+                break;
+            };
+            if let Some(slot) = (id & 0x3FFF).checked_sub(0x038F).filter(|slot| *slot < 4) {
+                values[usize::from(slot)] = value;
+            }
+        }
+    }
+    let align = |value: u32| match value {
+        1 => Some(PositionAlign::Start),
+        2 => Some(PositionAlign::Center),
+        3 => Some(PositionAlign::End),
+        4 => Some(PositionAlign::Inside),
+        5 => Some(PositionAlign::Outside),
+        _ => None,
+    };
+    let base = |value: u32, horizontal: bool| match (value, horizontal) {
+        (1, _) => PositionBase::Margin,
+        (2, _) => PositionBase::Page,
+        (4, true) => PositionBase::Character,
+        (4, false) => PositionBase::Line,
+        (_, true) => PositionBase::Column,
+        (_, false) => PositionBase::Paragraph,
+    };
+    [
+        align(values[0]).map(|a| (a, base(values[1], true))),
+        align(values[2]).map(|a| (a, base(values[3], false))),
+    ]
+}
+
 /// A shape id from a shape container's OfficeArtFSP ([MS-ODRAW] §2.2.40).
 pub fn shape_id(bytes: &[u8], container: &Record) -> Option<u32> {
     let fsp = children(bytes, container.body, container.body + container.length)
@@ -350,5 +395,26 @@ mod tests {
 
         let bytes = container(&[(0x01BF, 0x0010_0000)]);
         assert_eq!(shape_format(&bytes, &record(&bytes, 0).unwrap()).fill, None);
+    }
+
+    /// [MS-ODRAW] §2.3.4.19, §2.3.4.20, §2.3.4.21, §2.3.4.22: msophAbs
+    /// leaves an axis to its offset; posrelh and posrelv default to the
+    /// text.
+    #[test]
+    fn shape_alignment_reads_posh_and_posv() {
+        let bytes = container(&[]);
+        assert_eq!(
+            shape_alignment(&bytes, &record(&bytes, 0).unwrap()),
+            [None, None]
+        );
+
+        let bytes = container(&[(0x038F, 2), (0x0391, 3), (0x0392, 2)]);
+        assert_eq!(
+            shape_alignment(&bytes, &record(&bytes, 0).unwrap()),
+            [
+                Some((PositionAlign::Center, PositionBase::Column)),
+                Some((PositionAlign::End, PositionBase::Page)),
+            ]
+        );
     }
 }

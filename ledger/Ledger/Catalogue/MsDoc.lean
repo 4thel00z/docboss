@@ -743,7 +743,7 @@ def rows1 : List Feature := [
   { standard := .msDoc, ref := .clause [2, 9, 252], title := "SortColumnAndDirection", status := .notImplemented,
     note := "No reader code cites this structure; it is not read, or is read only inside a structure whose row names it." },
   { standard := .msDoc, ref := .clause [2, 9, 253], title := "Spa", status := .implemented,
-    note := "Spa entries give floating shape anchors and ids (test read.rs floating_picture_and_text_box)." },
+    note := "Spa entries give floating shape anchors, ids and the bx and by origins of each axis (document.rs shapes, test read.rs floating_picture_and_text_box)." },
   { standard := .msDoc, ref := .clause [2, 9, 254], title := "SpellingSpls", status := .notImplemented,
     note := "No reader code cites this structure; it is not read, or is read only inside a structure whose row names it." },
   { standard := .msDoc, ref := .clause [2, 9, 255], title := "SPgbPropOperand", status := .notImplemented,

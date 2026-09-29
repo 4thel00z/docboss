@@ -7,14 +7,15 @@ use std::sync::Arc;
 
 use docboss_font::FontDatabase;
 use docboss_model::{
-    Block, Break, Color, Diagnostic, Document, HeaderFooterRefs, Inline, MediaId, NoteKind,
-    NumberFormat, NumberingCounter, RunContent, SectionBreak, SectionProperties,
+    Block, Break, Color, Diagnostic, Document, DrawingPosition, HeaderFooterRefs, Inline, MediaId,
+    NoteKind, NumberFormat, NumberingCounter, PositionAlign, PositionBase, RunContent,
+    SectionBreak, SectionProperties,
 };
 
 use crate::paragraph::layout_paragraph;
 use crate::shape::Shaper;
 use crate::table::{layout_table, RowPlan};
-use crate::units::twips_to_pt;
+use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{Item, LayoutOptions, LineStyle, Page, Rect};
 
 const MAX_PAGES: usize = 100_000;
@@ -25,18 +26,102 @@ const MAX_NESTING: usize = 24;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Floating {
     pub media: Option<MediaId>,
-    pub rect: Rect,
-    pub relative_to_page: bool,
+    pub width: f32,
+    pub height: f32,
+    pub horizontal: DrawingPosition,
+    pub vertical: DrawingPosition,
     pub behind: bool,
-    /// A text box's shape and text, relative to `rect`'s top-left corner.
+    /// A text box's shape and text, relative to its top-left corner.
     pub content: Vec<Item>,
 }
 
+/// The page geometry a floating drawing is placed against, in page
+/// coordinates: each span is a start and a length.
+pub(crate) struct Frame {
+    pub page: (f32, f32),
+    pub margin_x: (f32, f32),
+    pub margin_y: (f32, f32),
+    pub column: (f32, f32),
+    /// The top and height of the line that holds the drawing's anchor.
+    pub line: (f32, f32),
+    pub odd: bool,
+}
+
+impl Frame {
+    /// ECMA-376 Part 1 §20.4.3.4: the horizontal span `base` names.
+    fn horizontal(&self, base: PositionBase) -> (f32, f32) {
+        let (left, width) = self.margin_x;
+        let right = left + width;
+        let left_margin = (0.0, left);
+        let right_margin = (right, (self.page.0 - right).max(0.0));
+        match base {
+            PositionBase::Page => (0.0, self.page.0),
+            PositionBase::Margin => self.margin_x,
+            PositionBase::LeftMargin => left_margin,
+            PositionBase::RightMargin => right_margin,
+            PositionBase::InsideMargin if self.odd => left_margin,
+            PositionBase::InsideMargin => right_margin,
+            PositionBase::OutsideMargin if self.odd => right_margin,
+            PositionBase::OutsideMargin => left_margin,
+            _ => self.column,
+        }
+    }
+
+    /// ECMA-376 Part 1 §20.4.3.5: the vertical span `base` names.
+    fn vertical(&self, base: PositionBase) -> (f32, f32) {
+        let (top, height) = self.margin_y;
+        let bottom = top + height;
+        match base {
+            PositionBase::Page => (0.0, self.page.1),
+            PositionBase::Margin => self.margin_y,
+            PositionBase::TopMargin | PositionBase::InsideMargin => (0.0, top),
+            PositionBase::BottomMargin | PositionBase::OutsideMargin => {
+                (bottom, (self.page.1 - bottom).max(0.0))
+            }
+            _ => self.line,
+        }
+    }
+
+    /// ECMA-376 Part 1 §20.4.3.1, §20.4.3.2: the start of an object of
+    /// `size` placed on `span` by `position`.
+    fn place(&self, span: (f32, f32), size: f32, position: &DrawingPosition) -> f32 {
+        let (start, length) = span;
+        let Some(align) = position.align else {
+            return start + emu_to_pt(position.offset);
+        };
+        let align = match (align, self.odd) {
+            (PositionAlign::Inside, true) | (PositionAlign::Outside, false) => PositionAlign::Start,
+            (PositionAlign::Inside, false) | (PositionAlign::Outside, true) => PositionAlign::End,
+            (other, _) => other,
+        };
+        match align {
+            PositionAlign::Center => start + (length - size) / 2.0,
+            PositionAlign::End => start + length - size,
+            _ => start,
+        }
+    }
+}
+
 impl Floating {
-    /// The items the float paints, `rect` moved to `origin`: the picture,
-    /// unless the float is a text box without one, then its content.
-    fn items(&self, origin: (f32, f32)) -> Vec<Item> {
-        let rect = Rect::new(origin.0, origin.1, self.rect.width, self.rect.height);
+    /// The drawing's rectangle in page coordinates.
+    fn rect(&self, frame: &Frame) -> Rect {
+        let x = frame.place(
+            frame.horizontal(self.horizontal.base),
+            self.width,
+            &self.horizontal,
+        );
+        let y = frame.place(
+            frame.vertical(self.vertical.base),
+            self.height,
+            &self.vertical,
+        );
+        Rect::new(x, y, self.width, self.height)
+    }
+
+    /// The items the float paints on `frame`: the picture, unless the
+    /// float is a text box without one, then its content.
+    fn items(&self, frame: &Frame) -> Vec<Item> {
+        let rect = self.rect(frame);
         let picture = (self.media.is_some() || self.content.is_empty()).then_some(Item::Image {
             media: self.media,
             rect,
@@ -235,12 +320,32 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
 struct Story {
     items: Vec<Item>,
     height: f32,
-    /// Floats positioned relative to the page, in page coordinates.
-    page_items: Vec<Item>,
+    /// Floats with the top and height of the line that holds each.
+    floats: Vec<(Floating, f32, f32)>,
+}
+
+impl Story {
+    /// The story's items with its floats placed on `frame`, the story
+    /// starting at `origin` in the frame's coordinates.
+    fn placed(self, frame: &mut Frame, origin: (f32, f32)) -> Vec<Item> {
+        let mut items: Vec<Item> = self
+            .items
+            .into_iter()
+            .map(|mut item| {
+                item.offset(origin.0, origin.1);
+                item
+            })
+            .collect();
+        for (float, y, height) in &self.floats {
+            frame.line = (origin.1 + y, *height);
+            items.extend(float.items(frame));
+        }
+        items
+    }
 }
 
 /// Lays out a header, footer or note body as items stacked from `y = 0`,
-/// its floating drawings and text boxes included.
+/// its floating drawings and text boxes kept apart for placing.
 fn layout_story(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> Story {
     let fresh = ctx.doc.numbering.counter();
     let saved = std::mem::replace(&mut ctx.counter, fresh);
@@ -249,7 +354,7 @@ fn layout_story(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> Story {
     let mut story = Story {
         items: Vec::new(),
         height: 0.0,
-        page_items: Vec::new(),
+        floats: Vec::new(),
     };
     let mut y = 0.0;
     for slab in slabs {
@@ -258,17 +363,9 @@ fn layout_story(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> Story {
             item.offset(0.0, y);
             item
         }));
-        for float in &slab.floats {
-            if float.relative_to_page {
-                story
-                    .page_items
-                    .extend(float.items((float.rect.x, float.rect.y)));
-                continue;
-            }
-            story
-                .items
-                .extend(float.items((float.rect.x, float.rect.y + y)));
-        }
+        story
+            .floats
+            .extend(slab.floats.into_iter().map(|float| (float, y, slab.height)));
         y += slab.height;
     }
     story.height = y;
@@ -290,6 +387,9 @@ struct PageState {
     number_format: Option<docboss_model::NumberFormat>,
     text_left: f32,
     text_width: f32,
+    /// The top and bottom page margins as y coordinates.
+    margin_top: f32,
+    margin_bottom: f32,
     header_top: f32,
     footer_bottom: f32,
     header: Option<String>,
@@ -300,6 +400,24 @@ struct PageState {
     front: Vec<Item>,
     notes: Vec<i64>,
     note_height: f32,
+}
+
+impl PageState {
+    /// The page's geometry for placing floats, with the text area as the
+    /// column.
+    fn frame(&self) -> Frame {
+        Frame {
+            page: (self.width, self.height),
+            margin_x: (self.text_left, self.text_width),
+            margin_y: (
+                self.margin_top,
+                (self.margin_bottom - self.margin_top).max(0.0),
+            ),
+            column: (self.text_left, self.text_width),
+            line: (self.margin_top, 0.0),
+            odd: self.number % 2 == 1,
+        }
+    }
 }
 
 struct Cursor {
@@ -418,6 +536,8 @@ impl Paginator<'_, '_> {
             number_format: props.page_number_format.clone(),
             text_left,
             text_width,
+            margin_top: twips_to_pt(m.top.abs()),
+            margin_bottom: height - twips_to_pt(m.bottom.abs()),
             header_top,
             footer_bottom,
             header,
@@ -477,7 +597,16 @@ impl Paginator<'_, '_> {
         };
         self.ctx.current_note = Some(self.ctx.note_label(NoteKind::Footnote, id));
         let story = layout_story(self.ctx, &note.blocks, width);
-        let laid = (story.items, story.height);
+        let height = story.height;
+        let mut frame = Frame {
+            page: (width, height),
+            margin_x: (0.0, width),
+            margin_y: (0.0, height),
+            column: (0.0, width),
+            line: (0.0, 0.0),
+            odd: true,
+        };
+        let laid = (story.placed(&mut frame, (0.0, 0.0)), height);
         self.ctx.current_note = None;
         self.notes.insert(id, laid.clone());
         laid
@@ -593,7 +722,7 @@ impl Paginator<'_, '_> {
             notes,
             ..
         } = slab;
-        let (x, _) = self
+        let (x, column_width) = self
             .cursor
             .frames
             .get(self.cursor.column)
@@ -622,13 +751,13 @@ impl Paginator<'_, '_> {
             item.offset(x, y);
             item
         }));
+        let frame = Frame {
+            column: (x, column_width),
+            line: (y, height),
+            ..page.frame()
+        };
         for float in floats {
-            let rect = if float.relative_to_page {
-                float.rect
-            } else {
-                float.rect.offset(x, y)
-            };
-            let items = float.items((rect.x, rect.y));
+            let items = float.items(&frame);
             if float.behind {
                 page.back.extend(items);
                 continue;
@@ -821,28 +950,22 @@ fn separator_line(width: f32) -> Item {
 /// footnotes of a finished page, now that the page count is known.
 fn finish_page(
     ctx: &mut Ctx<'_>,
-    state: PageState,
+    mut state: PageState,
     notes: &HashMap<i64, (Vec<Item>, f32)>,
 ) -> Page {
     ctx.page_number = state.number;
     ctx.page_format = state.number_format.clone();
-    let mut items = state.back;
+    let mut items = std::mem::take(&mut state.back);
     let doc = ctx.doc;
+    let mut frame = state.frame();
     if let Some(part) = state.header.as_deref().and_then(|id| doc.header_footer(id)) {
         let header = layout_story(ctx, &part.blocks, state.text_width);
-        items.extend(header.items.into_iter().map(|mut item| {
-            item.offset(state.text_left, state.header_top);
-            item
-        }));
-        items.extend(header.page_items);
+        items.extend(header.placed(&mut frame, (state.text_left, state.header_top)));
     }
     if let Some(part) = state.footer.as_deref().and_then(|id| doc.header_footer(id)) {
         let footer = layout_story(ctx, &part.blocks, state.text_width);
-        items.extend(footer.items.into_iter().map(|mut item| {
-            item.offset(state.text_left, state.footer_bottom - footer.height);
-            item
-        }));
-        items.extend(footer.page_items);
+        let top = state.footer_bottom - footer.height;
+        items.extend(footer.placed(&mut frame, (state.text_left, top)));
     }
     items.extend(state.body);
     if !state.notes.is_empty() {

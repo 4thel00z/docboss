@@ -4,9 +4,10 @@
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Break, Color, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, MediaId,
-    Paragraph, Revision, RevisionKind, Run, RunContent, RunProperties, Section, SectionProperties,
-    Table, TableCell, TableRow, VerticalAlign,
+    Block, Break, Color, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink,
+    Inline, MediaId, Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run,
+    RunContent, RunProperties, Section, SectionProperties, Table, TableCell, TableRow,
+    VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -440,10 +441,9 @@ struct DrawingInfo {
     fill_stated: bool,
     line_stated: bool,
     anchored: bool,
-    x: i64,
-    y: i64,
+    horizontal: DrawingPosition,
+    vertical: DrawingPosition,
     behind: bool,
-    page: bool,
 }
 
 impl DrawingInfo {
@@ -462,24 +462,91 @@ impl DrawingInfo {
             fill_stated: false,
             line_stated: false,
             anchored: false,
-            x: 0,
-            y: 0,
+            horizontal: DrawingPosition::offset(PositionBase::Column, 0),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind: false,
-            page: false,
         }
     }
 
     fn finish(mut self) -> Drawing {
         if self.anchored {
             self.drawing.placement = DrawingPlacement::Anchored {
-                x: self.x,
-                y: self.y,
+                horizontal: self.horizontal,
+                vertical: self.vertical,
                 behind_text: self.behind,
-                relative_to_page: self.page,
             };
         }
         self.drawing
     }
+}
+
+/// The base of a `wp:positionH` or `wp:positionV` position from its
+/// `relativeFrom` (ECMA-376 Part 1 §20.4.3.4, §20.4.3.5), or None for a
+/// value the axis does not allow.
+fn position_base(value: &str, horizontal: bool) -> Option<PositionBase> {
+    let base = match value {
+        "page" => PositionBase::Page,
+        "margin" => PositionBase::Margin,
+        "insideMargin" => PositionBase::InsideMargin,
+        "outsideMargin" => PositionBase::OutsideMargin,
+        "column" if horizontal => PositionBase::Column,
+        "character" if horizontal => PositionBase::Character,
+        "leftMargin" if horizontal => PositionBase::LeftMargin,
+        "rightMargin" if horizontal => PositionBase::RightMargin,
+        "paragraph" if !horizontal => PositionBase::Paragraph,
+        "line" if !horizontal => PositionBase::Line,
+        "topMargin" if !horizontal => PositionBase::TopMargin,
+        "bottomMargin" if !horizontal => PositionBase::BottomMargin,
+        _ => return None,
+    };
+    Some(base)
+}
+
+/// A VML shape's position on one axis from its `margin-left` or
+/// `margin-top` and the `mso-position-*` properties Word writes beside
+/// them.
+fn vml_position(style: &str, horizontal: bool) -> DrawingPosition {
+    let (margin, axis) = match horizontal {
+        true => ("margin-left", "horizontal"),
+        false => ("margin-top", "vertical"),
+    };
+    let relative = css_property(style, &format!("mso-position-{axis}-relative"));
+    let base = match relative {
+        Some("page") => PositionBase::Page,
+        Some("margin") => PositionBase::Margin,
+        Some("char") if horizontal => PositionBase::Character,
+        Some("line") if !horizontal => PositionBase::Line,
+        Some("left-margin-area") if horizontal => PositionBase::LeftMargin,
+        Some("right-margin-area") if horizontal => PositionBase::RightMargin,
+        Some("top-margin-area") if !horizontal => PositionBase::TopMargin,
+        Some("bottom-margin-area") if !horizontal => PositionBase::BottomMargin,
+        Some("inner-margin-area") => PositionBase::InsideMargin,
+        Some("outer-margin-area") => PositionBase::OutsideMargin,
+        _ if horizontal => PositionBase::Column,
+        _ => PositionBase::Paragraph,
+    };
+    let offset = css_property(style, margin)
+        .and_then(css_length)
+        .unwrap_or(0);
+    let align = css_property(style, &format!("mso-position-{axis}")).and_then(position_align);
+    DrawingPosition {
+        base,
+        align,
+        offset,
+    }
+}
+
+/// A `wp:align` value (ECMA-376 Part 1 §20.4.3.1, §20.4.3.2).
+fn position_align(value: &str) -> Option<PositionAlign> {
+    let align = match value {
+        "left" | "top" => PositionAlign::Start,
+        "center" => PositionAlign::Center,
+        "right" | "bottom" => PositionAlign::End,
+        "inside" => PositionAlign::Inside,
+        "outside" => PositionAlign::Outside,
+        _ => return None,
+    };
+    Some(align)
 }
 
 /// ECMA-376 Part 3 §7.5, §7.6, §7.7, §9.3.
@@ -859,6 +926,7 @@ impl<'p> StoryParser<'p> {
     /// §20.4): inline and anchored objects, their extent, non-visual
     /// properties, position offsets and text box content.
     /// ECMA-376 Part 1 §20.4.2.8, §20.4.2.3, §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38.
+    /// ECMA-376 Part 1 §20.4.2.1, §20.4.2.2: `wp:align` in place of an offset.
     /// ECMA-376 Part 1 §20.4.2.42, §20.4.2.37: text boxes inside WordprocessingML shapes.
     /// ECMA-376 Part 1 §20.4.2.22: `wps:bodyPr` insets, text anchor and `a:spAutoFit`.
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
@@ -890,20 +958,38 @@ impl<'p> StoryParser<'p> {
                 }
                 (Ns::WP, "positionH" | "positionV") => {
                     let horizontal = e.local == "positionH";
-                    if horizontal {
-                        info.page = e.attr_raw(Ns::NONE, "relativeFrom") == Some("page");
+                    let position = match horizontal {
+                        true => &mut info.horizontal,
+                        false => &mut info.vertical,
+                    };
+                    let from = e.attr_raw(Ns::NONE, "relativeFrom").unwrap_or_default();
+                    match position_base(from, horizontal) {
+                        Some(base) => position.base = base,
+                        None => self.diagnostics.push(Diagnostic::approximated(
+                            self.ctx.part,
+                            format!(
+                                "drawing position relativeFrom=\"{from}\" is read as the default"
+                            ),
+                        )),
                     }
-                    children(reader, |reader, offset| {
-                        if offset.local != "posOffset" {
-                            return;
+                    let mut unknown = None;
+                    children(reader, |reader, child| match child.local {
+                        "posOffset" => position.offset = int(&reader.read_text()).unwrap_or(0),
+                        "align" => {
+                            let text = reader.read_text();
+                            position.align = position_align(text.trim());
+                            if position.align.is_none() {
+                                unknown = Some(text.into_owned());
+                            }
                         }
-                        let value = int(&reader.read_text()).unwrap_or(0);
-                        if horizontal {
-                            info.x = value;
-                        } else {
-                            info.y = value;
-                        }
+                        _ => {}
                     });
+                    if let Some(text) = unknown {
+                        self.diagnostics.push(Diagnostic::approximated(
+                            self.ctx.part,
+                            format!("drawing alignment \"{text}\" is read as an offset"),
+                        ));
+                    }
                     return;
                 }
                 (Ns::A, "blip") => {
@@ -978,12 +1064,8 @@ impl<'p> StoryParser<'p> {
                         }
                         if css_property(&style, "position").is_some_and(|p| p == "absolute") {
                             info.anchored = true;
-                            info.x = css_property(&style, "margin-left")
-                                .and_then(css_length)
-                                .unwrap_or(0);
-                            info.y = css_property(&style, "margin-top")
-                                .and_then(css_length)
-                                .unwrap_or(0);
+                            info.horizontal = vml_position(&style, true);
+                            info.vertical = vml_position(&style, false);
                             info.behind =
                                 css_property(&style, "z-index").is_some_and(|z| z.starts_with('-'));
                         }

@@ -627,10 +627,9 @@ fn build_atoms(
             }
             Elem::Float(drawing) => {
                 let DrawingPlacement::Anchored {
-                    x,
-                    y,
+                    horizontal,
+                    vertical,
                     behind_text,
-                    relative_to_page,
                 } = drawing.placement
                 else {
                     continue;
@@ -641,8 +640,10 @@ fn build_atoms(
                     .map_or(emu_to_pt(drawing.height), |text_box| text_box.height);
                 floats.push(Floating {
                     media: drawing.media,
-                    rect: Rect::new(emu_to_pt(x), emu_to_pt(y), emu_to_pt(drawing.width), height),
-                    relative_to_page,
+                    width: emu_to_pt(drawing.width),
+                    height,
+                    horizontal,
+                    vertical,
                     behind: behind_text,
                     content: text_box.map(|text_box| text_box.items).unwrap_or_default(),
                 });

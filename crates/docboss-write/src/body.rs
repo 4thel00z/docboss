@@ -5,8 +5,9 @@
 use std::collections::BTreeMap;
 
 use docboss_model::{
-    Block, Break, Document, Drawing, DrawingPlacement, Field, Hyperlink, Inline, Paragraph,
-    Revision, RevisionKind, Run, RunContent, Table, TableCell,
+    Block, Break, Document, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink, Inline,
+    Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent, Table,
+    TableCell,
 };
 
 use crate::package::{office_rel, Rels, NS_A, NS_PIC};
@@ -304,10 +305,9 @@ impl<'s, 'a> Story<'s, 'a> {
                 xml.empty("wp:extent", &[("cx", &cx), ("cy", &cy)]);
             }
             DrawingPlacement::Anchored {
-                x,
-                y,
+                horizontal,
+                vertical,
                 behind_text,
-                relative_to_page,
             } => {
                 let behind = if behind_text { "1" } else { "0" };
                 let height = id.as_str();
@@ -327,17 +327,8 @@ impl<'s, 'a> Story<'s, 'a> {
                     ],
                 );
                 xml.empty("wp:simplePos", &[("x", "0"), ("y", "0")]);
-                let (horizontal, vertical) = if relative_to_page {
-                    ("page", "page")
-                } else {
-                    ("column", "paragraph")
-                };
-                xml.open("wp:positionH", &[("relativeFrom", horizontal)]);
-                xml.text_element("wp:posOffset", &[], &x.to_string());
-                xml.close("wp:positionH");
-                xml.open("wp:positionV", &[("relativeFrom", vertical)]);
-                xml.text_element("wp:posOffset", &[], &y.to_string());
-                xml.close("wp:positionV");
+                position(xml, "wp:positionH", horizontal, true);
+                position(xml, "wp:positionV", vertical, false);
                 xml.empty("wp:extent", &[("cx", &cx), ("cy", &cy)]);
             }
         }
@@ -426,6 +417,44 @@ impl<'s, 'a> Story<'s, 'a> {
         self.blocks(&cell.blocks, true);
         self.xml.close("w:tc");
     }
+}
+
+/// A floating drawing's `wp:positionH` or `wp:positionV`: its
+/// `relativeFrom` and a `wp:align` or `wp:posOffset` (ECMA-376 Part 1
+/// §20.4.2.10, §20.4.2.11, §20.4.2.1, §20.4.2.2). A base the axis does not
+/// allow is written as the axis's default, column or paragraph.
+fn position(xml: &mut Xml, element: &str, position: DrawingPosition, horizontal: bool) {
+    let from = match (position.base, horizontal) {
+        (PositionBase::Page, _) => "page",
+        (PositionBase::Margin, _) => "margin",
+        (PositionBase::InsideMargin, _) => "insideMargin",
+        (PositionBase::OutsideMargin, _) => "outsideMargin",
+        (PositionBase::Character, true) => "character",
+        (PositionBase::LeftMargin, true) => "leftMargin",
+        (PositionBase::RightMargin, true) => "rightMargin",
+        (PositionBase::Line, false) => "line",
+        (PositionBase::TopMargin, false) => "topMargin",
+        (PositionBase::BottomMargin, false) => "bottomMargin",
+        (_, true) => "column",
+        (_, false) => "paragraph",
+    };
+    xml.open(element, &[("relativeFrom", from)]);
+    let Some(align) = position.align else {
+        xml.text_element("wp:posOffset", &[], &position.offset.to_string());
+        xml.close(element);
+        return;
+    };
+    let value = match (align, horizontal) {
+        (PositionAlign::Start, true) => "left",
+        (PositionAlign::Start, false) => "top",
+        (PositionAlign::Center, _) => "center",
+        (PositionAlign::End, true) => "right",
+        (PositionAlign::End, false) => "bottom",
+        (PositionAlign::Inside, _) => "inside",
+        (PositionAlign::Outside, _) => "outside",
+    };
+    xml.text_element("wp:align", &[], value);
+    xml.close(element);
 }
 
 /// The grid a table is written with: its own, or equal columns spanning

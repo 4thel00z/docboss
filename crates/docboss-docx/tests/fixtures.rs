@@ -1,5 +1,8 @@
 use docboss_docx::read;
-use docboss_model::{plain_text, Block, Document, Inline, RunContent};
+use docboss_model::{
+    plain_text, Block, Document, DrawingPlacement, DrawingPosition, Inline, PositionAlign,
+    PositionBase, RunContent,
+};
 
 fn open(name: &str) -> Document {
     let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -97,4 +100,28 @@ fn textutil_document() {
     let text = plain_text(&doc);
     assert!(text.contains("First bullet"));
     assert!(text.contains("merged cell"));
+}
+
+/// A Word text box whose `wp:positionH` centers it on its column with
+/// `wp:align` and whose `wp:positionV` is an offset from the paragraph.
+/// ECMA-376 Part 1 §20.4.2.1, §20.4.2.10, §20.4.2.11, §20.4.3.1, §20.4.3.4, §20.4.3.5.
+#[test]
+fn word_aligned_text_box() {
+    let doc = open("dml-picture-in-textframe.docx");
+    let boxes = drawings(&doc);
+    assert_eq!(boxes.len(), 1);
+    assert_eq!(
+        boxes[0].placement,
+        DrawingPlacement::Anchored {
+            horizontal: DrawingPosition {
+                base: PositionBase::Column,
+                align: Some(PositionAlign::Center),
+                offset: 0,
+            },
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
+            behind_text: false,
+        }
+    );
+    assert_eq!(boxes[0].width, 2_388_870);
+    assert!(!boxes[0].text_box.is_empty());
 }

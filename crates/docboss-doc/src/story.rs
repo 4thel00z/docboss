@@ -7,9 +7,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Borders, Break, Diagnostic, Drawing, DrawingPlacement, Field, Hyperlink, Inline, Media,
-    MediaId, Paragraph, ParagraphProperties, Revision, RevisionKind, Run, RunContent,
-    RunProperties, Styles, Table, TableCell, TableRow,
+    Block, Borders, Break, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field,
+    Hyperlink, Inline, Media, MediaId, Paragraph, ParagraphProperties, PositionAlign, PositionBase,
+    Revision, RevisionKind, Run, RunContent, RunProperties, Styles, Table, TableCell, TableRow,
 };
 
 use crate::fkp::{find, FormatRun};
@@ -28,6 +28,31 @@ pub enum Reference {
     Comment(i64),
 }
 
+/// A floating shape's alignment and the base it aligns on, horizontal then
+/// vertical; None on an axis positioned by offset.
+pub type ShapeAlignment = [Option<(PositionAlign, PositionBase)>; 2];
+
+/// One axis of a floating shape's position: its Spa offset in twips from
+/// `base`, which already places a left, centered or right shape where the
+/// writer laid it out, or its alignment when that is inside or outside,
+/// which depends on the page it lands on.
+fn position(
+    base: PositionBase,
+    twips: i32,
+    alignment: Option<(PositionAlign, PositionBase)>,
+) -> DrawingPosition {
+    let Some((align, base)) =
+        alignment.filter(|(a, _)| matches!(a, PositionAlign::Inside | PositionAlign::Outside))
+    else {
+        return DrawingPosition::offset(base, i64::from(twips) * 635);
+    };
+    DrawingPosition {
+        base,
+        align: Some(align),
+        offset: 0,
+    }
+}
+
 /// A floating shape anchored at a CP ([MS-DOC] §2.9.253 Spa).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Anchor {
@@ -36,7 +61,9 @@ pub struct Anchor {
     pub top: i32,
     pub right: i32,
     pub bottom: i32,
-    pub relative_to_page: bool,
+    /// The origins of `left` and `top` from the Spa's bx and by.
+    pub horizontal: docboss_model::PositionBase,
+    pub vertical: docboss_model::PositionBase,
     pub behind_text: bool,
 }
 
@@ -80,6 +107,8 @@ pub struct Context<'a> {
     pub shape_blips: HashMap<u32, usize>,
     /// Fill, line and text frame of each floating shape by shape id.
     pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
+    /// Horizontal and vertical alignment of each floating shape by shape id.
+    pub shape_alignments: HashMap<u32, ShapeAlignment>,
     /// Text box stories by shape id: the CP range of each.
     pub text_boxes: HashMap<u32, (u32, u32)>,
     pub blip_store: Vec<Option<Image>>,
@@ -306,6 +335,7 @@ impl<'a> Context<'a> {
             authors: Vec::new(),
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
+            shape_alignments: HashMap::new(),
             text_boxes: HashMap::new(),
             blip_store: Vec::new(),
             media: RefCell::new(Vec::new()),
@@ -515,6 +545,11 @@ impl<'a> Context<'a> {
     /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt).
     fn floating(&self, cp: u32) -> Option<RunContent> {
         let anchor = self.anchors.get(&cp)?;
+        let alignment = self
+            .shape_alignments
+            .get(&anchor.shape_id)
+            .copied()
+            .unwrap_or_default();
         let media = self
             .shape_blips
             .get(&anchor.shape_id)
@@ -539,10 +574,9 @@ impl<'a> Context<'a> {
             width: i64::from(anchor.right - anchor.left) * 635,
             height: i64::from(anchor.bottom - anchor.top) * 635,
             placement: DrawingPlacement::Anchored {
-                x: i64::from(anchor.left) * 635,
-                y: i64::from(anchor.top) * 635,
+                horizontal: position(anchor.horizontal, anchor.left, alignment[0]),
+                vertical: position(anchor.vertical, anchor.top, alignment[1]),
                 behind_text: anchor.behind_text,
-                relative_to_page: anchor.relative_to_page,
             },
             name: None,
             description: None,

@@ -4,11 +4,12 @@ use std::sync::Arc;
 use docboss_font::FontDatabase;
 use docboss_layout::{layout, Item, Layout};
 use docboss_model::{
-    AbstractNumbering, Block, Border, BorderStyle, Borders, Break, Document, Field, HeaderFooter,
-    HeaderFooterKind, HeaderFooterRefs, Indentation, Inline, Justification, Level, Note, NoteKind,
-    NumberFormat, Numbering, NumberingInstance, NumberingRef, Paragraph, ParagraphProperties, Run,
-    RunContent, RunProperties, Section, SectionProperties, Style, StyleKind, Styles, TabAlignment,
-    TabLeader, TabStop, Table, TableCell, TableProperties, TableRow,
+    AbstractNumbering, Block, Border, BorderStyle, Borders, Break, Document, DrawingPosition,
+    Field, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Indentation, Inline, Justification,
+    Level, Note, NoteKind, NumberFormat, Numbering, NumberingInstance, NumberingRef, Paragraph,
+    ParagraphProperties, PositionAlign, PositionBase, Run, RunContent, RunProperties, Section,
+    SectionProperties, Style, StyleKind, Styles, TabAlignment, TabLeader, TabStop, Table,
+    TableCell, TableProperties, TableRow,
 };
 
 const COUSINE: &str = concat!(
@@ -910,10 +911,9 @@ fn framed() -> docboss_model::ShapeFormat {
 
 fn anchored(x: i64, y: i64) -> docboss_model::DrawingPlacement {
     docboss_model::DrawingPlacement::Anchored {
-        x,
-        y,
+        horizontal: DrawingPosition::offset(PositionBase::Column, x),
+        vertical: DrawingPosition::offset(PositionBase::Paragraph, y),
         behind_text: false,
-        relative_to_page: false,
     }
 }
 
@@ -965,6 +965,99 @@ fn anchored_text_boxes_paint_fill_text_and_outline() {
         .items
         .iter()
         .any(|item| matches!(item, Item::Image { .. })));
+}
+
+fn fill_of(layout: &Layout) -> docboss_layout::Rect {
+    layout.pages[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Rect { rect, color } if *color == docboss_model::Color(255, 255, 0) => {
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .expect("the text box fill is painted")
+}
+
+/// ECMA-376 Part 1 §20.4.2.1, §20.4.2.2, §20.4.3.1, §20.4.3.2, §20.4.3.4,
+/// §20.4.3.5: an aligned float sits at the start, center or end of the
+/// page, margin or column it is aligned on; inside is the start on an odd
+/// page.
+#[test]
+fn aligned_floats_sit_on_their_base() {
+    let aligned = |base, align| DrawingPosition {
+        base,
+        align: Some(align),
+        offset: 0,
+    };
+    let place = |horizontal, vertical| {
+        let placement = docboss_model::DrawingPlacement::Anchored {
+            horizontal,
+            vertical,
+            behind_text: false,
+        };
+        fill_of(&laid(&doc(vec![Block::Paragraph(Paragraph {
+            inlines: vec![
+                run("Anchor"),
+                text_box(placement, framed(), vec![para("Boxed")]),
+            ],
+            ..Paragraph::default()
+        })])))
+    };
+    let cases = [
+        (
+            aligned(PositionBase::Page, PositionAlign::End),
+            aligned(PositionBase::Margin, PositionAlign::End),
+            (412.0, 620.0),
+        ),
+        (
+            aligned(PositionBase::Margin, PositionAlign::Center),
+            aligned(PositionBase::Page, PositionAlign::Center),
+            (206.0, 346.0),
+        ),
+        (
+            aligned(PositionBase::Page, PositionAlign::Inside),
+            aligned(PositionBase::BottomMargin, PositionAlign::Start),
+            (0.0, 720.0),
+        ),
+        (
+            aligned(PositionBase::RightMargin, PositionAlign::Start),
+            DrawingPosition::offset(PositionBase::TopMargin, 127_000),
+            (540.0, 10.0),
+        ),
+    ];
+    for (horizontal, vertical, (x, y)) in cases {
+        let fill = place(horizontal, vertical);
+        assert!(
+            (fill.x - x).abs() < 0.01 && (fill.y - y).abs() < 0.01,
+            "{horizontal:?} {vertical:?}: {fill:?}"
+        );
+    }
+}
+
+/// ECMA-376 Part 1 §20.4.2.1, §20.4.2.10, §20.4.3.1, §20.4.3.4: the Word
+/// text box in the fixture is centered on its column: its 188.1 pt outline
+/// sits halfway between the 70.85 pt margins of the 612 pt page.
+#[test]
+fn word_text_box_is_centered_on_its_column() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../docboss-docx/tests/fixtures/dml-picture-in-textframe.docx"
+    );
+    let document = docboss_docx::read(&std::fs::read(path).unwrap()).unwrap();
+    let layout = laid(&document);
+    let left = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Line { from, to, .. } if from.0 == to.0 => Some(from.0),
+            _ => None,
+        })
+        .fold(f32::MAX, f32::min);
+    let width = 2_388_870.0 / 12_700.0;
+    let expected = 70.85 + (612.0 - 2.0 * 70.85 - width) / 2.0;
+    assert!((left - expected).abs() < 0.05, "{left} {expected}");
 }
 
 /// ECMA-376 Part 1 §20.4.2.22: `a:spAutoFit` sizes the shape to its text,

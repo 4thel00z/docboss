@@ -17,13 +17,72 @@ pub enum Break {
 pub enum DrawingPlacement {
     /// In line with the text, like a large character.
     Inline,
-    /// Floating, positioned by offsets in EMU from the paragraph or page.
+    /// Floating, positioned on each axis by an offset or an alignment.
     Anchored {
-        x: i64,
-        y: i64,
+        horizontal: DrawingPosition,
+        vertical: DrawingPosition,
         behind_text: bool,
-        relative_to_page: bool,
     },
+}
+
+/// What a floating drawing's position on one axis is measured from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum PositionBase {
+    Page,
+    Margin,
+    Column,
+    Character,
+    Paragraph,
+    Line,
+    LeftMargin,
+    RightMargin,
+    TopMargin,
+    BottomMargin,
+    /// The left margin on odd pages, the right on even pages; vertically
+    /// the top margin.
+    InsideMargin,
+    /// The right margin on odd pages, the left on even pages; vertically
+    /// the bottom margin.
+    OutsideMargin,
+}
+
+/// Where a floating drawing sits within its base on one axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum PositionAlign {
+    /// Left or top.
+    Start,
+    Center,
+    /// Right or bottom.
+    End,
+    /// `Start` on odd pages, `End` on even pages.
+    Inside,
+    /// `End` on odd pages, `Start` on even pages.
+    Outside,
+}
+
+/// A floating drawing's position on one axis: aligned within `base` when
+/// `align` is set, else `offset` EMU from the start of `base`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct DrawingPosition {
+    pub base: PositionBase,
+    pub align: Option<PositionAlign>,
+    pub offset: i64,
+}
+
+impl DrawingPosition {
+    /// An offset in EMU from the start of `base`.
+    pub fn offset(base: PositionBase, offset: i64) -> Self {
+        Self {
+            base,
+            align: None,
+            offset,
+        }
+    }
 }
 
 /// A picture placed in the text.

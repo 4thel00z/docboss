@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use docboss_model::{
-    Block, Break, Comment, Document, Drawing, DrawingPlacement, Field, Inline, Justification,
-    RevisionKind, Run, RunContent, RunProperties, SectionBreak, SectionProperties, TableCell,
-    TableCellProperties, TableRow, VerticalMerge,
+    Block, Break, Comment, Document, Drawing, DrawingPlacement, DrawingPosition, Field, Inline,
+    Justification, PositionBase, RevisionKind, Run, RunContent, RunProperties, SectionBreak,
+    SectionProperties, TableCell, TableCellProperties, TableRow, VerticalMerge,
 };
 use docboss_write::{DocumentBuilder, ListKind, Para, TableBuilder};
 
@@ -96,10 +96,9 @@ pub fn kitchen_sink() -> Document {
             width: 914400,
             height: 914400,
             placement: DrawingPlacement::Anchored {
-                x: 914400,
-                y: 0,
+                horizontal: DrawingPosition::offset(PositionBase::Column, 914400),
+                vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
                 behind_text: false,
-                relative_to_page: false,
             },
             name: Some("anchored".into()),
             description: Some("An anchored picture".into()),

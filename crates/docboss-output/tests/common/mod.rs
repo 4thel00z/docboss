@@ -237,10 +237,9 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         width: 1905000,
         height: 952500,
         placement: DrawingPlacement::Anchored {
-            x: 0,
-            y: 0,
+            horizontal: DrawingPosition::offset(PositionBase::Column, 0),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind_text: false,
-            relative_to_page: false,
         },
         name: Some("Text Box 1".into()),
         description: None,

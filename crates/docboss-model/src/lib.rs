@@ -28,8 +28,8 @@ pub use block::{
 pub use diagnostic::{Diagnostic, Severity};
 pub use document::{Comment, Document, Metadata, Note, NoteKind, Settings, SourceFormat};
 pub use inline::{
-    Break, Drawing, DrawingPlacement, Field, Hyperlink, Inline, Revision, RevisionKind, Run,
-    RunContent, ShapeFormat,
+    Break, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink, Inline, PositionAlign,
+    PositionBase, Revision, RevisionKind, Run, RunContent, ShapeFormat,
 };
 pub use media::{sniff_image, FontEntry, Media, MediaId};
 pub use numbering::{

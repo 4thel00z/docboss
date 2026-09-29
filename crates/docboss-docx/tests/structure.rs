@@ -1,8 +1,8 @@
 use docboss_docx::read;
 use docboss_model::{
-    plain_text, Block, BorderStyle, Break, Color, DrawingPlacement, HeaderFooterKind, Inline,
-    Justification, NumberFormat, NumberingRef, RevisionKind, RunContent, SectionBreak,
-    VerticalAlign, VerticalMerge,
+    plain_text, Block, BorderStyle, Break, Color, DrawingPlacement, DrawingPosition,
+    HeaderFooterKind, Inline, Justification, NumberFormat, NumberingRef, PositionAlign,
+    PositionBase, RevisionKind, RunContent, SectionBreak, VerticalAlign, VerticalMerge,
 };
 use docboss_testkit::Docx;
 
@@ -229,6 +229,76 @@ fn markup_compatibility_and_content_controls() {
     assert_eq!(plain_text(&doc), "choice\nused\ncontrol\n");
 }
 
+/// ECMA-376 Part 1 §20.4.2.1, §20.4.2.2, §20.4.3.1, §20.4.3.2, §20.4.3.4,
+/// §20.4.3.5: `wp:align` and every `relativeFrom` base on each axis; a base
+/// the axis does not allow is reported and read as the default.
+#[test]
+fn drawing_alignment_and_bases() {
+    let anchor = |h: &str, v: &str| {
+        format!(
+            r#"<w:r><w:drawing><wp:anchor>{h}{v}<wp:extent cx="10" cy="20"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>x</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>"#
+        )
+    };
+    let body = format!(
+        "<w:p>{}{}{}</w:p>",
+        anchor(
+            r#"<wp:positionH relativeFrom="rightMargin"><wp:align>right</wp:align></wp:positionH>"#,
+            r#"<wp:positionV relativeFrom="bottomMargin"><wp:align>center</wp:align></wp:positionV>"#,
+        ),
+        anchor(
+            r#"<wp:positionH relativeFrom="insideMargin"><wp:align>outside</wp:align></wp:positionH>"#,
+            r#"<wp:positionV relativeFrom="line"><wp:posOffset>-50</wp:posOffset></wp:positionV>"#,
+        ),
+        anchor(
+            r#"<wp:positionH relativeFrom="paragraph"><wp:posOffset>7</wp:posOffset></wp:positionH>"#,
+            r#"<wp:positionV relativeFrom="margin"><wp:align>bottom</wp:align></wp:positionV>"#,
+        ),
+    );
+    let doc = read(&Docx::new(&body).build()).unwrap();
+    let placements: Vec<DrawingPlacement> = paragraphs(&doc)[0]
+        .inlines
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Run(run) => match &run.content[0] {
+                RunContent::Drawing(drawing) => Some(drawing.placement),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    let aligned = |base, align| DrawingPosition {
+        base,
+        align: Some(align),
+        offset: 0,
+    };
+    let anchored = |horizontal, vertical| DrawingPlacement::Anchored {
+        horizontal,
+        vertical,
+        behind_text: false,
+    };
+    assert_eq!(
+        placements,
+        vec![
+            anchored(
+                aligned(PositionBase::RightMargin, PositionAlign::End),
+                aligned(PositionBase::BottomMargin, PositionAlign::Center),
+            ),
+            anchored(
+                aligned(PositionBase::InsideMargin, PositionAlign::Outside),
+                DrawingPosition::offset(PositionBase::Line, -50),
+            ),
+            anchored(
+                DrawingPosition::offset(PositionBase::Column, 7),
+                aligned(PositionBase::Margin, PositionAlign::End),
+            ),
+        ]
+    );
+    assert!(doc
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("relativeFrom=\"paragraph\"")));
+}
+
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x01\0\0\0\x01\x08\x06\0\0\0\x1f\x15\xc4\x89\0\0\0\rIDATx\x9cc\xf8\x0f\0\0\x01\x01\0\x05\x18\xd8N\0\0\0\0IEND\xaeB`\x82";
 
 /// ECMA-376 Part 1 §20.4.2.8 and §20.4.2.3: inline and anchored drawings
@@ -265,10 +335,9 @@ fn drawings_and_media() {
     assert_eq!(
         shape.placement,
         DrawingPlacement::Anchored {
-            x: 100,
-            y: 200,
+            horizontal: DrawingPosition::offset(PositionBase::Page, 100),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 200),
             behind_text: true,
-            relative_to_page: true
         }
     );
     let Block::Paragraph(boxed) = &shape.text_box[0] else {

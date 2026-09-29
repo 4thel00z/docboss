@@ -13,3 +13,6 @@ keywords.workspace = true
 [dependencies]
 docboss-model = { workspace = true }
 docboss-font = { workspace = true }
+
+[dev-dependencies]
+docboss-docx = { workspace = true }

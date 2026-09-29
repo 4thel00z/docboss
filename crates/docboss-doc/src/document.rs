@@ -6,13 +6,14 @@ use std::collections::HashMap;
 use docboss_cfb::CompoundFile;
 use docboss_model::{
     Block, Comment, Diagnostic, Document, HeaderFooter, HeaderFooterKind, Inline, Note, NoteKind,
-    Paragraph, Run, RunContent, Section, SectionProperties, Settings, SourceFormat,
+    Paragraph, PositionBase, Run, RunContent, Section, SectionProperties, Settings, SourceFormat,
 };
 
 use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
 use crate::fib::{slot, Fib};
 use crate::picture::{
-    blip, children, record, shape_blip_index, shape_containers, shape_format, shape_id,
+    blip, children, record, shape_alignment, shape_blip_index, shape_containers, shape_format,
+    shape_id,
 };
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
@@ -373,6 +374,7 @@ fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
 /// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent: the
 /// drawing group, then one OfficeArtWordDrawing per story, each a dgglbl
 /// byte and a drawing container, §2.9.172).
+/// The Spa bx and by fields give the origin of each axis.
 /// [MS-DOC] §2.8.27, §2.9.253, §2.9.171, §2.9.172.
 fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts: &Parts) {
     let main = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
@@ -395,7 +397,16 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
                 top: value(8),
                 right: value(12),
                 bottom: value(16),
-                relative_to_page: (flags >> 1) & 3 == 1,
+                horizontal: match (flags >> 1) & 3 {
+                    0 => PositionBase::Margin,
+                    1 => PositionBase::Page,
+                    _ => PositionBase::Column,
+                },
+                vertical: match (flags >> 3) & 3 {
+                    0 => PositionBase::Margin,
+                    1 => PositionBase::Page,
+                    _ => PositionBase::Paragraph,
+                },
                 behind_text: flags & 0x4000 != 0,
             },
         );
@@ -476,6 +487,9 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
             context
                 .shape_formats
                 .insert(id, shape_format(table, &container));
+            context
+                .shape_alignments
+                .insert(id, shape_alignment(table, &container));
         }
         let (Some(id), Some(pib)) = (
             shape_id(table, &container),
