@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+<office:styles>
+<style:style style:name="Standard" style:family="paragraph"><style:text-properties fo:font-size="11pt"/></style:style>
+<draw:gradient draw:name="Fade" draw:style="linear" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:angle="0deg" draw:border="0%"/>
+</office:styles>
+<office:automatic-styles>
+<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:fill="gradient" draw:fill-gradient-name="Fade" draw:stroke="none"/></style:style>
+<style:style style:name="gr2" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#00ff00" draw:stroke="none"/></style:style>
+</office:automatic-styles>
+<office:body><office:text>
+<text:p>Group paragraph.<draw:g text:anchor-type="paragraph"><draw:rect draw:style-name="gr1" svg:x="1in" svg:y="0.5in" svg:width="2in" svg:height="1in"/><draw:ellipse draw:style-name="gr2" svg:x="3.5in" svg:y="0.5in" svg:width="1in" svg:height="1in"/></draw:g></text:p>
+<text:p>After.</text:p>
+</office:text></office:body></office:document>

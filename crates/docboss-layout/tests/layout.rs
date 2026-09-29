@@ -962,6 +962,7 @@ fn text_box(
             text_box: blocks,
             shape,
             geometry: None,
+            members: Vec::new(),
         }))],
     })
 }
@@ -1248,6 +1249,7 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         }))],
     });
     let mut properties = ParagraphProperties::default();
@@ -1308,6 +1310,7 @@ fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -
                 text_box: Vec::new(),
                 shape,
                 geometry: Some(Box::new(geometry)),
+                members: Vec::new(),
             }))],
         })],
     )
@@ -1412,4 +1415,75 @@ fn lines_flip_turn_and_end_in_arrowheads() {
         (x - 169.0).abs() < 0.01 && (y - 119.0).abs() < 0.01,
         "{x} {y}"
     );
+}
+
+/// A group paints each member at its box inside the group: pictures as
+/// images, shapes with a gradient as shaded outlines laid over their box.
+/// ECMA-376 Part 1 §20.4.2.39, §20.1.8.33.
+#[test]
+fn groups_paint_their_members_in_place() {
+    let red = docboss_model::Color(255, 0, 0);
+    let gradient = docboss_model::Gradient::new(&[(0, red), (100_000, red)]);
+    let square = docboss_model::Drawing {
+        width: 635_000,
+        height: 635_000,
+        geometry: Some(Box::new(docboss_model::Geometry::rectangle())),
+        shape: docboss_model::ShapeFormat {
+            fill: Some(red),
+            gradient,
+            ..docboss_model::ShapeFormat::default()
+        },
+        ..docboss_model::Drawing::default()
+    };
+    let picture = docboss_model::Drawing {
+        width: 254_000,
+        height: 127_000,
+        media: Some(docboss_model::MediaId(0)),
+        ..docboss_model::Drawing::default()
+    };
+    let group = docboss_model::Drawing {
+        width: 1_270_000,
+        height: 635_000,
+        placement: anchored(0, 0),
+        members: vec![
+            docboss_model::GroupMember {
+                x: 0,
+                y: 0,
+                drawing: square,
+            },
+            docboss_model::GroupMember {
+                x: 635_000,
+                y: 127_000,
+                drawing: picture,
+            },
+        ],
+        ..docboss_model::Drawing::default()
+    };
+    let layout = laid(&doc(vec![para_with(
+        ParagraphProperties::default(),
+        vec![Inline::Run(Run {
+            properties: RunProperties::default(),
+            content: vec![RunContent::Drawing(Box::new(group))],
+        })],
+    )]));
+    let items = &layout.pages[0].items;
+    let (frame, size) = items
+        .iter()
+        .find_map(|item| match item {
+            Item::Shade { frame, size, .. } => Some((*frame, *size)),
+            _ => None,
+        })
+        .expect("a shaded square");
+    assert_eq!(size, (50.0, 50.0));
+    let images: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Image { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(images.len(), 1, "{items:?}");
+    assert!((images[0].x - frame[4] - 50.0).abs() < 0.01);
+    assert!((images[0].y - frame[5] - 10.0).abs() < 0.01);
+    assert_eq!((images[0].width, images[0].height), (20.0, 10.0));
 }

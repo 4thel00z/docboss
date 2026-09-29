@@ -171,6 +171,7 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         }))
     };
     let mut doc = document(vec![
@@ -231,6 +232,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
             ..ShapeFormat::default()
         },
         geometry: None,
+        members: Vec::new(),
     };
     let doc = document(vec![para(vec![Inline::Run(Run {
         properties: RunProperties::default(),
@@ -268,6 +270,7 @@ fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
             text_box: vec![para(vec![])],
             shape,
             geometry: None,
+            members: Vec::new(),
         }))],
     })
 }
@@ -406,6 +409,7 @@ fn drawn_shape(x_pt: i64, name: &str, shape: ShapeFormat) -> Inline {
                 name: name.into(),
                 adjust: Vec::new(),
             })),
+            members: Vec::new(),
         }))],
     })
 }
@@ -451,4 +455,40 @@ fn preset_shapes_fill_and_stroke_their_outline() {
     assert!(dark(&pixmap, 446, 164));
     assert!(dark(&pixmap, 444, 168));
     assert!(!dark(&pixmap, 441, 150));
+}
+
+/// A linear gradient runs across the shape along its angle and a path
+/// gradient spreads from its focus: ECMA-376 Part 1 §20.1.8.33,
+/// §20.1.8.41, §20.1.8.46.
+#[test]
+fn gradient_fills_shade_across_the_shape() {
+    let red = Color(255, 0, 0);
+    let blue = Color(0, 0, 255);
+    let mut linear = docboss_model::Gradient::new(&[(0, red), (100_000, blue)]).unwrap();
+    linear.angle = 0;
+    let mut path = linear;
+    path.path = Some(docboss_model::GradientPath::Rect);
+    path.focus = [50_000; 4];
+    let shaded = |gradient| ShapeFormat {
+        fill: Some(Color::WHITE),
+        gradient: Some(gradient),
+        ..ShapeFormat::default()
+    };
+    let doc = document(vec![para(vec![
+        drawn_shape(72, "rect", shaded(linear)),
+        drawn_shape(300, "ellipse", shaded(path)),
+    ])]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    let at = |x: usize, y: usize| {
+        let i = (y * pixmap.width as usize + x) * 4;
+        (pixmap.data[i], pixmap.data[i + 2])
+    };
+    let (r, b) = at(75, 122);
+    assert!(r > 230 && b < 25, "{r} {b}");
+    let (r, b) = at(169, 122);
+    assert!(r < 25 && b > 230, "{r} {b}");
+    let (r, b) = at(350, 122);
+    assert!(r > 230 && b < 25, "{r} {b}");
+    let (r, b) = at(305, 122);
+    assert!(r < 60 && b > 190, "{r} {b}");
 }

@@ -1,6 +1,7 @@
 # Fixtures
 
-- `text`, `lists`, `tables`, `notes`, `image`, `sections`: `.fodt` sources
+- `text`, `lists`, `tables`, `notes`, `image`, `sections`, `floating`,
+  `group`: `.fodt` sources
   written for these tests, converted with
   `soffice --headless --convert-to doc`; the `.txt` files are
   `soffice --headless --convert-to "txt:Text (encoded):UTF8"` of the `.doc`.

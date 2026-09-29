@@ -105,6 +105,7 @@ pub fn kitchen_sink() -> Document {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         })),
         RunProperties::default(),
     ));

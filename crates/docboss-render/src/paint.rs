@@ -5,10 +5,11 @@ use std::sync::Arc;
 
 use docboss_font::{FontId, Seg};
 use docboss_layout::{GlyphRun, Item, Layout, LineStyle, Rect, Stroke};
-use docboss_model::{Color, DashPattern, Diagnostic, LineCap, LineJoin, MediaId};
+use docboss_model::{Color, DashPattern, Diagnostic, Gradient, LineCap, LineJoin, MediaId};
 
 use crate::image::{decode, Decoded, ImageError};
 use crate::raster::{flatten, polylines, rasterize, Mask, Point, Polygons};
+use crate::shade::{apply, compose, invert, Shader};
 use crate::{Error, Pixmap, Result};
 
 const SUBPIXEL: f32 = 4.0;
@@ -94,6 +95,12 @@ impl Renderer {
                 Item::Path { segs, fill, stroke } => {
                     canvas.path(segs, *fill, stroke.as_ref(), scale)
                 }
+                Item::Shade {
+                    segs,
+                    gradient,
+                    frame,
+                    size,
+                } => canvas.shade(segs, gradient, *frame, *size, scale),
                 Item::ClipBegin(rect) => {
                     outer.push(clip);
                     clip = clip.intersect(scaled(*rect, scale));
@@ -318,6 +325,42 @@ impl Canvas<'_> {
     fn fill_polygons(&mut self, polys: &Polygons, color: Color) {
         let mask = rasterize(polys, Some(self.clip.pixels()));
         self.blit(&mask, 0, 0, color);
+    }
+
+    /// Fills `segs`, in points, with the gradient laid over the box of
+    /// `size` that `frame` maps into the page.
+    fn shade(
+        &mut self,
+        segs: &[Seg],
+        gradient: &Gradient,
+        frame: [f32; 6],
+        size: (f32, f32),
+        scale: f32,
+    ) {
+        let m = [scale, 0.0, 0.0, scale, 0.0, 0.0];
+        let Some(back) = invert(compose(m, frame)) else {
+            return;
+        };
+        let mask = rasterize(&flatten(segs, m), Some(self.clip.pixels()));
+        let shader = Shader::new(gradient, size);
+        let stride = self.pixmap.width as usize;
+        for row in 0..mask.height {
+            let y = mask.y + row as i32;
+            let line = &mask.coverage[row * mask.width..(row + 1) * mask.width];
+            for (col, &c) in line.iter().enumerate() {
+                if c == 0 {
+                    continue;
+                }
+                let x = mask.x + col as i32;
+                let (u, v) = apply(back, x as f32 + 0.5, y as f32 + 0.5);
+                let at = (y as usize * stride + x as usize) * 4;
+                blend(
+                    &mut self.pixmap.data[at..at + 4],
+                    shader.color(u, v),
+                    u32::from(c),
+                );
+            }
+        }
     }
 
     fn segment(&mut self, p: (f32, f32), q: (f32, f32), width: f32, color: Color) {

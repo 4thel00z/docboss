@@ -229,6 +229,7 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         text_box: Vec::new(),
         shape: Default::default(),
         geometry: None,
+        members: Vec::new(),
     })))
 }
 
@@ -247,5 +248,6 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         text_box: blocks,
         shape: Default::default(),
         geometry: None,
+        members: Vec::new(),
     })))
 }

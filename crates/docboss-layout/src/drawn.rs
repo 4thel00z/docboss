@@ -60,7 +60,8 @@ fn shaded(color: Color, fill: PathFill) -> Option<Color> {
 /// any other geometry (ECMA-376 Part 1 §20.1.9.18 `prstGeom`, §20.1.9.8
 /// `custGeom`) becomes paths, flipped and then turned about the shape's
 /// center as `a:xfrm` says (§20.1.7.6); its text is not turned. A shape
-/// with a picture shows the picture in place of its fill.
+/// with a picture shows the picture in place of its fill; a gradient
+/// (§20.1.8.33) is laid over the shape's box and turns with it.
 pub(crate) fn shape_items(
     ctx: &mut Ctx<'_>,
     drawing: &Drawing,
@@ -70,16 +71,25 @@ pub(crate) fn shape_items(
     let shape = drawing.shape;
     let stroke = stroke(drawing);
     let rotation = shape.rotation;
-    let fill = shape.fill.filter(|_| drawing.media.is_none());
+    let pictured = drawing.media.is_some();
+    let gradient = shape.gradient.filter(|_| !pictured);
+    let fill = shape.fill.filter(|_| !pictured && gradient.is_none());
     let geometry = drawing
         .geometry
         .as_ref()
         .filter(|g| !(g.is_rectangle() && rotation == 0));
     let Some(geometry) = geometry else {
         let rect = Rect::new(0.0, 0.0, width, height);
+        let shade = gradient.map(|gradient| Item::Shade {
+            segs: rectangle(width, height),
+            gradient,
+            frame: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            size: (width, height),
+        });
         let under = fill
             .map(|color| Item::Rect { rect, color })
             .into_iter()
+            .chain(shade)
             .collect();
         let over = stroke
             .map(|s| Item::Outline {
@@ -116,6 +126,15 @@ pub(crate) fn shape_items(
     let mut under = Vec::new();
     let mut over = Vec::new();
     for path in &evaluated.paths {
+        if let Some(gradient) = gradient.filter(|_| path.fill != PathFill::None) {
+            under.push(Item::Shade {
+                segs: path.segs.clone(),
+                gradient,
+                frame: map,
+                size: (width, height),
+            });
+            continue;
+        }
         if let Some(color) = fill.and_then(|c| shaded(c, path.fill)) {
             under.push(Item::Path {
                 segs: path.segs.clone(),
@@ -138,6 +157,17 @@ pub(crate) fn shape_items(
         over.extend(heads);
     }
     ShapeItems { under, over }
+}
+
+/// The outline of a `width` by `height` rectangle at the origin.
+fn rectangle(width: f32, height: f32) -> Vec<Seg> {
+    vec![
+        Seg::Move(0.0, 0.0),
+        Seg::Line(width, 0.0),
+        Seg::Line(width, height),
+        Seg::Line(0.0, height),
+        Seg::Close,
+    ]
 }
 
 /// The map that flips a `width` by `height` shape and then turns it

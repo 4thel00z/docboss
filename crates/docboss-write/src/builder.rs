@@ -160,6 +160,7 @@ impl Para {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         };
         self.content(
             RunContent::Drawing(Box::new(drawing)),

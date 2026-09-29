@@ -11,6 +11,7 @@ mod image;
 mod jpeg;
 mod paint;
 mod raster;
+mod shade;
 
 use std::path::Path;
 

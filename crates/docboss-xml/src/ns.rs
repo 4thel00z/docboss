@@ -53,6 +53,8 @@ impl Ns {
     /// DrawingML WordprocessingML drawing, Word 2010 extensions.
     pub const WP14: Ns = Ns(23);
     pub const XSI: Ns = Ns(24);
+    /// WordprocessingML drawing canvases (`wpc:wpc`).
+    pub const WPC: Ns = Ns(25);
 
     pub const FIRST_UNKNOWN: u16 = 1000;
 }
@@ -146,6 +148,10 @@ const KNOWN: &[(&str, Ns)] = &[
         Ns::WP14,
     ),
     ("http://www.w3.org/2001/XMLSchema-instance", Ns::XSI),
+    (
+        "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
+        Ns::WPC,
+    ),
 ];
 
 /// The id of a known namespace URI.

@@ -5,8 +5,8 @@
 use std::io::Read;
 
 use docboss_model::{
-    Color, DashPattern, Geometry, LineCap, LineEnd, LineEndKind, LineEndSize, LineJoin,
-    PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
+    Color, DashPattern, Geometry, Gradient, GradientPath, LineCap, LineEnd, LineEndKind,
+    LineEndSize, LineJoin, PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
 };
 
 use crate::bytes::{i16_at, i32_at, slice, u16_at, u32_at, u8_at};
@@ -253,6 +253,7 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
         (flags == 0).then_some(Color(r, g, b))
     };
     let mut insets = [91440i64, 45720, 91440, 45720];
+    let mut shade = (0u32, Color::WHITE, 0i32, 0i32);
     for i in 0..usize::from(options.instance) {
         let at = options.body + i * 6;
         let (Some(id), Some(value)) = (u16_at(bytes, at), u32_at(bytes, at + 2)) else {
@@ -269,6 +270,10 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
             }
             0x00BF => format.auto_fit = value & 0x0002_0002 == 0x0002_0002,
             0x0181 => format.fill = color(value),
+            0x0180 => shade.0 = value,
+            0x0183 => shade.1 = color(value).unwrap_or(Color::WHITE),
+            0x018B => shade.2 = value as i32,
+            0x018C => shade.3 = value as i32,
             0x01BF if value & 0x0010_0000 != 0 && value & 0x10 == 0 => format.fill = None,
             0x01C0 => format.outline = color(value),
             0x01CB => format.outline_width = Some(i64::from(value)),
@@ -298,9 +303,39 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
         }
     }
     format.insets = Some(insets);
+    format.gradient = format.fill.and_then(|fill| shaded_fill(shade, fill));
+    if let Some(gradient) = format.gradient {
+        format.fill = Some(gradient.average());
+    }
     format.head_end = line_end(ends[0], ends[2], ends[3]);
     format.tail_end = line_end(ends[1], ends[4], ends[5]);
     format
+}
+
+/// The gradient of a shaded fill ([MS-ODRAW] §2.3.7.1 fillType of
+/// msofillShade to msofillShadeTitle, §2.4.11) from `fill` to its back
+/// color (§2.3.7.4), along the direction fillAngle turns counterclockwise
+/// (§2.3.7.14), with fillFocus placing the back color (§2.3.7.15); the
+/// center and shape shades spread from the middle. An angle of zero runs
+/// top to bottom: §2.3.7.14 names the vector from bottom to top, but the
+/// DrawingML copy Word writes of the same fill, and LibreOffice, run it
+/// downwards.
+fn shaded_fill(
+    (kind, back, angle, focus): (u32, Color, i32, i32),
+    fill: Color,
+) -> Option<Gradient> {
+    if !(4..=8).contains(&kind) {
+        return None;
+    }
+    let focus = f64::from(focus.clamp(-100, 100)) / 100.0;
+    let mut gradient = Gradient::focused(&[(0, fill), (100_000, back)], focus)?;
+    let degrees = f64::from(angle) / 65_536.0;
+    gradient.angle = (((90.0 - degrees) * 60_000.0).round() as i64).rem_euclid(21_600_000) as i32;
+    if matches!(kind, 5 | 6 | 8) {
+        gradient.path = Some(GradientPath::Rect);
+        gradient.focus = [50_000; 4];
+    }
+    Some(gradient)
 }
 
 /// [MS-ODRAW] §2.4.16, §2.4.17, §2.4.18: a line end from its MSOLINEEND,
@@ -408,6 +443,94 @@ pub fn shape_id(bytes: &[u8], container: &Record) -> Option<u32> {
         .into_iter()
         .find(|r| r.kind == 0xF00A)?;
     u32_at(bytes, fsp.body)
+}
+
+/// A rectangle as OfficeArtFSPGR and OfficeArtChildAnchor write it: left,
+/// top, right and bottom.
+pub type Bounds = [i32; 4];
+
+/// A group of shapes ([MS-ODRAW] §2.2.16 OfficeArtSpgrContainer): the shape
+/// id of the group shape, the coordinate space its members' anchors are in
+/// (§2.2.38 OfficeArtFSPGR), and the members in drawing order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeGroup {
+    pub id: u32,
+    pub space: Bounds,
+    pub members: Vec<GroupChild>,
+}
+
+/// A member of a group with its anchor in the group's coordinates
+/// ([MS-ODRAW] §2.2.39 OfficeArtChildAnchor).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupChild {
+    Shape { id: u32, anchor: Bounds },
+    Group { anchor: Bounds, group: ShapeGroup },
+}
+
+fn bounds(bytes: &[u8], rec: &Record) -> Option<Bounds> {
+    let value = |i: usize| u32_at(bytes, rec.body + i * 4).map(|v| v as i32);
+    Some([value(0)?, value(1)?, value(2)?, value(3)?])
+}
+
+fn child_record(bytes: &[u8], container: &Record, kind: u16) -> Option<Record> {
+    children(bytes, container.body, container.body + container.length)
+        .into_iter()
+        .find(|r| r.kind == kind)
+}
+
+/// The groups directly inside the patriarch group of a drawing container
+/// (0xF002) in `bytes[start..end]`, with the groups nested in them.
+pub fn shape_groups(bytes: &[u8], start: usize, end: usize, out: &mut Vec<ShapeGroup>) {
+    for drawing in children(bytes, start, end) {
+        if drawing.kind != 0xF003 {
+            continue;
+        }
+        for child in children(bytes, drawing.body, drawing.body + drawing.length) {
+            if child.kind != 0xF003 {
+                continue;
+            }
+            if let Some((group, _)) = shape_group(bytes, &child, 0) {
+                out.push(group);
+            }
+        }
+    }
+}
+
+/// A group container ([MS-ODRAW] §2.2.16): its first shape container is
+/// the group shape, with its coordinate space and, for a nested group, its
+/// own anchor; the other records are its members. Returns the group and
+/// its anchor in its parent's coordinates.
+fn shape_group(bytes: &[u8], container: &Record, depth: usize) -> Option<(ShapeGroup, Bounds)> {
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    let records = children(bytes, container.body, container.body + container.length);
+    let (first, rest) = records.split_first()?;
+    if first.kind != 0xF004 {
+        return None;
+    }
+    let id = shape_id(bytes, first)?;
+    let space = child_record(bytes, first, 0xF009)
+        .and_then(|r| bounds(bytes, &r))
+        .unwrap_or_default();
+    let anchor = child_record(bytes, first, 0xF00F)
+        .and_then(|r| bounds(bytes, &r))
+        .unwrap_or_default();
+    let members = rest
+        .iter()
+        .filter_map(|member| match member.kind {
+            0xF004 => Some(GroupChild::Shape {
+                id: shape_id(bytes, member)?,
+                anchor: child_record(bytes, member, 0xF00F).and_then(|r| bounds(bytes, &r))?,
+            }),
+            0xF003 => {
+                let (group, anchor) = shape_group(bytes, member, depth + 1)?;
+                Some(GroupChild::Group { anchor, group })
+            }
+            _ => None,
+        })
+        .collect();
+    Some((ShapeGroup { id, space, members }, anchor))
 }
 
 /// Every shape container under `bytes[start..end]`.

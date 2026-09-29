@@ -21,7 +21,9 @@ mod units;
 use std::sync::Arc;
 
 use docboss_font::{FontDatabase, FontId, Seg};
-use docboss_model::{Color, DashPattern, Diagnostic, Document, LineCap, LineJoin, Media, MediaId};
+use docboss_model::{
+    Color, DashPattern, Diagnostic, Document, Gradient, LineCap, LineJoin, Media, MediaId,
+};
 
 pub use units::{emu_to_pt, twips_to_pt};
 
@@ -146,6 +148,14 @@ pub enum Item {
         fill: Option<Color>,
         stroke: Option<Stroke>,
     },
+    /// An outline like [`Item::Path`]'s filled with a gradient laid over the
+    /// box of `size` points that `frame` maps into the page.
+    Shade {
+        segs: Vec<Seg>,
+        gradient: Gradient,
+        frame: [f32; 6],
+        size: (f32, f32),
+    },
     /// Confines the items that follow, up to the matching [`Item::ClipEnd`],
     /// to a rectangle.
     ClipBegin(Rect),
@@ -171,6 +181,13 @@ impl Item {
                 for seg in segs.iter_mut() {
                     *seg = seg.transformed([1.0, 0.0, 0.0, 1.0, dx, dy]);
                 }
+            }
+            Item::Shade { segs, frame, .. } => {
+                for seg in segs.iter_mut() {
+                    *seg = seg.transformed([1.0, 0.0, 0.0, 1.0, dx, dy]);
+                }
+                frame[4] += dx;
+                frame[5] += dy;
             }
             Item::ClipEnd => {}
         }

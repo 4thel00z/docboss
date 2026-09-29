@@ -11,11 +11,12 @@ pub enum Break {
 }
 
 /// Where a drawing sits relative to the text.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "snake_case"))]
 pub enum DrawingPlacement {
     /// In line with the text, like a large character.
+    #[default]
     Inline,
     /// Floating, positioned on each axis by an offset or an alignment.
     Anchored {
@@ -86,7 +87,7 @@ impl DrawingPosition {
 }
 
 /// A picture placed in the text.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Drawing {
     /// The image, when the drawing refers to one the reader could load.
@@ -105,6 +106,9 @@ pub struct Drawing {
     pub shape: ShapeFormat,
     /// The outline of a drawn shape; `None` for a picture.
     pub geometry: Option<Box<Geometry>>,
+    /// The drawings of a group or drawing canvas, in painting order; empty
+    /// for any other drawing.
+    pub members: Vec<crate::GroupMember>,
 }
 
 /// A shape's geometry (ECMA-376 Part 1 §20.1.9).
@@ -392,6 +396,8 @@ pub enum LineEndSize {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ShapeFormat {
     pub fill: Option<crate::Color>,
+    /// A gradient drawn in place of `fill`, which then holds its average.
+    pub gradient: Option<crate::Gradient>,
     pub outline: Option<crate::Color>,
     /// Outline width in EMU.
     pub outline_width: Option<i64>,

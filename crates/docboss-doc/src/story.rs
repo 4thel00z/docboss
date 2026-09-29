@@ -7,13 +7,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Borders, Break, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field,
-    Hyperlink, Inline, Media, MediaId, Paragraph, ParagraphProperties, PositionAlign, PositionBase,
-    Revision, RevisionKind, Run, RunContent, RunProperties, Styles, Table, TableCell, TableRow,
+    Block, Borders, Break, ChildBox, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field,
+    GroupFrame, GroupMember, Hyperlink, Inline, Media, MediaId, Paragraph, ParagraphProperties,
+    PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent, RunProperties,
+    ShapeFormat, Styles, Table, TableCell, TableRow,
 };
 
 use crate::fkp::{find, FormatRun};
-use crate::picture::{inline_picture, Image};
+use crate::picture::{inline_picture, Bounds, GroupChild, Image, ShapeGroup};
 use crate::props::{apply_chp, apply_pap, dttm, numbering_ref, CharContext, CharExtra, ParaExtra};
 use crate::sprm::prls;
 use crate::styles::Stylesheet;
@@ -50,6 +51,45 @@ fn position(
         base,
         align: Some(align),
         offset: 0,
+    }
+}
+
+const MAX_GROUP_DEPTH: usize = 16;
+
+/// A group's frame: its box at the left and top of `anchor` of `extent` in
+/// its parent's coordinates, holding the coordinate space `space`
+/// ([MS-ODRAW] §2.2.38, §2.2.39).
+fn group_frame(
+    anchor: Bounds,
+    extent: (f64, f64),
+    space: Bounds,
+    rotation: i32,
+    flip_horizontal: bool,
+    flip_vertical: bool,
+) -> GroupFrame {
+    GroupFrame {
+        offset: (f64::from(anchor[0]), f64::from(anchor[1])),
+        extent,
+        child_offset: (f64::from(space[0]), f64::from(space[1])),
+        child_extent: (
+            f64::from(space[2]) - f64::from(space[0]),
+            f64::from(space[3]) - f64::from(space[1]),
+        ),
+        rotation,
+        flip_horizontal,
+        flip_vertical,
+    }
+}
+
+/// The unturned extent of a shape whose anchor holds `width` by `height`:
+/// Word stores the anchor of a shape turned by 45 to 135 or 225 to 315
+/// degrees with its sides swapped about its center, as LibreOffice reads
+/// it.
+fn turned_extent(width: i64, height: i64, rotation: i32) -> (i64, i64) {
+    let degrees = rotation / 60_000;
+    match (45..135).contains(&degrees) || (225..315).contains(&degrees) {
+        true => (height, width),
+        false => (width, height),
     }
 }
 
@@ -111,6 +151,8 @@ pub struct Context<'a> {
     pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
     pub shape_alignments: HashMap<u32, ShapeAlignment>,
+    /// Groups of shapes by the shape id of the group shape.
+    pub shape_groups: HashMap<u32, crate::picture::ShapeGroup>,
     /// Text box stories by shape id: the CP range of each.
     pub text_boxes: HashMap<u32, (u32, u32)>,
     pub blip_store: Vec<Option<Image>>,
@@ -337,6 +379,7 @@ impl<'a> Context<'a> {
             authors: Vec::new(),
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
+            shape_groups: HashMap::new(),
             shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
             text_boxes: HashMap::new(),
@@ -542,11 +585,13 @@ impl<'a> Context<'a> {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         })))
     }
 
     /// A floating shape: its picture from the BLIP store, or its text box
-    /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt), or a preset shape.
+    /// story ([MS-DOC] §2.3.6, §2.8.32 PlcftxbxTxt), or a preset shape, or
+    /// a group of them.
     fn floating(&self, cp: u32) -> Option<RunContent> {
         let anchor = self.anchors.get(&cp)?;
         let alignment = self
@@ -554,56 +599,162 @@ impl<'a> Context<'a> {
             .get(&anchor.shape_id)
             .copied()
             .unwrap_or_default();
-        let media = self
-            .shape_blips
+        let rotation = self
+            .shape_formats
             .get(&anchor.shape_id)
-            .and_then(|&index| self.blip_store.get(index).cloned().flatten())
-            .map(|image| self.add_media(image));
-        let text_box = match self.text_boxes.get(&anchor.shape_id) {
-            Some(&(start, end)) => self.story(start, end, StoryKind::TextBox),
-            None => Vec::new(),
-        };
-        let geometry = media
-            .is_none()
-            .then(|| {
-                self.shape_geometries
+            .map_or(0, |format| format.rotation);
+        let stated = (
+            i64::from(anchor.right - anchor.left) * 635,
+            i64::from(anchor.bottom - anchor.top) * 635,
+        );
+        let (width, height) = turned_extent(stated.0, stated.1, rotation);
+        let mut drawing = match self.shape_groups.get(&anchor.shape_id) {
+            Some(group) => {
+                let shape = self
+                    .shape_formats
                     .get(&anchor.shape_id)
-                    .cloned()
-                    .map(Box::new)
-            })
-            .flatten();
-        if media.is_none() && text_box.is_empty() && geometry.is_none() {
+                    .copied()
+                    .unwrap_or_default();
+                let frame = group_frame(
+                    [0, 0, 0, 0],
+                    (width as f64, height as f64),
+                    group.space,
+                    shape.rotation,
+                    shape.flip_horizontal,
+                    shape.flip_vertical,
+                );
+                let mut drawing = Drawing::default();
+                self.group_members(group, &mut vec![frame], &mut drawing.members, 0);
+                drawing
+            }
+            None => self.shape_drawing(anchor.shape_id),
+        };
+        if drawing.media.is_none()
+            && drawing.text_box.is_empty()
+            && drawing.geometry.is_none()
+            && drawing.members.is_empty()
+        {
             self.report(Diagnostic::dropped(
                 "WordDocument",
                 format!(
-                    "shape {} at CP {cp} is neither a picture, a text box nor a preset shape",
+                    "shape {} at CP {cp} is neither a picture, a text box, a preset shape nor a group",
                     anchor.shape_id
                 ),
             ));
             return None;
         }
-        Some(RunContent::Drawing(Box::new(Drawing {
+        let (dx, dy) = ((stated.0 - width) / 2, (stated.1 - height) / 2);
+        let mut horizontal = position(anchor.horizontal, anchor.left, alignment[0]);
+        let mut vertical = position(anchor.vertical, anchor.top, alignment[1]);
+        horizontal.offset += dx;
+        vertical.offset += dy;
+        drawing.width = width;
+        drawing.height = height;
+        drawing.placement = DrawingPlacement::Anchored {
+            horizontal,
+            vertical,
+            behind_text: anchor.behind_text,
+        };
+        Some(RunContent::Drawing(Box::new(drawing)))
+    }
+
+    /// The drawing of one shape by id, without its size and placement: its
+    /// picture, text box or preset geometry with its format.
+    fn shape_drawing(&self, id: u32) -> Drawing {
+        let media = self
+            .shape_blips
+            .get(&id)
+            .and_then(|&index| self.blip_store.get(index).cloned().flatten())
+            .map(|image| self.add_media(image));
+        let text_box = match self.text_boxes.get(&id) {
+            Some(&(start, end)) => self.story(start, end, StoryKind::TextBox),
+            None => Vec::new(),
+        };
+        let geometry = media
+            .is_none()
+            .then(|| self.shape_geometries.get(&id).cloned().map(Box::new))
+            .flatten();
+        let format = self.shape_formats.get(&id).copied().unwrap_or_default();
+        let shape = match text_box.is_empty() && geometry.is_none() {
+            true => ShapeFormat {
+                rotation: format.rotation,
+                flip_horizontal: format.flip_horizontal,
+                flip_vertical: format.flip_vertical,
+                ..Default::default()
+            },
+            false => format,
+        };
+        Drawing {
             media,
-            width: i64::from(anchor.right - anchor.left) * 635,
-            height: i64::from(anchor.bottom - anchor.top) * 635,
-            placement: DrawingPlacement::Anchored {
-                horizontal: position(anchor.horizontal, anchor.left, alignment[0]),
-                vertical: position(anchor.vertical, anchor.top, alignment[1]),
-                behind_text: anchor.behind_text,
-            },
-            name: None,
-            description: None,
-            shape: match text_box.is_empty() && geometry.is_none() {
-                true => Default::default(),
-                false => self
-                    .shape_formats
-                    .get(&anchor.shape_id)
-                    .copied()
-                    .unwrap_or_default(),
-            },
+            shape,
             text_box,
             geometry,
-        })))
+            ..Default::default()
+        }
+    }
+
+    /// Adds the members of a group, placed through `frames` (the group's
+    /// own frame last), to `out`, descending into nested groups.
+    fn group_members(
+        &self,
+        group: &ShapeGroup,
+        frames: &mut Vec<GroupFrame>,
+        out: &mut Vec<GroupMember>,
+        depth: usize,
+    ) {
+        if depth > MAX_GROUP_DEPTH {
+            return;
+        }
+        for member in &group.members {
+            match member {
+                GroupChild::Shape { id, anchor } => {
+                    let drawing = self.shape_drawing(*id);
+                    let shape = drawing.shape;
+                    let (width, height) = (
+                        f64::from(anchor[2]) - f64::from(anchor[0]),
+                        f64::from(anchor[3]) - f64::from(anchor[1]),
+                    );
+                    let (w, h) = turned_extent(width as i64, height as i64, shape.rotation);
+                    let placed = ChildBox {
+                        x: f64::from(anchor[0]) + (width - w as f64) / 2.0,
+                        y: f64::from(anchor[1]) + (height - h as f64) / 2.0,
+                        width: w as f64,
+                        height: h as f64,
+                        rotation: shape.rotation,
+                        flip_horizontal: shape.flip_horizontal,
+                        flip_vertical: shape.flip_vertical,
+                    };
+                    let drawn = drawing.media.is_some()
+                        || !drawing.text_box.is_empty()
+                        || drawing.geometry.is_some();
+                    if drawn {
+                        let placed = GroupFrame::place_through(frames, placed);
+                        out.push(GroupMember::new(drawing, placed));
+                    }
+                }
+                GroupChild::Group { anchor, group } => {
+                    let shape = self
+                        .shape_formats
+                        .get(&group.id)
+                        .copied()
+                        .unwrap_or_default();
+                    let extent = (
+                        f64::from(anchor[2]) - f64::from(anchor[0]),
+                        f64::from(anchor[3]) - f64::from(anchor[1]),
+                    );
+                    frames.push(group_frame(
+                        *anchor,
+                        extent,
+                        group.space,
+                        shape.rotation,
+                        shape.flip_horizontal,
+                        shape.flip_vertical,
+                    ));
+                    self.group_members(group, frames, out, depth + 1);
+                    frames.pop();
+                }
+            }
+        }
     }
 
     fn markers_in(&self, start: u32, end: u32) -> &[(u32, u8, Marker)] {

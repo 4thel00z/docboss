@@ -23,6 +23,9 @@ pub(crate) struct TextBox {
 /// shape, or a shape without text (ECMA-376 Part 1 §20.1.9). `None` for a
 /// picture, and for a text box without text.
 pub(crate) fn layout_drawing(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
+    if !drawing.members.is_empty() {
+        return Some(layout_group(ctx, drawing));
+    }
     if !drawing.text_box.is_empty() {
         return layout_text_box(ctx, drawing);
     }
@@ -33,6 +36,35 @@ pub(crate) fn layout_drawing(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Tex
     let mut items = shape.under;
     items.extend(shape.over);
     Some(TextBox { items, height })
+}
+
+/// Lays out the members of a group or drawing canvas (ECMA-376 Part 1
+/// §20.4.2.39, §20.4.2.41, §20.4.2.32) in their order, each at its box in
+/// the group: its picture, then its shape and text.
+fn layout_group(ctx: &mut Ctx<'_>, drawing: &Drawing) -> TextBox {
+    let mut items = Vec::new();
+    for member in &drawing.members {
+        let (x, y) = (emu_to_pt(member.x), emu_to_pt(member.y));
+        let inner = &member.drawing;
+        if inner.media.is_some() {
+            let size = (emu_to_pt(inner.width), emu_to_pt(inner.height));
+            items.push(Item::Image {
+                media: inner.media,
+                rect: Rect::new(x, y, size.0.max(0.0), size.1.max(0.0)),
+            });
+        }
+        let Some(content) = layout_drawing(ctx, inner) else {
+            continue;
+        };
+        items.extend(content.items.into_iter().map(|mut item| {
+            item.offset(x, y);
+            item
+        }));
+    }
+    TextBox {
+        items,
+        height: emu_to_pt(drawing.height).max(0.0),
+    }
 }
 
 /// Lays out a drawing's text box. ECMA-376 Part 1 §20.4.2.38 (`txbxContent`)

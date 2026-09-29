@@ -849,14 +849,122 @@ fn shape_custom_geometry() {
     );
 }
 
-/// Shapes inside a group keep no geometry of their own, so the group is
-/// drawn as before.
-/// ECMA-376 Part 1 §20.4.2.32.
+const GROUP_NS: &str = r#"xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture""#;
+
+fn group_drawing(graphic: &str) -> docboss_model::Drawing {
+    let body = format!(
+        r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="2000000" cy="1000000"/><a:graphic {GROUP_NS}><a:graphicData>{graphic}</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#
+    );
+    first_drawing(&read(&Docx::new(&body).build()).unwrap())
+}
+
+/// A group's shapes, text boxes and nested groups become its members, their
+/// `a:xfrm` boxes mapped from the child offset and extent to the group's
+/// extent and through the nested group's own frame.
+/// ECMA-376 Part 1 §20.4.2.39, §20.4.2.32, §20.4.2.33, §20.1.7.5, §20.1.7.2, §20.1.7.1.
 #[test]
-fn group_children_keep_no_geometry() {
-    let body = r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wpg:wgp xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="ellipse"/></wps:spPr><wps:bodyPr/></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
-    let drawing = first_drawing(&read(&Docx::new(body).build()).unwrap());
+fn group_members_are_placed_through_their_groups() {
+    let drawing = group_drawing(
+        r#"<wpg:wgp><wpg:grpSpPr><a:xfrm><a:off x="500" y="500"/><a:ext cx="2000000" cy="1000000"/><a:chOff x="0" y="0"/><a:chExt cx="1000000" cy="500000"/></a:xfrm></wpg:grpSpPr><wps:wsp><wps:spPr><a:xfrm rot="5400000"><a:off x="100000" y="50000"/><a:ext cx="200000" cy="100000"/></a:xfrm><a:prstGeom prst="ellipse"/><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Inside</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp><wpg:grpSp><wpg:grpSpPr><a:xfrm flipH="1"><a:off x="500000" y="0"/><a:ext cx="500000" cy="500000"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></wpg:grpSpPr><wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="50" cy="50"/></a:xfrm></wps:spPr><wps:bodyPr/></wps:wsp></wpg:grpSp></wpg:wgp>"#,
+    );
     assert_eq!(drawing.geometry, None);
+    assert_eq!(drawing.members.len(), 2);
+    let ellipse = &drawing.members[0];
+    assert_eq!((ellipse.x, ellipse.y), (200_000, 100_000));
+    assert_eq!(
+        (ellipse.drawing.width, ellipse.drawing.height),
+        (400_000, 200_000)
+    );
+    assert_eq!(ellipse.drawing.shape.rotation, 5_400_000);
+    assert_eq!(ellipse.drawing.shape.fill, Some(Color(255, 0, 0)));
+    assert!(matches!(
+        ellipse.drawing.geometry.as_deref(),
+        Some(docboss_model::Geometry::Preset { name, .. }) if name == "ellipse"
+    ));
+    let Block::Paragraph(text) = &ellipse.drawing.text_box[0] else {
+        panic!()
+    };
+    assert_eq!(text.text(), "Inside");
+    let nested = &drawing.members[1];
+    assert_eq!((nested.x, nested.y), (1_500_000, 0));
+    assert_eq!(
+        (nested.drawing.width, nested.drawing.height),
+        (500_000, 500_000)
+    );
+    assert!(nested.drawing.shape.flip_horizontal);
+}
+
+/// A drawing canvas places its shapes and pictures in its own EMU; an
+/// empty canvas keeps its extent and draws nothing.
+/// ECMA-376 Part 1 §20.4.2.41.
+#[test]
+fn canvas_members_keep_their_offsets() {
+    let drawing = group_drawing(
+        r#"<wpc:wpc><wpc:bg/><wps:wsp><wps:spPr><a:xfrm><a:off x="10" y="20"/><a:ext cx="30" cy="40"/></a:xfrm><a:prstGeom prst="rect"/></wps:spPr><wps:bodyPr/></wps:wsp><pic:pic><pic:blipFill><a:blip/></pic:blipFill><pic:spPr><a:xfrm flipV="1"><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></pic:spPr></pic:pic></wpc:wpc>"#,
+    );
+    assert_eq!(drawing.members.len(), 2);
+    assert_eq!((drawing.members[0].x, drawing.members[0].y), (10, 20));
+    let picture = &drawing.members[1].drawing;
+    assert_eq!((picture.width, picture.height), (300, 400));
+    assert!(picture.geometry.is_none() && picture.shape.flip_vertical);
+    let empty = group_drawing(r#"<wpc:wpc><wpc:bg/><wpc:whole/></wpc:wpc>"#);
+    assert!(empty.members.is_empty());
+    assert_eq!(empty.shape.fill, None);
+    assert_eq!(empty.shape.outline, None);
+    assert!(empty.geometry.is_some());
+}
+
+/// A gradient fill's stops, linear angle and path focus.
+/// ECMA-376 Part 1 §20.1.8.33, §20.1.8.37, §20.1.8.36, §20.1.8.41, §20.1.8.46, §20.1.8.31.
+#[test]
+fn shape_gradient_fill() {
+    let linear = shape_drawing(
+        r#"<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/></a:gradFill>"#,
+    );
+    let gradient = linear.shape.gradient.unwrap();
+    assert_eq!(
+        gradient.stops(),
+        &[(0, Color(255, 0, 0)), (100_000, Color(0, 0, 255))]
+    );
+    assert_eq!(gradient.angle, 5_400_000);
+    assert_eq!(gradient.path, None);
+    assert_eq!(linear.shape.fill, Some(gradient.average()));
+    let path = shape_drawing(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>"#,
+    );
+    let gradient = path.shape.gradient.unwrap();
+    assert_eq!(gradient.path, Some(docboss_model::GradientPath::Circle));
+    assert_eq!(gradient.focus, [50_000; 4]);
+    let solid = shape_drawing(r#"<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>"#);
+    assert_eq!(solid.shape.gradient, None);
+}
+
+/// VML groups place their children through `coordorigin` and `coordsize`,
+/// nested groups through their own; a `v:fill` gradient runs from the
+/// fill color to `color2`, and `v:stroke` arrowheads become line ends.
+/// ECMA-376 Part 1 §17.3.3.19; [MS-ODRAW] §2.3.7.1, §2.3.7.14, §2.3.7.15, §2.4.16.
+#[test]
+fn vml_group_members_and_fills() {
+    let body = r#"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:group style="position:absolute;margin-left:0;margin-top:0;width:100pt;height:50pt" coordorigin="100,100" coordsize="200,100"><v:rect style="position:absolute;left:100;top:150;width:100;height:50" fillcolor="red"><v:fill type="gradient" color2="blue" angle="90"/></v:rect><v:group style="position:absolute;left:200;top:100;width:100;height:100" coordsize="10,10"><v:line from="0,0" to="10,10"><v:stroke endarrow="block" endarrowwidth="wide"/></v:line></v:group></v:group></w:pict></w:r></w:p>"#;
+    let drawing = first_drawing(&read(&Docx::new(body).build()).unwrap());
+    assert_eq!((drawing.width, drawing.height), (1_270_000, 635_000));
+    assert_eq!(drawing.members.len(), 2);
+    let rect = &drawing.members[0];
+    assert_eq!((rect.x, rect.y), (0, 317_500));
+    assert_eq!(
+        (rect.drawing.width, rect.drawing.height),
+        (635_000, 317_500)
+    );
+    let gradient = rect.drawing.shape.gradient.unwrap();
+    assert_eq!(gradient.angle, 10_800_000);
+    assert_eq!(gradient.color_at(0.0), Color(0, 0, 255));
+    assert_eq!(gradient.color_at(1.0), Color(255, 0, 0));
+    let line = &drawing.members[1];
+    assert_eq!((line.x, line.y), (635_000, 0));
+    assert_eq!(
+        line.drawing.shape.tail_end.unwrap().width,
+        docboss_model::LineEndSize::Large
+    );
 }
 
 /// VML shape elements take their preset geometry: an oval, a rounded

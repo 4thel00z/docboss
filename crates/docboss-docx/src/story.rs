@@ -4,14 +4,16 @@
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Break, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement, DrawingPosition,
-    Field, Geometry, Hyperlink, Inline, LineCap, LineJoin, MediaId, Paragraph, PositionAlign,
-    PositionBase, Revision, RevisionKind, Run, RunContent, RunProperties, Section,
-    SectionProperties, Table, TableCell, TableRow, VerticalAlign,
+    Block, Break, ChildBox, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement,
+    DrawingPosition, Field, Geometry, Gradient, GradientPath, Hyperlink, Inline, LineCap, LineJoin,
+    MediaId, Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent,
+    RunProperties, Section, SectionProperties, Table, TableCell, TableRow, VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
 use crate::geometry;
+
+mod group;
 use crate::package::Relationships;
 use crate::props::{
     cell_properties, paragraph_properties, row_properties, run_properties, section_properties,
@@ -356,11 +358,11 @@ fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
 /// A shape's fill and outline from `wps:spPr` (ECMA-376 Part 1 §20.4.2.35,
 /// §20.1.2.2.24 `a:ln`), recording which of the two it states: the dash
 /// (§20.1.8.48, §20.1.8.21), the cap (§20.1.10.31) and the join
-/// (§20.1.8.9, §20.1.8.43, §20.1.8.52), the line ends and, outside a group,
-/// the geometry and its rotation and flips (ECMA-376 Part 1 §20.1.7.6). An outline without `cap` takes
-/// round caps, as LibreOffice draws it, not the square the clause names.
-/// Returns a note when a preset dash is unknown or a custom dash has more
-/// stops than a pattern holds.
+/// (§20.1.8.9, §20.1.8.43, §20.1.8.52), the line ends, a gradient fill
+/// (§20.1.8.33), the geometry and its rotation and flips (ECMA-376 Part 1
+/// §20.1.7.6). An outline without `cap` takes round caps, as LibreOffice
+/// draws it, not the square the clause names. Returns a note when a preset
+/// dash is unknown or a custom dash has more stops than a pattern holds.
 fn shape_properties(
     reader: &mut Reader<'_>,
     theme: &Theme,
@@ -368,37 +370,35 @@ fn shape_properties(
 ) -> Option<String> {
     let mut note = None;
     info.drawing.shape.outline_cap = LineCap::Round;
-    if !info.in_group {
-        info.drawing.geometry = Some(Box::new(Geometry::rectangle()));
-    }
+    info.drawing.geometry = Some(Box::new(Geometry::rectangle()));
     children(reader, |reader, e| {
         if e.ns != Ns::A {
             return;
         }
         match e.local {
-            "xfrm" if !info.in_group => {
-                let shape = &mut info.drawing.shape;
-                shape.rotation = e
-                    .attr_raw(Ns::NONE, "rot")
-                    .and_then(int)
-                    .map_or(0, |r| r.rem_euclid(21_600_000) as i32);
-                shape.flip_horizontal = e.attr_raw(Ns::NONE, "flipH").is_some_and(xml_true);
-                shape.flip_vertical = e.attr_raw(Ns::NONE, "flipV").is_some_and(xml_true);
-            }
-            "prstGeom" if !info.in_group => {
+            "xfrm" => transform_2d(reader, &e, info),
+            "prstGeom" => {
                 info.drawing.geometry = Some(Box::new(geometry::preset(reader, &e)));
             }
-            "custGeom" if !info.in_group => {
+            "custGeom" => {
                 let (custom, dropped) = geometry::custom(reader);
                 info.drawing.geometry = Some(Box::new(custom));
                 note = dropped.or(note.take());
             }
             "solidFill" => {
                 info.drawing.shape.fill = color_choice(reader, theme);
+                info.drawing.shape.gradient = None;
                 info.fill_stated = true;
             }
-            "noFill" | "gradFill" | "blipFill" | "pattFill" => {
+            "gradFill" => {
+                let gradient = gradient_fill(reader, theme);
+                info.drawing.shape.fill = gradient.map(|g| g.average());
+                info.drawing.shape.gradient = gradient;
+                info.fill_stated = true;
+            }
+            "noFill" | "blipFill" | "pattFill" => {
                 info.drawing.shape.fill = None;
+                info.drawing.shape.gradient = None;
                 info.fill_stated = e.local == "noFill";
             }
             "ln" => {
@@ -456,6 +456,84 @@ fn shape_properties(
         }
     });
     note
+}
+
+/// `a:xfrm` (ECMA-376 Part 1 §20.1.7.6): the rotation and flips of a shape
+/// or picture, and its offset and extent in the coordinates of the group
+/// holding it.
+fn transform_2d(reader: &mut Reader<'_>, e: &Element<'_>, info: &mut DrawingInfo) {
+    let shape = &mut info.drawing.shape;
+    shape.rotation = e
+        .attr_raw(Ns::NONE, "rot")
+        .and_then(int)
+        .map_or(0, |r| r.rem_euclid(21_600_000) as i32);
+    shape.flip_horizontal = e.attr_raw(Ns::NONE, "flipH").is_some_and(xml_true);
+    shape.flip_vertical = e.attr_raw(Ns::NONE, "flipV").is_some_and(xml_true);
+    let mut placed = ChildBox::default();
+    children(reader, |_, part| {
+        let pair = |x: &str, y: &str| {
+            let value =
+                |name: &str| part.attr_raw(Ns::NONE, name).and_then(int).unwrap_or(0) as f64;
+            (value(x), value(y))
+        };
+        match part.local {
+            "off" => (placed.x, placed.y) = pair("x", "y"),
+            "ext" => (placed.width, placed.height) = pair("cx", "cy"),
+            _ => {}
+        }
+    });
+    info.placed = Some(placed);
+}
+
+/// A gradient fill (ECMA-376 Part 1 §20.1.8.33): its stops (§20.1.8.37,
+/// §20.1.8.36) and a linear direction (§20.1.8.41) or a path with its
+/// focus rectangle (§20.1.8.46, §20.1.8.31). `None` without stops.
+fn gradient_fill(reader: &mut Reader<'_>, theme: &Theme) -> Option<Gradient> {
+    let mut stops: Vec<(i64, Color)> = Vec::new();
+    let mut angle = 0;
+    let mut path = None;
+    let mut focus = [0; 4];
+    children(reader, |reader, e| match e.local {
+        "gsLst" => children(reader, |reader, gs| {
+            let position = gs
+                .attr_raw(Ns::NONE, "pos")
+                .and_then(percentage)
+                .unwrap_or(0);
+            if let Some(color) = color_choice(reader, theme) {
+                stops.push((position, color));
+            }
+        }),
+        "lin" => {
+            angle = e
+                .attr_raw(Ns::NONE, "ang")
+                .and_then(int)
+                .map_or(0, |a| a.rem_euclid(21_600_000) as i32);
+        }
+        "path" => {
+            path = Some(match e.attr_raw(Ns::NONE, "path") {
+                Some("circle") => GradientPath::Circle,
+                Some("rect") => GradientPath::Rect,
+                _ => GradientPath::Shape,
+            });
+            children(reader, |_, rect| {
+                if rect.local != "fillToRect" {
+                    return;
+                }
+                let inset = |name: &str| {
+                    rect.attr_raw(Ns::NONE, name)
+                        .and_then(percentage)
+                        .map_or(0, |v| v.clamp(-1_000_000, 1_000_000) as i32)
+                };
+                focus = [inset("l"), inset("t"), inset("r"), inset("b")];
+            });
+        }
+        _ => {}
+    });
+    let mut gradient = Gradient::new(&stops)?;
+    gradient.angle = angle;
+    gradient.path = path;
+    gradient.focus = focus;
+    Some(gradient)
 }
 
 /// ECMA-376 Part 1 §20.1.8.48 and §20.1.10.49: the pattern of a preset
@@ -584,6 +662,119 @@ fn vml_color(value: &str) -> Option<Color> {
     Color::from_hex(hex)
 }
 
+/// The size and position a top-level VML shape or group's `style` gives
+/// the drawing: its first stated size, and its absolute position.
+fn vml_box(style: &str, info: &mut DrawingInfo) {
+    if info.drawing.width == 0 {
+        info.drawing.width = css_property(style, "width")
+            .and_then(css_length)
+            .unwrap_or(0)
+            .max(0);
+        info.drawing.height = css_property(style, "height")
+            .and_then(css_length)
+            .unwrap_or(0)
+            .max(0);
+    }
+    if css_property(style, "position").is_some_and(|p| p == "absolute") {
+        info.anchored = true;
+        info.horizontal = vml_position(style, true);
+        info.vertical = vml_position(style, false);
+        info.behind = css_property(style, "z-index").is_some_and(|z| z.starts_with('-'));
+    }
+}
+
+/// The description, fill, outline and geometry of a VML shape element
+/// from its attributes.
+fn vml_shape(e: &Element<'_>, info: &mut DrawingInfo) {
+    if info.drawing.description.is_none() {
+        info.drawing.description = e
+            .attr(Ns::NONE, "alt")
+            .map(Into::into)
+            .filter(|d: &String| !d.is_empty());
+    }
+    let shape = &mut info.drawing.shape;
+    let filled = vml_true(e.attr_raw(Ns::NONE, "filled"), true);
+    let stroked = vml_true(e.attr_raw(Ns::NONE, "stroked"), true);
+    shape.fill = filled
+        .then(|| {
+            e.attr_raw(Ns::NONE, "fillcolor")
+                .map_or(Some(Color::WHITE), vml_color)
+        })
+        .flatten();
+    shape.outline = stroked
+        .then(|| {
+            e.attr_raw(Ns::NONE, "strokecolor")
+                .map_or(Some(Color::BLACK), vml_color)
+        })
+        .flatten();
+    shape.outline_width = Some(
+        e.attr_raw(Ns::NONE, "strokeweight")
+            .and_then(css_length)
+            .unwrap_or(9_525),
+    );
+    shape.outline_cap = LineCap::Round;
+    vml_geometry(e, info);
+}
+
+/// A VML `v:fill` of type `gradient` or `gradientRadial` ([MS-ODRAW]
+/// §2.3.7.1, §2.3.7.14, §2.3.7.15, §2.3.7.26 give the same fill in binary
+/// form): from the shape's fill color to `color2`, or through the stops of
+/// `colors`, along the direction `angle` turns counterclockwise from
+/// bottom-to-top, with `focus` placing the last color, as LibreOffice
+/// reads it.
+fn vml_fill(e: &Element<'_>, info: &mut DrawingInfo) {
+    let kind = e.attr_raw(Ns::NONE, "type").unwrap_or_default();
+    if !matches!(kind, "gradient" | "gradientRadial") {
+        return;
+    }
+    let shape = &mut info.drawing.shape;
+    let Some(first) = shape.fill else {
+        return;
+    };
+    let last = e
+        .attr_raw(Ns::NONE, "color2")
+        .and_then(vml_color)
+        .unwrap_or(Color::WHITE);
+    let listed: Vec<(i64, Color)> = e
+        .attr_raw(Ns::NONE, "colors")
+        .map(|colors| {
+            colors
+                .split(';')
+                .filter_map(|stop| {
+                    let (position, color) = stop.trim().split_once(' ')?;
+                    let position = vml_fraction(position)?;
+                    Some(((position * 100_000.0).round() as i64, vml_color(color)?))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let stops = match listed.len() >= 2 {
+        true => listed,
+        false => vec![(0, first), (100_000, last)],
+    };
+    let focus = e
+        .attr_raw(Ns::NONE, "focus")
+        .and_then(|f| f.trim().strip_suffix('%')?.trim().parse::<f64>().ok())
+        .filter(|f| f.is_finite())
+        .unwrap_or(0.0)
+        .clamp(-100.0, 100.0);
+    let angle = e
+        .attr_raw(Ns::NONE, "angle")
+        .and_then(|a| a.trim().parse::<f64>().ok())
+        .filter(|a| a.is_finite())
+        .unwrap_or(0.0);
+    let Some(mut gradient) = Gradient::focused(&stops, focus / 100.0) else {
+        return;
+    };
+    gradient.angle = (((270.0 - angle) * 60_000.0).round() as i64).rem_euclid(21_600_000) as i32;
+    if kind == "gradientRadial" {
+        gradient.path = Some(GradientPath::Rect);
+        gradient.focus = [50_000; 4];
+    }
+    shape.fill = Some(gradient.average());
+    shape.gradient = Some(gradient);
+}
+
 /// The geometry of a VML shape element: `v:rect`, `v:roundrect` with its
 /// `arcsize`, `v:oval`, `v:line` between `from` and `to`, or a `v:shape`
 /// whose `type` or `o:spt` names a preset shape type ([MS-ODRAW] §2.4.24);
@@ -671,8 +862,8 @@ struct DrawingInfo {
     fill_stated: bool,
     line_stated: bool,
     anchored: bool,
-    /// Inside a group or canvas, whose children's geometry is not read.
-    in_group: bool,
+    /// The box `a:xfrm` gives the shape in its group's coordinates.
+    placed: Option<ChildBox>,
     horizontal: DrawingPosition,
     vertical: DrawingPosition,
     behind: bool,
@@ -691,11 +882,12 @@ impl DrawingInfo {
                 text_box: Vec::new(),
                 shape: Default::default(),
                 geometry: None,
+                members: Vec::new(),
             },
             fill_stated: false,
             line_stated: false,
             anchored: false,
-            in_group: false,
+            placed: None,
             horizontal: DrawingPosition::offset(PositionBase::Column, 0),
             vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind: false,
@@ -817,6 +1009,7 @@ fn understood(ns: Ns) -> bool {
         Ns::PIC,
         Ns::WPS,
         Ns::WPG,
+        Ns::WPC,
         Ns::W14,
         Ns::WP14,
         Ns::V,
@@ -1118,7 +1311,8 @@ impl<'p> StoryParser<'p> {
                 self.vml(reader, &mut info);
                 let drawn = info.drawing.media.is_some()
                     || !info.drawing.text_box.is_empty()
-                    || info.drawing.geometry.is_some();
+                    || info.drawing.geometry.is_some()
+                    || !info.drawing.members.is_empty();
                 if drawn {
                     content.push(RunContent::Drawing(Box::new(info.finish())));
                 }
@@ -1279,9 +1473,17 @@ impl<'p> StoryParser<'p> {
                     alternate_content(reader, |reader| self.drawing_children(reader, info));
                     return;
                 }
-                (Ns::WPG, "wgp") | (_, "wpc") => {
-                    info.in_group = true;
-                    info.drawing.geometry = None;
+                (Ns::WPG, "wgp") | (Ns::WPC, "wpc") => {
+                    self.group(reader, &e, info, &mut Vec::new());
+                    return;
+                }
+                (Ns::PIC, "spPr") => {
+                    children(reader, |reader, x| {
+                        if x.ns == Ns::A && x.local == "xfrm" {
+                            transform_2d(reader, &x, info);
+                        }
+                    });
+                    return;
                 }
                 _ => {}
             }
@@ -1296,64 +1498,28 @@ impl<'p> StoryParser<'p> {
             match (e.ns, e.local) {
                 (Ns::V, "shape" | "rect" | "roundrect" | "oval" | "line") => {
                     if let Some(style) = e.attr(Ns::NONE, "style") {
-                        if info.drawing.width == 0 {
-                            info.drawing.width = css_property(&style, "width")
-                                .and_then(css_length)
-                                .unwrap_or(0)
-                                .max(0);
-                            info.drawing.height = css_property(&style, "height")
-                                .and_then(css_length)
-                                .unwrap_or(0)
-                                .max(0);
-                        }
-                        if css_property(&style, "position").is_some_and(|p| p == "absolute") {
-                            info.anchored = true;
-                            info.horizontal = vml_position(&style, true);
-                            info.vertical = vml_position(&style, false);
-                            info.behind =
-                                css_property(&style, "z-index").is_some_and(|z| z.starts_with('-'));
-                        }
+                        vml_box(&style, info);
                     }
-                    if info.drawing.description.is_none() {
-                        info.drawing.description = e
-                            .attr(Ns::NONE, "alt")
-                            .map(Into::into)
-                            .filter(|d: &String| !d.is_empty());
-                    }
-                    let shape = &mut info.drawing.shape;
-                    let filled = vml_true(e.attr_raw(Ns::NONE, "filled"), true);
-                    let stroked = vml_true(e.attr_raw(Ns::NONE, "stroked"), true);
-                    shape.fill = filled
-                        .then(|| {
-                            e.attr_raw(Ns::NONE, "fillcolor")
-                                .map_or(Some(Color::WHITE), vml_color)
-                        })
-                        .flatten();
-                    shape.outline = stroked
-                        .then(|| {
-                            e.attr_raw(Ns::NONE, "strokecolor")
-                                .map_or(Some(Color::BLACK), vml_color)
-                        })
-                        .flatten();
-                    shape.outline_width = Some(
-                        e.attr_raw(Ns::NONE, "strokeweight")
-                            .and_then(css_length)
-                            .unwrap_or(9_525),
-                    );
-                    shape.outline_cap = LineCap::Round;
-                    if !info.in_group {
-                        vml_geometry(&e, info);
-                    }
+                    vml_shape(&e, info);
                 }
                 (Ns::V, "group") => {
-                    info.in_group = true;
-                    info.drawing.geometry = None;
+                    if let Some(style) = e.attr(Ns::NONE, "style") {
+                        vml_box(&style, info);
+                    }
+                    self.vml_group(reader, &e, info, &mut Vec::new());
+                    return;
+                }
+                (Ns::V, "fill") => {
+                    vml_fill(&e, info);
+                    return;
                 }
                 (Ns::V, "stroke") => {
                     let shape = &mut info.drawing.shape;
                     if let Some(style) = e.attr_raw(Ns::NONE, "dashstyle") {
                         shape.outline_dash = vml_dash(style);
                     }
+                    shape.head_end = geometry::vml_line_end(&e, "start");
+                    shape.tail_end = geometry::vml_line_end(&e, "end");
                     match e.attr_raw(Ns::NONE, "endcap") {
                         Some("flat") => shape.outline_cap = LineCap::Flat,
                         Some("round") => shape.outline_cap = LineCap::Round,

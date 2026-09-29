@@ -328,6 +328,7 @@ impl<'o, 'a> Converter<'o, 'a> {
             text_box: Vec::new(),
             shape: Default::default(),
             geometry: None,
+            members: Vec::new(),
         };
         self.push_inline(Inline::Run(Run {
             properties: RunProperties::default(),

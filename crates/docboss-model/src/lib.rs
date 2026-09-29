@@ -13,6 +13,8 @@
 mod block;
 mod diagnostic;
 mod document;
+mod fill;
+mod group;
 mod inline;
 mod media;
 mod numbering;
@@ -27,6 +29,8 @@ pub use block::{
 };
 pub use diagnostic::{Diagnostic, Severity};
 pub use document::{Comment, Document, Metadata, Note, NoteKind, Settings, SourceFormat};
+pub use fill::{Gradient, GradientPath};
+pub use group::{ChildBox, GroupFrame, GroupMember};
 pub use inline::{
     Break, CustomGeometry, DashPattern, Drawing, DrawingPlacement, DrawingPosition, Field,
     Geometry, GeometryPath, Guide, Hyperlink, Inline, LineCap, LineEnd, LineEndKind, LineEndSize,

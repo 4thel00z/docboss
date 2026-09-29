@@ -338,6 +338,9 @@ impl<'a> HtmlWriter<'a, '_> {
     }
 
     fn image(&self, drawing: &Drawing, out: &mut String) {
+        for member in &drawing.members {
+            self.image(&member.drawing, out);
+        }
         let doc = self.resolver.doc;
         let Some(media) = drawing.media.and_then(|id| doc.media(id)) else {
             return;

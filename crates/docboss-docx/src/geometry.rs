@@ -179,3 +179,27 @@ pub fn line_end(e: &Element<'_>) -> Option<LineEnd> {
         length: size("len"),
     })
 }
+
+/// A VML `v:stroke` arrowhead from its `startarrow` or `endarrow` and the
+/// matching `…arrowwidth` and `…arrowlength` ([MS-ODRAW] §2.4.16,
+/// §2.4.17, §2.4.18 name the same values); `None` for none.
+pub fn vml_line_end(e: &Element<'_>, end: &str) -> Option<LineEnd> {
+    let kind = match e.attr_raw(Ns::NONE, &format!("{end}arrow"))? {
+        "block" => LineEndKind::Triangle,
+        "classic" => LineEndKind::Stealth,
+        "diamond" => LineEndKind::Diamond,
+        "oval" => LineEndKind::Oval,
+        "open" => LineEndKind::Arrow,
+        _ => return None,
+    };
+    let size = |name: &str| match e.attr_raw(Ns::NONE, &format!("{end}arrow{name}")) {
+        Some("narrow" | "short") => LineEndSize::Small,
+        Some("wide" | "long") => LineEndSize::Large,
+        _ => LineEndSize::Medium,
+    };
+    Some(LineEnd {
+        kind,
+        width: size("width"),
+        length: size("length"),
+    })
+}

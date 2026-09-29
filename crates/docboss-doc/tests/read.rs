@@ -364,6 +364,40 @@ fn floating_picture_and_text_box() {
     );
 }
 
+/// A group of shapes becomes one drawing whose members sit at their child
+/// anchors mapped from the group's coordinate space to its Spa rectangle;
+/// a shaded fill becomes a gradient from the fill color to the back color.
+/// [MS-ODRAW] §2.2.16, §2.2.38, §2.2.39, §2.3.7.1, §2.3.7.4, §2.3.7.14, §2.3.7.15.
+#[test]
+fn group_members_and_shaded_fill() {
+    let document = fixture("group");
+    let drawing = paragraphs(&document)
+        .iter()
+        .flat_map(|p| runs(p))
+        .flat_map(|r| &r.content)
+        .find_map(|c| match c {
+            RunContent::Drawing(d) => Some(d.as_ref().clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!((drawing.width, drawing.height), (3_200_400, 914_400));
+    assert_eq!(drawing.members.len(), 2);
+    let [rect, ellipse] = [&drawing.members[0], &drawing.members[1]];
+    assert_eq!((rect.x, rect.y), (0, 0));
+    assert!((rect.drawing.width - 1_828_800).abs() < 1_000);
+    assert!((ellipse.x - 2_286_000).abs() < 1_000);
+    assert!(ellipse.drawing.shape.gradient.is_none());
+    let gradient = rect.drawing.shape.gradient.unwrap();
+    assert_eq!(gradient.angle, 5_400_000);
+    assert_eq!(gradient.color_at(0.0), docboss_model::Color(255, 0, 0));
+    assert_eq!(gradient.color_at(1.0), docboss_model::Color(0, 0, 255));
+    assert!(
+        document.diagnostics.is_empty(),
+        "{:?}",
+        document.diagnostics
+    );
+}
+
 /// [MS-DOC] §2.9.286, §2.9.82, §2.2.4: the font table names the faces the
 /// document uses.
 #[test]
