@@ -7,7 +7,8 @@ use docboss_model::{
     Block, Break, ChildBox, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement,
     DrawingPosition, Field, Geometry, Gradient, GradientPath, Hyperlink, Inline, LineCap, LineJoin,
     MediaId, Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent,
-    RunProperties, Section, SectionProperties, Table, TableCell, TableRow, VerticalAlign,
+    RunProperties, Section, SectionProperties, Table, TableCell, TableRow, TextDirection,
+    VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -804,7 +805,7 @@ fn vml_geometry(e: &Element<'_>, info: &mut DrawingInfo) {
                     .parse()
                     .ok()
             })
-            .and_then(Geometry::from_shape_type),
+            .and_then(|spt| Geometry::from_shape_type_adjusted(spt, &vml_adjust(e))),
     };
     info.drawing.geometry = geometry.map(Box::new);
     let style = e.attr(Ns::NONE, "style").unwrap_or_default();
@@ -834,6 +835,25 @@ fn vml_geometry(e: &Element<'_>, info: &mut DrawingInfo) {
     info.vertical.offset = info.vertical.offset.saturating_add(from.1.min(to.1));
     shape.flip_horizontal ^= to.0 < from.0;
     shape.flip_vertical ^= to.1 < from.1;
+}
+
+/// The adjust values of a VML shape's `adj`, comma-separated with blanks
+/// for unstated ones ([MS-ODRAW] §2.3.6.10 gives them in binary form).
+fn vml_adjust(e: &Element<'_>) -> Vec<Option<i64>> {
+    e.attr_raw(Ns::NONE, "adj")
+        .map(|adj| {
+            adj.split(',')
+                .take(8)
+                .map(|v| {
+                    v.trim()
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite())
+                        .map(|v| v as i64)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// A VML fraction: `0.25`, `25%` or the 65536ths form `16384f`.
@@ -1359,7 +1379,8 @@ impl<'p> StoryParser<'p> {
     /// ECMA-376 Part 1 §20.4.2.8, §20.4.2.3, §20.4.2.7, §20.4.2.5, §20.4.2.10, §20.4.2.11, §20.4.2.12, §20.4.2.38.
     /// ECMA-376 Part 1 §20.4.2.1, §20.4.2.2: `wp:align` in place of an offset.
     /// ECMA-376 Part 1 §20.4.2.42, §20.4.2.37: text boxes inside WordprocessingML shapes.
-    /// ECMA-376 Part 1 §20.4.2.22: `wps:bodyPr` insets, text anchor and `a:spAutoFit`.
+    /// ECMA-376 Part 1 §20.4.2.22: `wps:bodyPr` insets, text anchor and `a:spAutoFit`;
+    /// ECMA-376 Part 1 §20.1.10.83: `vert`, and `upright`.
     fn drawing_children(&mut self, reader: &mut Reader<'_>, info: &mut DrawingInfo) {
         children(reader, |reader, e| {
             match (e.ns, e.local) {
@@ -1456,6 +1477,19 @@ impl<'p> StoryParser<'p> {
                         inset("rIns", DEFAULT_INSETS[2]),
                         inset("bIns", DEFAULT_INSETS[3]),
                     ]);
+                    shape.text_upright = e.attr_raw(Ns::NONE, "upright").is_some_and(xml_true);
+                    let vert = e.attr_raw(Ns::NONE, "vert").unwrap_or("horz");
+                    shape.text_direction = match vert {
+                        "vert" | "eaVert" | "mongolianVert" => TextDirection::TopToBottom,
+                        "vert270" => TextDirection::BottomToTop,
+                        _ => TextDirection::LeftToRight,
+                    };
+                    if vert.starts_with("wordArtVert") {
+                        self.diagnostics.push(Diagnostic::approximated(
+                            self.ctx.part,
+                            format!("stacked text (vert=\"{vert}\") is laid out across"),
+                        ));
+                    }
                     shape.text_anchor = match e.attr_raw(Ns::NONE, "anchor") {
                         Some("ctr") => Some(VerticalAlign::Center),
                         Some("b") => Some(VerticalAlign::Bottom),
@@ -1552,10 +1586,21 @@ impl<'p> StoryParser<'p> {
                             .filter(|v| *v >= 0)
                             .unwrap_or(DEFAULT_INSETS[i])
                     }));
-                    shape.auto_fit = e.attr(Ns::NONE, "style").is_some_and(|style| {
-                        css_property(&style, "mso-fit-shape-to-text")
-                            .is_some_and(|v| v == "t" || v == "true")
-                    });
+                    let style = e.attr(Ns::NONE, "style").unwrap_or_default();
+                    shape.auto_fit = css_property(&style, "mso-fit-shape-to-text")
+                        .is_some_and(|v| v == "t" || v == "true");
+                    shape.text_direction = match (
+                        css_property(&style, "layout-flow"),
+                        css_property(&style, "mso-layout-flow-alt"),
+                    ) {
+                        (Some("vertical" | "vertical-ideographic"), Some("bottom-to-top")) => {
+                            TextDirection::BottomToTop
+                        }
+                        (Some("vertical" | "vertical-ideographic"), _) => {
+                            TextDirection::TopToBottom
+                        }
+                        _ => TextDirection::LeftToRight,
+                    };
                 }
                 (Ns::V, "imagedata") => {
                     let id = e.attr(Ns::R, "id").or_else(|| e.attr(Ns::O, "relid"));

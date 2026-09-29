@@ -172,7 +172,13 @@ fn rectangle(width: f32, height: f32) -> Vec<Seg> {
 
 /// The map that flips a `width` by `height` shape and then turns it
 /// clockwise by `rotation` 60000ths of a degree about its center.
-fn transform(width: f32, height: f32, rotation: i32, flip_x: bool, flip_y: bool) -> [f32; 6] {
+pub(crate) fn transform(
+    width: f32,
+    height: f32,
+    rotation: i32,
+    flip_x: bool,
+    flip_y: bool,
+) -> [f32; 6] {
     let (sx, sy) = (
         if flip_x { -1.0 } else { 1.0 },
         if flip_y { -1.0 } else { 1.0 },
@@ -182,6 +188,18 @@ fn transform(width: f32, height: f32, rotation: i32, flip_x: bool, flip_y: bool)
     let (cx, cy) = (width / 2.0, height / 2.0);
     let (a, b, c, d) = (cos * sx, sin * sx, -sin * sy, cos * sy);
     [a, b, c, d, cx - a * cx - c * cy, cy - b * cx - d * cy]
+}
+
+/// `outer` after `inner`: the map that applies `inner`, then `outer`.
+pub(crate) fn compose(outer: [f32; 6], inner: [f32; 6]) -> [f32; 6] {
+    [
+        outer[0] * inner[0] + outer[2] * inner[1],
+        outer[1] * inner[0] + outer[3] * inner[1],
+        outer[0] * inner[2] + outer[2] * inner[3],
+        outer[1] * inner[2] + outer[3] * inner[3],
+        outer[0] * inner[4] + outer[2] * inner[5] + outer[4],
+        outer[1] * inner[4] + outer[3] * inner[5] + outer[5],
+    ]
 }
 
 /// An end of a path: its point and the point it is drawn from or toward.

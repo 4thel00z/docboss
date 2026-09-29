@@ -293,7 +293,41 @@ impl Geometry {
             adjust: Vec::new(),
         })
     }
+
+    /// [`Geometry::from_shape_type`] with the shape's adjust values on
+    /// their 21600 grid ([MS-ODRAW] §2.3.6.10 adjustValue to
+    /// §2.3.6.17 adjust8Value, and VML `adj`), unstated ones `None`. They
+    /// are carried over for the presets whose guides take them as the same
+    /// fraction of the shape: the triangle's apex, the rounded
+    /// rectangle's corner, the bent connectors' elbows and the wedge
+    /// callouts' tip. Other types keep their default proportions.
+    pub fn from_shape_type_adjusted(shape_type: u32, values: &[Option<i64>]) -> Option<Geometry> {
+        let mut geometry = Geometry::from_shape_type(shape_type)?;
+        let Geometry::Preset { adjust, .. } = &mut geometry else {
+            return Some(geometry);
+        };
+        let scaled: fn(i64) -> i64 = |v| v.saturating_mul(100_000) / 21_600;
+        let centered: fn(i64) -> i64 =
+            |v| v.saturating_sub(10_800).saturating_mul(100_000) / 21_600;
+        let rules: &[AdjustRule] = match shape_type {
+            2 | 5 => &[("adj", scaled)],
+            34 => &[("adj1", scaled)],
+            35 => &[("adj1", scaled), ("adj2", scaled)],
+            36 => &[("adj1", scaled), ("adj2", scaled), ("adj3", scaled)],
+            61..=63 => &[("adj1", centered), ("adj2", centered)],
+            _ => &[],
+        };
+        for ((name, map), value) in rules.iter().zip(values) {
+            if let Some(value) = value {
+                adjust.push(((*name).into(), map(*value)));
+            }
+        }
+        Some(geometry)
+    }
 }
+
+/// A preset guide name and the map from an MSOSPT adjust value to it.
+type AdjustRule = (&'static str, fn(i64) -> i64);
 
 /// A shape guide: a name and its formula, as `a:gd` writes them, such as
 /// `*/ w adj 100000`.
@@ -412,6 +446,10 @@ pub struct ShapeFormat {
     pub text_anchor: Option<crate::VerticalAlign>,
     /// The shape grows to fit its text.
     pub auto_fit: bool,
+    /// How the text runs inside the shape.
+    pub text_direction: crate::TextDirection,
+    /// The text stays upright when the shape turns.
+    pub text_upright: bool,
     /// Clockwise rotation about the shape's center, in 60000ths of a degree.
     pub rotation: i32,
     pub flip_horizontal: bool,
@@ -629,6 +667,25 @@ mod tests {
         assert_eq!(name(75), None);
         assert_eq!(name(136), None);
         assert!(Geometry::rectangle().is_rectangle());
+    }
+
+    /// [MS-ODRAW] §2.3.6.10: adjust values on the 21600 grid become the
+    /// preset's adjust values where the guides take the same fraction.
+    #[test]
+    fn shape_type_adjust_values_carry_over() {
+        let adjust = |spt: u32, values: &[Option<i64>]| match Geometry::from_shape_type_adjusted(
+            spt, values,
+        ) {
+            Some(Geometry::Preset { adjust, .. }) => adjust,
+            _ => panic!(),
+        };
+        assert_eq!(adjust(5, &[Some(21_600)]), vec![("adj".into(), 100_000)]);
+        assert_eq!(adjust(34, &[None, Some(1)]), vec![]);
+        assert_eq!(
+            adjust(61, &[Some(10_800), Some(21_600)]),
+            vec![("adj1".into(), 0), ("adj2".into(), 50_000)]
+        );
+        assert_eq!(adjust(13, &[Some(5)]), vec![]);
     }
 
     /// ECMA-376 Part 1 §20.1.10.49 and [MS-ODRAW] §2.4.15: the preset

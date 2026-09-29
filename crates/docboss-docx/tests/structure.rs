@@ -1014,3 +1014,62 @@ fn vml_shape_geometry() {
     let doc = read(&Docx::new(custom).build()).unwrap();
     assert!(!format!("{:?}", paragraphs(&doc)[0].inlines).contains("Drawing"));
 }
+
+/// Vertical and upright text in a shape's `wps:bodyPr` and in a VML text
+/// box's `layout-flow`, and a cell's `w:textDirection`.
+/// ECMA-376 Part 1 §20.4.2.22, §20.1.10.83, §17.4.72, §17.18.93.
+#[test]
+fn vertical_text_directions() {
+    use docboss_model::TextDirection::*;
+    let shape = |body_pr: &str| {
+        let body = format!(
+            r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:spPr/><wps:txbx><w:txbxContent><w:p/></w:txbxContent></wps:txbx>{body_pr}</wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#
+        );
+        first_drawing(&read(&Docx::new(&body).build()).unwrap()).shape
+    };
+    assert_eq!(
+        shape(r#"<wps:bodyPr vert="vert"/>"#).text_direction,
+        TopToBottom
+    );
+    assert_eq!(
+        shape(r#"<wps:bodyPr vert="eaVert"/>"#).text_direction,
+        TopToBottom
+    );
+    assert_eq!(
+        shape(r#"<wps:bodyPr vert="vert270"/>"#).text_direction,
+        BottomToTop
+    );
+    let upright = shape(r#"<wps:bodyPr vert="horz" upright="1"/>"#);
+    assert_eq!(upright.text_direction, LeftToRight);
+    assert!(upright.text_upright);
+    let vml = r#"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:rect style="width:10pt;height:10pt"><v:textbox style="layout-flow:vertical;mso-layout-flow-alt:bottom-to-top"><w:txbxContent><w:p/></w:txbxContent></v:textbox></v:rect></w:pict></w:r></w:p>"#;
+    let drawing = first_drawing(&read(&Docx::new(vml).build()).unwrap());
+    assert_eq!(drawing.shape.text_direction, BottomToTop);
+    let table = r#"<w:tbl><w:tr><w:tc><w:tcPr><w:textDirection w:val="btLr"/></w:tcPr><w:p/></w:tc><w:tc><w:tcPr><w:textDirection w:val="rl"/></w:tcPr><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>"#;
+    let doc = read(&Docx::new(table).build()).unwrap();
+    let Some(Block::Table(table)) = doc.blocks().next() else {
+        panic!()
+    };
+    let directions: Vec<_> = table.rows[0]
+        .cells
+        .iter()
+        .map(|c| c.properties.text_direction)
+        .collect();
+    assert_eq!(directions, [BottomToTop, TopToBottom, LeftToRight]);
+}
+
+/// A VML shape's `adj` values carry over to the preset where the guides
+/// take the same fraction of the shape.
+/// [MS-ODRAW] §2.3.6.10.
+#[test]
+fn vml_adjust_values() {
+    let body = r##"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:shape type="#_x0000_t5" adj="5400" style="width:10pt;height:10pt"/></w:pict></w:r></w:p>"##;
+    let drawing = first_drawing(&read(&Docx::new(body).build()).unwrap());
+    assert_eq!(
+        drawing.geometry.as_deref(),
+        Some(&docboss_model::Geometry::Preset {
+            name: "triangle".into(),
+            adjust: vec![("adj".into(), 25_000)],
+        })
+    );
+}

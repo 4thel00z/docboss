@@ -4,7 +4,7 @@
 
 use docboss_model::{
     Borders, Justification, Shading, TableCellProperties, TableProperties, TableRowProperties,
-    VerticalAlign, VerticalMerge,
+    TextDirection, VerticalAlign, VerticalMerge,
 };
 
 use crate::bytes::{i16_at, u16_at, u8_at};
@@ -17,6 +17,8 @@ pub struct CellFormat {
     pub horizontal_merge: u8,
     pub vertical_merge: u8,
     pub vertical_align: u8,
+    /// The TextFlow of the cell ([MS-DOC] §2.9.323).
+    pub text_flow: u16,
     pub borders: Option<Borders>,
     pub shading: Option<Shading>,
 }
@@ -54,6 +56,7 @@ fn tc80(bytes: &[u8]) -> CellFormat {
         horizontal_merge: (grf & 3) as u8,
         vertical_merge: ((grf >> 5) & 3) as u8,
         vertical_align: ((grf >> 7) & 3) as u8,
+        text_flow: (grf >> 2) & 7,
         borders: has_borders.then_some(borders),
         shading: None,
     }
@@ -71,7 +74,8 @@ fn cells_in(row: &mut RowInfo, operand: &[u8], apply: impl Fn(&mut CellFormat)) 
 impl RowInfo {
     /// Reads the table sprms of a TTP paragraph. `sprmTDxaGapHalf` is each
     /// cell's left and right margin unless `sprmTCellPadding` states one
-    /// ([MS-DOC] §2.6.3).
+    /// ([MS-DOC] §2.6.3); `sprmTTextFlow` sets the text flow of a range of
+    /// cells ([MS-DOC] §2.9.29).
     pub fn parse(grpprl: &[u8]) -> RowInfo {
         let mut row = RowInfo::default();
         let mut gap_half: Option<i32> = None;
@@ -165,6 +169,10 @@ impl RowInfo {
                     let align = u8_at(prl.variable(), 2).unwrap_or(0);
                     cells_in(&mut row, prl.variable(), |cell| cell.vertical_align = align);
                 }
+                0x7629 => {
+                    let flow = u16_at(prl.operand, 2).unwrap_or(0);
+                    cells_in(&mut row, prl.operand, |cell| cell.text_flow = flow);
+                }
                 0x5624 => {
                     let first = usize::from(u8_at(prl.operand, 0).unwrap_or(0));
                     let lim = usize::from(u8_at(prl.operand, 1).unwrap_or(0)).min(row.cells.len());
@@ -221,7 +229,18 @@ impl RowInfo {
                 _ => None,
             },
             margins: None,
+            text_direction: text_direction(format.text_flow),
         }
+    }
+}
+
+/// [MS-DOC] §2.9.323: grpfTFtbrl and grpfTFtbrlv run the lines top to
+/// bottom, grpfTFbtlr bottom to top; the others run across.
+fn text_direction(flow: u16) -> TextDirection {
+    match flow {
+        1 | 5 => TextDirection::TopToBottom,
+        3 => TextDirection::BottomToTop,
+        _ => TextDirection::LeftToRight,
     }
 }
 
@@ -251,6 +270,27 @@ mod tests {
             RowInfo::parse(&both).table.cell_margins,
             Some([0, 20, 0, 70])
         );
+    }
+
+    /// [MS-DOC] §2.9.317, §2.9.323, §2.9.29: the TCGRF text flow of each
+    /// cell, and sprmTTextFlow over a range of cells.
+    #[test]
+    fn cells_take_their_text_flow() {
+        let mut operand = vec![0u8, 0, 2, 0, 0, 100, 0, 200, 0];
+        let mut tc = [0u8; 20];
+        tc[0] = 3 << 2;
+        operand.extend(tc);
+        operand.extend([0u8; 20]);
+        let len = (operand.len() - 1) as u16;
+        operand[0..2].copy_from_slice(&len.to_le_bytes());
+        let mut grpprl = prl(0xD608, &operand);
+        let row = RowInfo::parse(&grpprl);
+        use docboss_model::TextDirection::*;
+        assert_eq!(row.cell_properties(0).text_direction, BottomToTop);
+        assert_eq!(row.cell_properties(1).text_direction, LeftToRight);
+        grpprl.extend(prl(0x7629, &[1, 2, 1, 0]));
+        let row = RowInfo::parse(&grpprl);
+        assert_eq!(row.cell_properties(1).text_direction, TopToBottom);
     }
 
     /// [MS-DOC] §2.9.313: a zeroed border in a TC80 leaves the side to the

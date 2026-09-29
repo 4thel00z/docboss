@@ -6,7 +6,7 @@ use std::io::Read;
 
 use docboss_model::{
     Color, DashPattern, Geometry, Gradient, GradientPath, LineCap, LineEnd, LineEndKind,
-    LineEndSize, LineJoin, PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
+    LineEndSize, LineJoin, PositionAlign, PositionBase, ShapeFormat, TextDirection, VerticalAlign,
 };
 
 use crate::bytes::{i16_at, i32_at, slice, u16_at, u32_at, u8_at};
@@ -268,6 +268,7 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
                     _ => Some(VerticalAlign::Top),
                 }
             }
+            0x0088 => format.text_direction = text_flow(value),
             0x00BF => format.auto_fit = value & 0x0002_0002 == 0x0002_0002,
             0x0181 => format.fill = color(value),
             0x0180 => shade.0 = value,
@@ -310,6 +311,16 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
     format.head_end = line_end(ends[0], ends[2], ends[3]);
     format.tail_end = line_end(ends[1], ends[4], ends[5]);
     format
+}
+
+/// [MS-ODRAW] §2.3.21.9, §2.4.5: the txflTextFlow of a text box; the
+/// vertical flows other than msotxflBtoT run top to bottom.
+fn text_flow(value: u32) -> TextDirection {
+    match value {
+        1 | 3 | 5 => TextDirection::TopToBottom,
+        2 => TextDirection::BottomToTop,
+        _ => TextDirection::LeftToRight,
+    }
 }
 
 /// The gradient of a shaded fill ([MS-ODRAW] §2.3.7.1 fillType of
@@ -363,14 +374,25 @@ fn line_end(kind: u32, width: u32, length: u32) -> Option<LineEnd> {
 }
 
 /// A shape's preset geometry from the shape type in its OfficeArtFSP
-/// header ([MS-ODRAW] §2.2.40, §2.4.24); `None` for a group, a picture
-/// frame, a custom shape or WordArt. Adjust values are not read: they
-/// follow the VML geometry, not DrawingML's.
+/// header ([MS-ODRAW] §2.2.40, §2.4.24) and the adjust values of its
+/// OfficeArtFOPT (§2.3.6.10 to §2.3.6.17); `None` for a group, a picture
+/// frame, a custom shape or WordArt.
 pub fn shape_geometry(bytes: &[u8], container: &Record) -> Option<Geometry> {
-    let fsp = children(bytes, container.body, container.body + container.length)
-        .into_iter()
-        .find(|r| r.kind == 0xF00A)?;
-    Geometry::from_shape_type(u32::from(fsp.instance))
+    let records = children(bytes, container.body, container.body + container.length);
+    let fsp = records.iter().find(|r| r.kind == 0xF00A)?;
+    let mut values = [None; 8];
+    if let Some(options) = records.iter().find(|r| r.kind == 0xF00B) {
+        for i in 0..usize::from(options.instance) {
+            let at = options.body + i * 6;
+            let (Some(id), Some(value)) = (u16_at(bytes, at), u32_at(bytes, at + 2)) else {
+                break;
+            };
+            if let Some(slot) = (id & 0x3FFF).checked_sub(0x0147).filter(|s| *s < 8) {
+                values[usize::from(slot)] = Some(i64::from(value as i32));
+            }
+        }
+    }
+    Geometry::from_shape_type_adjusted(u32::from(fsp.instance), &values)
 }
 
 /// [MS-ODRAW] §2.4.15: the pattern of an MSOLINEDASHING value, `None` for
@@ -589,7 +611,8 @@ mod tests {
 
     /// [MS-ODRAW] §2.3.7.2, §2.3.7.43, §2.3.8.38, §2.3.21.2, §2.3.21.8,
     /// §2.3.21.15: unstated properties take their defaults, and the boolean
-    /// sets only count where their `fUse` bit is set.
+    /// sets only count where their `fUse` bit is set; §2.3.21.9 and §2.4.5:
+    /// the text flow.
     #[test]
     fn shape_format_reads_fill_line_insets_and_anchor() {
         let bytes = container(&[]);
@@ -617,13 +640,19 @@ mod tests {
 
         let bytes = container(&[(0x01BF, 0x0010_0000)]);
         assert_eq!(shape_format(&bytes, &record(&bytes, 0).unwrap()).fill, None);
+
+        let bytes = container(&[(0x0088, 2)]);
+        assert_eq!(
+            shape_format(&bytes, &record(&bytes, 0).unwrap()).text_direction,
+            TextDirection::BottomToTop
+        );
     }
 
     /// [MS-ODRAW] §2.2.40, §2.4.24: the shape type and flips of the
     /// OfficeArtFSP; §2.3.18.5: the rotation; §2.3.8.20 to §2.3.8.25 and
     /// §2.4.16 to §2.4.18: the line ends.
     /// [MS-ODRAW] §2.3.8.20, §2.3.8.21, §2.3.8.22, §2.3.8.23, §2.3.8.24, §2.3.8.25.
-    /// [MS-ODRAW] §2.4.16, §2.4.17, §2.4.18, §2.2.40, §2.4.24, §2.3.18.5.
+    /// [MS-ODRAW] §2.4.16, §2.4.17, §2.4.18, §2.2.40, §2.4.24, §2.3.18.5, §2.3.6.10.
     #[test]
     fn shape_type_flips_rotation_and_line_ends() {
         let bytes = shape(
@@ -656,6 +685,14 @@ mod tests {
         );
         let bytes = shape(0, 0x1, &[]);
         assert_eq!(shape_geometry(&bytes, &record(&bytes, 0).unwrap()), None);
+        let bytes = shape(5, 0, &[(0x0147, 5400)]);
+        assert_eq!(
+            shape_geometry(&bytes, &record(&bytes, 0).unwrap()),
+            Some(Geometry::Preset {
+                name: "triangle".into(),
+                adjust: vec![("adj".into(), 25_000)],
+            })
+        );
         let bytes = shape(1, 0, &[(0x0004, (-45i32 << 16) as u32)]);
         let format = shape_format(&bytes, &record(&bytes, 0).unwrap());
         assert_eq!(format.rotation, 18_900_000);

@@ -208,6 +208,20 @@ pub enum VerticalAlign {
     Bottom,
 }
 
+/// How the lines of a text box or table cell run: across and stacked
+/// downwards, or turned a quarter so they run down the box and stack
+/// leftwards (`TopToBottom`) or run up the box and stack rightwards
+/// (`BottomToTop`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum TextDirection {
+    #[default]
+    LeftToRight,
+    TopToBottom,
+    BottomToTop,
+}
+
 /// A highlight color from the fixed WordprocessingML palette, as RGB.
 pub type Highlight = Color;
 

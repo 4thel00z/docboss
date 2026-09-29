@@ -1487,3 +1487,80 @@ fn groups_paint_their_members_in_place() {
     assert!((images[0].y - frame[5] - 10.0).abs() < 0.01);
     assert_eq!((images[0].width, images[0].height), (20.0, 10.0));
 }
+
+fn transforms(layout: &Layout) -> Vec<[f32; 6]> {
+    layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::TransformBegin(m) => Some(*m),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A text box's text turns with its shape unless it stays upright, and
+/// vertical text turns a quarter inside the box.
+/// ECMA-376 Part 1 §20.1.7.6, §20.4.2.22, §20.1.10.83.
+#[test]
+fn text_boxes_turn_their_text() {
+    let turned = docboss_model::ShapeFormat {
+        rotation: 5_400_000,
+        ..framed()
+    };
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), turned, vec![para("turned")])],
+        ..Paragraph::default()
+    })]));
+    let maps = transforms(&layout);
+    assert_eq!(maps.len(), 1);
+    let [a, b, c, d, ..] = maps[0];
+    assert!(a.abs() < 1e-6 && (b - 1.0).abs() < 1e-6 && (c + 1.0).abs() < 1e-6 && d.abs() < 1e-6);
+    let upright = docboss_model::ShapeFormat {
+        text_upright: true,
+        ..turned
+    };
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), upright, vec![para("upright")])],
+        ..Paragraph::default()
+    })]));
+    assert!(transforms(&layout).is_empty());
+    let vertical = docboss_model::ShapeFormat {
+        text_direction: docboss_model::TextDirection::BottomToTop,
+        ..framed()
+    };
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![text_box(anchored(0, 0), vertical, vec![para("up")])],
+        ..Paragraph::default()
+    })]));
+    let maps = transforms(&layout);
+    assert_eq!(maps.len(), 1);
+    assert_eq!(&maps[0][..4], &[0.0, -1.0, 1.0, 0.0]);
+}
+
+/// A bottom-to-top cell turns its text into the cell, and the row grows
+/// to hold its unwrapped line.
+/// ECMA-376 Part 1 §17.4.72.
+#[test]
+fn turned_cells_rotate_their_text() {
+    let cell = TableCell {
+        properties: docboss_model::TableCellProperties {
+            text_direction: docboss_model::TextDirection::BottomToTop,
+            ..Default::default()
+        },
+        blocks: vec![para("a long turned line")],
+    };
+    let table = Table {
+        grid: vec![1440],
+        rows: vec![TableRow {
+            cells: vec![cell],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let maps = transforms(&layout);
+    assert_eq!(maps.len(), 1);
+    assert_eq!(&maps[0][..4], &[0.0, -1.0, 1.0, 0.0]);
+    assert!(maps[0][5] > 100.0, "{:?}", maps[0]);
+}

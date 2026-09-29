@@ -10,7 +10,7 @@ use docboss_model::{
 use crate::breaks;
 use crate::flow::{Ctx, Floating, Slab};
 use crate::shape::{Glyph, RunStyle};
-use crate::textbox::layout_drawing;
+use crate::textbox::{layout_drawing, picture_items};
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{GlyphRun, Item, LineStyle, PositionedGlyph, Rect};
 
@@ -457,6 +457,7 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
             );
         }
         let mut slab = Slab::new(height, items);
+        slab.extent = line_extent(&atoms, line, &geometry);
         slab.break_before = pending_break.take().filter(|b| *b != Break::Line);
         if let LineEnd::Mandatory(kind) = line.end {
             pending_break = Some(kind);
@@ -638,15 +639,18 @@ fn build_atoms(
                 let height = text_box
                     .as_ref()
                     .map_or(emu_to_pt(drawing.height), |text_box| text_box.height);
+                let mut content = picture_items(drawing);
+                let placeholder = content.is_empty() && text_box.is_none();
+                content.extend(text_box.map(|text_box| text_box.items).unwrap_or_default());
                 floats.push(Floating {
                     media: drawing.media,
-                    picture: drawing.media.is_some() || text_box.is_none(),
+                    picture: placeholder,
                     width: emu_to_pt(drawing.width),
                     height,
                     horizontal,
                     vertical,
                     behind: behind_text,
-                    content: text_box.map(|text_box| text_box.items).unwrap_or_default(),
+                    content,
                 });
             }
             Elem::Note(id) => match word.as_mut() {
@@ -833,6 +837,21 @@ fn hyphenate(ctx: &mut Ctx<'_>, styles: &[RunStyle], atoms: &mut [Atom], placed:
     last.width = atom.width;
 }
 
+/// The width a line's content needs: up to its last visible atom, plus
+/// the paragraph's right indent.
+fn line_extent(atoms: &[Atom], line: &Line, g: &Geometry) -> f32 {
+    let end = line
+        .placed
+        .iter()
+        .filter(|p| {
+            let atom = &atoms[p.atom];
+            !atom.is_space() && !matches!(atom.kind, Kind::Break(_))
+        })
+        .map(|p| p.x + p.width)
+        .fold(0.0, f32::max);
+    end + g.right
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_line(
     ctx: &mut Ctx<'_>,
@@ -897,18 +916,19 @@ fn emit_line(
                 };
                 let h = emu_to_pt(drawing.height);
                 let text_box = layout_drawing(ctx, drawing);
-                if drawing.media.is_some() || text_box.is_none() {
+                if drawing.media.is_none() && text_box.is_none() {
                     glyphs.push(Item::Image {
-                        media: drawing.media,
+                        media: None,
                         rect: Rect::new(x0, baseline - h, width, h),
                     });
                 }
-                if let Some(text_box) = text_box {
-                    glyphs.extend(text_box.items.into_iter().map(|mut item| {
-                        item.offset(x0, baseline - h);
-                        item
-                    }));
-                }
+                let content = picture_items(drawing)
+                    .into_iter()
+                    .chain(text_box.map(|text_box| text_box.items).unwrap_or_default());
+                glyphs.extend(content.map(|mut item| {
+                    item.offset(x0, baseline - h);
+                    item
+                }));
                 continue;
             }
             Kind::Tab => {

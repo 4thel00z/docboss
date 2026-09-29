@@ -44,7 +44,7 @@ pub use numbering::{
 pub use props::{
     Border, BorderStyle, Borders, Color, FontSlots, Highlight, Indentation, Justification,
     LineRule, NumberingRef, ParagraphProperties, RunProperties, Shading, Spacing, TabAlignment,
-    TabLeader, TabStop, Underline, VerticalAlign,
+    TabLeader, TabStop, TextDirection, Underline, VerticalAlign,
 };
 pub use section::{
     Columns, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Orientation, PageBorderDisplay,

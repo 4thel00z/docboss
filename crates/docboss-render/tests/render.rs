@@ -492,3 +492,68 @@ fn gradient_fills_shade_across_the_shape() {
     let (r, b) = at(305, 122);
     assert!(r < 60 && b > 190, "{r} {b}");
 }
+
+/// Items under a transform are mapped as they are painted: a wide
+/// rectangle turned a quarter about its center stands upright, and a text
+/// box whose text runs bottom to top paints its glyphs in a column.
+/// ECMA-376 Part 1 §20.1.7.6, §20.1.10.83.
+#[test]
+fn transforms_turn_rectangles_and_text() {
+    let turn = [0.0, 1.0, -1.0, 0.0, 100.0, 0.0];
+    let layout = docboss_layout::Layout {
+        pages: vec![docboss_layout::Page {
+            width: 100.0,
+            height: 100.0,
+            number: 1,
+            items: vec![
+                docboss_layout::Item::TransformBegin(turn),
+                docboss_layout::Item::Rect {
+                    rect: docboss_layout::Rect::new(10.0, 40.0, 80.0, 20.0),
+                    color: Color::BLACK,
+                },
+                docboss_layout::Item::TransformEnd,
+            ],
+        }],
+        fonts: fonts(),
+        media: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+    let pixmap = render_page(&layout, 0, 1.0).unwrap();
+    assert!(dark(&pixmap, 50, 20));
+    assert!(!dark(&pixmap, 20, 50));
+
+    let shape = ShapeFormat {
+        text_direction: docboss_model::TextDirection::BottomToTop,
+        insets: Some([0; 4]),
+        ..ShapeFormat::default()
+    };
+    let big = RunProperties {
+        size: Some(48),
+        ..RunProperties::default()
+    };
+    let doc = document(vec![para(vec![Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(Box::new(Drawing {
+            width: 381_000,
+            height: 2_540_000,
+            placement: DrawingPlacement::Anchored {
+                horizontal: DrawingPosition::offset(PositionBase::Page, 914_400),
+                vertical: DrawingPosition::offset(PositionBase::Page, 914_400),
+                behind_text: false,
+            },
+            text_box: vec![para(vec![run("HHHHHHHH", big)])],
+            shape,
+            ..Drawing::default()
+        }))],
+    })])]);
+    let pixmap = render_page(&layout_doc(&doc), 0, 1.0).unwrap();
+    let inked = |x0: u32, x1: u32, y0: u32, y1: u32| {
+        (x0..x1).any(|x| (y0..y1).any(|y| dark(&pixmap, x, y)))
+    };
+    assert!(inked(72, 102, 180, 270));
+    assert!(!inked(110, 250, 72, 110));
+}
+
+fn layout_doc(doc: &Document) -> docboss_layout::Layout {
+    layout(doc, &fonts())
+}

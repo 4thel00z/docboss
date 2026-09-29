@@ -143,6 +143,9 @@ impl Floating {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Slab {
     pub height: f32,
+    /// How far across the slab its content reaches, for a line of text;
+    /// zero when unknown.
+    pub extent: f32,
     pub gap_before: f32,
     pub items: Vec<Item>,
     pub floats: Vec<Floating>,
@@ -158,6 +161,7 @@ impl Slab {
     pub(crate) fn new(height: f32, items: Vec<Item>) -> Slab {
         Slab {
             height,
+            extent: 0.0,
             gap_before: 0.0,
             items,
             floats: Vec::new(),

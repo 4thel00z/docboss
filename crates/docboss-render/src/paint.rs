@@ -9,7 +9,7 @@ use docboss_model::{Color, DashPattern, Diagnostic, Gradient, LineCap, LineJoin,
 
 use crate::image::{decode, Decoded, ImageError};
 use crate::raster::{flatten, polylines, rasterize, Mask, Point, Polygons};
-use crate::shade::{apply, compose, invert, Shader};
+use crate::shade::{apply, compose, invert, Affine, Shader};
 use crate::{Error, Pixmap, Result};
 
 const SUBPIXEL: f32 = 4.0;
@@ -54,11 +54,39 @@ impl Renderer {
         let full = Clip::of(&pixmap);
         let mut clip = full;
         let mut outer: Vec<Clip> = Vec::new();
+        let mut turn: Option<Affine> = None;
+        let mut turns: Vec<Option<Affine>> = Vec::new();
         for item in &page.items {
             let mut canvas = Canvas {
                 pixmap: &mut pixmap,
                 clip,
             };
+            match item {
+                Item::TransformBegin(m) => {
+                    turns.push(turn);
+                    turn = Some(turn.map_or(*m, |t| compose(t, *m)));
+                    continue;
+                }
+                Item::TransformEnd => {
+                    turn = turns.pop().flatten();
+                    continue;
+                }
+                Item::ClipEnd => {
+                    clip = outer.pop().unwrap_or(full);
+                    continue;
+                }
+                Item::ClipBegin(rect) if turn.is_some() => {
+                    outer.push(clip);
+                    let t = turn.unwrap_or(IDENTITY);
+                    clip = clip.intersect(scaled(bounds(t, *rect), scale));
+                    continue;
+                }
+                _ => {}
+            }
+            if let Some(t) = turn {
+                self.turned(layout, &mut canvas, item, t, scale);
+                continue;
+            }
             match item {
                 Item::Glyphs(run) => self.glyphs(layout, &mut canvas, run, scale),
                 Item::Rect { rect, color } => canvas.fill_rect(scaled(*rect, scale), *color),
@@ -105,10 +133,155 @@ impl Renderer {
                     outer.push(clip);
                     clip = clip.intersect(scaled(*rect, scale));
                 }
-                Item::ClipEnd => clip = outer.pop().unwrap_or(full),
+                Item::ClipEnd | Item::TransformBegin(_) | Item::TransformEnd => {}
             }
         }
         Ok(pixmap)
+    }
+
+    /// Paints an item under the map `t` from its points to the page's:
+    /// glyph outlines and images are mapped as they are drawn, rectangles
+    /// and outlines become paths.
+    fn turned(
+        &mut self,
+        layout: &Layout,
+        canvas: &mut Canvas<'_>,
+        item: &Item,
+        t: Affine,
+        scale: f32,
+    ) {
+        let device = compose([scale, 0.0, 0.0, scale, 0.0, 0.0], t);
+        let unit = (t[0] * t[3] - t[1] * t[2]).abs().sqrt();
+        let mapped = |segs: &[Seg]| -> Vec<Seg> { segs.iter().map(|s| s.transformed(t)).collect() };
+        match item {
+            Item::Glyphs(run) => self.turned_glyphs(layout, canvas, run, device),
+            Item::Rect { rect, color } => {
+                let polygon = corners(*rect).map(|(x, y)| {
+                    let (x, y) = apply(device, x, y);
+                    Point { x, y }
+                });
+                canvas.fill_polygons(&vec![polygon.to_vec()], *color);
+            }
+            Item::Line {
+                from,
+                to,
+                width,
+                color,
+                style,
+                cap,
+            } => {
+                let p = apply(device, from.0, from.1);
+                let q = apply(device, to.0, to.1);
+                canvas.line(p, q, (width * scale * unit).max(0.5), *color, *style, *cap);
+            }
+            Item::Image { media, rect } => self.turned_image(layout, canvas, *media, *rect, device),
+            Item::Outline {
+                rect,
+                width,
+                color,
+                style,
+                cap,
+                join,
+            } => {
+                let [a, b, c, d] = corners(*rect);
+                let segs = [
+                    Seg::Move(a.0, a.1),
+                    Seg::Line(b.0, b.1),
+                    Seg::Line(c.0, c.1),
+                    Seg::Line(d.0, d.1),
+                    Seg::Close,
+                ];
+                let stroke = Stroke {
+                    width: width * unit,
+                    color: *color,
+                    style: *style,
+                    cap: *cap,
+                    join: *join,
+                };
+                canvas.path(&mapped(&segs), None, Some(&stroke), scale);
+            }
+            Item::Path { segs, fill, stroke } => {
+                let stroke = stroke.map(|s| Stroke {
+                    width: s.width * unit,
+                    ..s
+                });
+                canvas.path(&mapped(segs), *fill, stroke.as_ref(), scale);
+            }
+            Item::Shade {
+                segs,
+                gradient,
+                frame,
+                size,
+            } => canvas.shade(&mapped(segs), gradient, compose(t, *frame), *size, scale),
+            Item::ClipBegin(_) | Item::ClipEnd | Item::TransformBegin(_) | Item::TransformEnd => {}
+        }
+    }
+
+    /// A glyph run under the map `device` from points to pixels: each
+    /// outline is flattened through the map and filled, bypassing the
+    /// glyph cache.
+    fn turned_glyphs(
+        &mut self,
+        layout: &Layout,
+        canvas: &mut Canvas<'_>,
+        run: &GlyphRun,
+        device: Affine,
+    ) {
+        let Some(font) = layout.fonts.font(run.font) else {
+            return;
+        };
+        let unit = (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
+        let size_px = run.size * unit;
+        if !(0.5..=4000.0).contains(&size_px) {
+            return;
+        }
+        let k = run.size / f32::from(font.units_per_em());
+        let shear = if run.synthetic_italic { SLANT * k } else { 0.0 };
+        let embolden = match run.synthetic_bold {
+            true => (size_px / 36.0).max(0.6) / unit,
+            false => 0.0,
+        };
+        let offsets: &[f32] = match embolden > 0.0 {
+            true => &[0.0, embolden],
+            false => &[0.0],
+        };
+        for glyph in &run.glyphs {
+            let outline = font.outline(glyph.id);
+            for dx in offsets {
+                let m = compose(device, [k, 0.0, shear, -k, glyph.x + dx, run.baseline]);
+                let mask = rasterize(&flatten(&outline, m), Some(canvas.clip.pixels()));
+                canvas.blit(&mask, 0, 0, run.color);
+            }
+        }
+    }
+
+    /// A picture under the map `device` from points to pixels.
+    fn turned_image(
+        &mut self,
+        layout: &Layout,
+        canvas: &mut Canvas<'_>,
+        media: Option<MediaId>,
+        rect: Rect,
+        device: Affine,
+    ) {
+        let decoded = media.and_then(|id| {
+            let data = layout.media.get(id.0 as usize)?;
+            Some(
+                self.images
+                    .entry(id)
+                    .or_insert_with(|| Arc::new(decode(&data.data)))
+                    .clone(),
+            )
+        });
+        let Some(Ok(image)) = decoded.as_deref() else {
+            let polygon = corners(rect).map(|(x, y)| {
+                let (x, y) = apply(device, x, y);
+                Point { x, y }
+            });
+            canvas.fill_polygons(&vec![polygon.to_vec()], Color(0xF0, 0xF0, 0xF0));
+            return;
+        };
+        canvas.draw_turned_image(image, rect, device);
     }
 
     fn glyphs(&mut self, layout: &Layout, canvas: &mut Canvas<'_>, run: &GlyphRun, scale: f32) {
@@ -194,6 +367,31 @@ impl Renderer {
             }
         }
     }
+}
+
+const IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+/// The corners of a rectangle, clockwise from its top-left.
+fn corners(rect: Rect) -> [(f32, f32); 4] {
+    [
+        (rect.x, rect.y),
+        (rect.right(), rect.y),
+        (rect.right(), rect.bottom()),
+        (rect.x, rect.bottom()),
+    ]
+}
+
+/// The axis-aligned bounds of a rectangle mapped by `m`.
+fn bounds(m: Affine, rect: Rect) -> Rect {
+    let points = corners(rect).map(|(x, y)| apply(m, x, y));
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for (x, y) in points {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    Rect::new(x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
 }
 
 fn scaled(rect: Rect, scale: f32) -> Rect {
@@ -685,6 +883,56 @@ impl Canvas<'_> {
             ((x0, y1), (x1, y0)),
         ] {
             self.segment(p, q, 1.0, grey);
+        }
+    }
+
+    /// Draws `image` over `rect`, in points, mapped into the pixmap by
+    /// `device`: each pixel under the mapped rectangle samples the image
+    /// where the inverse map takes it.
+    fn draw_turned_image(&mut self, image: &Decoded, rect: Rect, device: Affine) {
+        let Some(back) = invert(device) else {
+            return;
+        };
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
+        }
+        let unit = (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
+        let reduced = reduce(image, rect.width * unit, rect.height * unit);
+        let src = reduced.as_ref().unwrap_or(image);
+        let (sw, sh) = (src.width as usize, src.height as usize);
+        let area = scaled(bounds(device, rect), 1.0);
+        let (cx0, cy0, cx1, cy1) = self.clip.pixels();
+        let x0 = (area.x.floor() as i32).max(cx0).max(0);
+        let y0 = (area.y.floor() as i32).max(cy0).max(0);
+        let x1 = (area.right().ceil() as i32).min(cx1);
+        let y1 = (area.bottom().ceil() as i32).min(cy1);
+        let stride = self.pixmap.width as usize;
+        let sample = |x: usize, y: usize, c: usize| {
+            f32::from(src.rgba[(y.min(sh - 1) * sw + x.min(sw - 1)) * 4 + c])
+        };
+        for py in y0..y1 {
+            for px in x0..x1 {
+                let (lx, ly) = apply(back, px as f32 + 0.5, py as f32 + 0.5);
+                let fu = (lx - rect.x) / rect.width;
+                let fv = (ly - rect.y) / rect.height;
+                if !(0.0..1.0).contains(&fu) || !(0.0..1.0).contains(&fv) {
+                    continue;
+                }
+                let u = (fu * sw as f32 - 0.5).max(0.0);
+                let v = (fv * sh as f32 - 0.5).max(0.0);
+                let (ux, fx) = (u.floor() as usize, u - u.floor());
+                let (vy, fy) = (v.floor() as usize, v - v.floor());
+                let mut rgba = [0f32; 4];
+                for (c, slot) in rgba.iter_mut().enumerate() {
+                    let top = sample(ux, vy, c) * (1.0 - fx) + sample(ux + 1, vy, c) * fx;
+                    let bottom =
+                        sample(ux, vy + 1, c) * (1.0 - fx) + sample(ux + 1, vy + 1, c) * fx;
+                    *slot = top * (1.0 - fy) + bottom * fy;
+                }
+                let at = (py as usize * stride + px as usize) * 4;
+                let color = Color(rgba[0] as u8, rgba[1] as u8, rgba[2] as u8);
+                blend(&mut self.pixmap.data[at..at + 4], color, rgba[3] as u32);
+            }
         }
     }
 

@@ -160,6 +160,11 @@ pub enum Item {
     /// to a rectangle.
     ClipBegin(Rect),
     ClipEnd,
+    /// Maps the items that follow, up to the matching
+    /// [`Item::TransformEnd`], into the page after any outer map:
+    /// `[a, b, c, d, e, f]` takes `(x, y)` to `(a x + c y + e, b x + d y + f)`.
+    TransformBegin([f32; 6]),
+    TransformEnd,
 }
 
 impl Item {
@@ -189,7 +194,11 @@ impl Item {
                 frame[4] += dx;
                 frame[5] += dy;
             }
-            Item::ClipEnd => {}
+            Item::TransformBegin(m) => {
+                m[4] += dx - (m[0] * dx + m[2] * dy);
+                m[5] += dy - (m[1] * dx + m[3] * dy);
+            }
+            Item::ClipEnd | Item::TransformEnd => {}
         }
     }
 }

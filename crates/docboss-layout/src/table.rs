@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use docboss_model::{
     Border, BorderStyle, Borders, Color, DashPattern, Justification, LineCap, Table,
-    TableProperties, VerticalAlign, VerticalMerge,
+    TableProperties, TextDirection, VerticalAlign, VerticalMerge,
 };
 
 use crate::flow::{layout_blocks, stack_height, Ctx, Slab};
@@ -13,6 +13,13 @@ use crate::units::twips_to_pt;
 use crate::{Item, LineStyle, Rect};
 
 const DEFAULT_CELL_MARGIN: i32 = 108;
+/// The line length a turned cell's text is first laid out at, in points,
+/// to find its longest line.
+const UNWRAPPED: f32 = 1584.0;
+/// The shortest stated row height, less the cell margins, that a turned
+/// cell's lines wrap at, in points; below it they run unwrapped and the
+/// row grows to hold them.
+const MIN_TURNED_LENGTH: f32 = 6.0;
 /// Word's limit on the columns of a table grid.
 const MAX_COLUMNS: usize = 63;
 
@@ -96,11 +103,33 @@ pub(crate) struct CellPlan {
     /// For a cell that starts a vertical merge, the height of the rows it
     /// spans below its own.
     span_below: f32,
+    direction: TextDirection,
+    /// The length of a turned cell's lines.
+    length: f32,
 }
 
 impl CellPlan {
     fn content_height(&self) -> f32 {
-        stack_height(&self.content) + self.trailing + self.margins[0] + self.margins[2]
+        let along = match self.direction {
+            TextDirection::LeftToRight => stack_height(&self.content) + self.trailing,
+            _ => self.length,
+        };
+        along + self.margins[0] + self.margins[2]
+    }
+
+    /// The map from a turned cell's text frame into the row, `height` tall
+    /// (ECMA-376 Part 1 §17.4.72): bottom-to-top lines start at the cell's
+    /// bottom and stack rightwards, top-to-bottom lines start at its top
+    /// and stack leftwards.
+    fn turn(&self, height: f32) -> Option<[f32; 6]> {
+        let m = self.margins;
+        match self.direction {
+            TextDirection::LeftToRight => None,
+            TextDirection::BottomToTop => Some([0.0, -1.0, 1.0, 0.0, self.x + m[1], height - m[2]]),
+            TextDirection::TopToBottom => {
+                Some([0.0, 1.0, -1.0, 0.0, self.x + self.width - m[3], m[0]])
+            }
+        }
     }
 }
 
@@ -124,20 +153,32 @@ impl RowPlan {
                 });
             }
             let inner = stack_height(&cell.content);
-            let room = h - cell.margins[0] - cell.margins[2];
+            let turn = cell.turn(h);
+            let (room, start, left) = match turn {
+                Some(_) => (cell.width - cell.margins[1] - cell.margins[3], 0.0, 0.0),
+                None => (
+                    h - cell.margins[0] - cell.margins[2],
+                    cell.margins[0],
+                    cell.x + cell.margins[1],
+                ),
+            };
             let offset = match cell.align {
                 Some(VerticalAlign::Center) => ((room - inner) / 2.0).max(0.0),
                 Some(VerticalAlign::Bottom) => (room - inner).max(0.0),
                 _ => 0.0,
             };
-            let mut y = cell.margins[0] + offset;
+            items.extend(turn.map(Item::TransformBegin));
+            let mut y = start + offset;
             for slab in &cell.content {
                 y += slab.gap_before;
                 items.extend(slab.items.iter().cloned().map(|mut item| {
-                    item.offset(cell.x + cell.margins[1], y);
+                    item.offset(left, y);
                     item
                 }));
                 y += slab.height;
+            }
+            if turn.is_some() {
+                items.push(Item::TransformEnd);
             }
         }
         for cell in &self.cells {
@@ -180,7 +221,10 @@ impl RowPlan {
     /// Splits the row so the first part fits in `room` points: each cell
     /// keeps the slabs that fit and passes the rest on.
     pub(crate) fn split(&self, room: f32) -> Option<(RowPlan, RowPlan, f32)> {
-        if self.cells.iter().any(|c| c.continues || c.span_below > 0.0) {
+        let fixed = |c: &CellPlan| {
+            c.continues || c.span_below > 0.0 || c.direction != TextDirection::LeftToRight
+        };
+        if self.cells.iter().any(fixed) {
             return None;
         }
         let mut head = self.clone();
@@ -375,15 +419,28 @@ fn layout_table_rows(
                 .shading
                 .and_then(|s| s.fill)
                 .or(props.shading.and_then(|s| s.fill));
-            let (content, trailing) = if continues {
-                (Vec::new(), 0.0)
-            } else {
-                let behind = fill.or(ctx.background);
-                let outer = std::mem::replace(&mut ctx.background, behind);
-                let laid = layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0));
-                ctx.background = outer;
-                laid
+            let direction = cell.properties.text_direction;
+            let turned = direction != TextDirection::LeftToRight && !continues;
+            let stated = row.properties.height.map_or(0.0, twips_to_pt) - m[0] - m[2];
+            let behind = fill.or(ctx.background);
+            let outer = std::mem::replace(&mut ctx.background, behind);
+            let mut length = 0.0;
+            let (content, trailing) = match (continues, turned) {
+                (true, _) => (Vec::new(), 0.0),
+                (false, false) => layout_blocks(ctx, &cell.blocks, (w - m[1] - m[3]).max(1.0)),
+                (false, true) => {
+                    length = match stated >= MIN_TURNED_LENGTH {
+                        true => stated,
+                        false => {
+                            let (lines, _) = layout_blocks(ctx, &cell.blocks, UNWRAPPED);
+                            let longest = lines.iter().map(|l| l.extent).fold(0.0, f32::max);
+                            longest.ceil().clamp(1.0, UNWRAPPED)
+                        }
+                    };
+                    layout_blocks(ctx, &cell.blocks, length)
+                }
             };
+            ctx.background = outer;
             let own = cell.properties.borders.unwrap_or_default();
             let edge_h = |outer: bool| {
                 if outer {
@@ -430,6 +487,12 @@ fn layout_table_rows(
                 align: cell.properties.vertical_align,
                 continues,
                 span_below: 0.0,
+                direction: if turned {
+                    direction
+                } else {
+                    TextDirection::LeftToRight
+                },
+                length,
             });
         }
         let plan = RowPlan { cells };
@@ -470,6 +533,26 @@ fn layout_table_rows(
             }
             let below: f32 = plans[r + 1..=last].iter().map(|p| p.1).sum();
             plans[r].0.cells[c].span_below = below;
+        }
+    }
+
+    for (r, (plan, height, ..)) in plans.iter_mut().enumerate() {
+        for (c, cell) in plan.cells.iter_mut().enumerate() {
+            if cell.direction == TextDirection::LeftToRight {
+                continue;
+            }
+            let full = *height + cell.span_below - cell.margins[0] - cell.margins[2];
+            if (full - cell.length).abs() < 0.5 || full < 1.0 {
+                continue;
+            }
+            let Some(source) = table.rows.get(r).and_then(|row| row.cells.get(c)) else {
+                continue;
+            };
+            let behind = cell.shading.or(ctx.background);
+            let outer = std::mem::replace(&mut ctx.background, behind);
+            (cell.content, cell.trailing) = layout_blocks(ctx, &source.blocks, full);
+            ctx.background = outer;
+            cell.length = full;
         }
     }
 

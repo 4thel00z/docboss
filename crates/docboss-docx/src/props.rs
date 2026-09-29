@@ -6,7 +6,7 @@ use docboss_model::{
     NumberingRef, Orientation, PageBorderDisplay, PageBorderOffset, PageBorders, PageMargins,
     PageSize, ParagraphProperties, RunProperties, SectionBreak, SectionProperties, Shading,
     Spacing, TabAlignment, TabLeader, TabStop, TableCellProperties, TableProperties,
-    TableRowProperties, Underline, VerticalAlign, VerticalMerge,
+    TableRowProperties, TextDirection, Underline, VerticalAlign, VerticalMerge,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -431,9 +431,21 @@ pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
             }
         }
         "tcMar" => p.margins = Some(margins(reader)),
+        "textDirection" => p.text_direction = text_direction(val(&e).as_deref()),
         _ => {}
     });
     p
+}
+
+/// ECMA-376 Part 1 §17.4.72, §17.18.93: a cell's `w:textDirection`, in its
+/// transitional and strict names. Lines that stack left to right while
+/// their text runs down (`tbLrV`, `lrV`) are read as running across.
+pub fn text_direction(value: Option<&str>) -> TextDirection {
+    match value {
+        Some("tbRl" | "tbRlV" | "rl" | "rlV") => TextDirection::TopToBottom,
+        Some("btLr" | "lr") => TextDirection::BottomToTop,
+        _ => TextDirection::LeftToRight,
+    }
 }
 
 /// `w:sectPr` (ECMA-376 Part 1 §17.6.18): page size and margins, columns,

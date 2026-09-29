@@ -87,6 +87,8 @@ pub struct TableCellProperties {
     pub vertical_align: Option<crate::VerticalAlign>,
     /// Cell margins in twips: top, left, bottom, right.
     pub margins: Option<[i32; 4]>,
+    /// How the cell's text runs.
+    pub text_direction: crate::TextDirection,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
