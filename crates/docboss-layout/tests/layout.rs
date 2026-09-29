@@ -1564,3 +1564,236 @@ fn turned_cells_rotate_their_text() {
     assert_eq!(&maps[0][..4], &[0.0, -1.0, 1.0, 0.0]);
     assert!(maps[0][5] > 100.0, "{:?}", maps[0]);
 }
+
+const NOTO_ARABIC: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../docboss-font/tests/fixtures/NotoSansArabic-Subset.ttf"
+);
+const NOTO_HEBREW: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../docboss-font/tests/fixtures/NotoSansHebrew-Subset.ttf"
+);
+
+fn script_fonts() -> Arc<FontDatabase> {
+    let mut db = FontDatabase::new();
+    db.add_file(Path::new(COUSINE));
+    db.add_file(Path::new(NOTO_ARABIC));
+    db.add_file(Path::new(NOTO_HEBREW));
+    Arc::new(db)
+}
+
+fn complex_run(text: &str, complex: &str, rtl: bool) -> Inline {
+    let mut properties = RunProperties::default();
+    properties.fonts.complex = Some(complex.into());
+    properties.right_to_left = rtl.then_some(true);
+    Inline::Run(Run {
+        properties,
+        content: vec![RunContent::Text(text.into())],
+    })
+}
+
+fn rtl_para(inlines: Vec<Inline>) -> Block {
+    para_with(
+        ParagraphProperties {
+            bidi: Some(true),
+            ..ParagraphProperties::default()
+        },
+        inlines,
+    )
+}
+
+/// Every glyph of the first page with the text of its run, in painting order.
+fn placed_glyphs(layout: &Layout) -> Vec<(String, u16, f32)> {
+    runs(layout, 0)
+        .iter()
+        .flat_map(|r| r.glyphs.iter().map(|g| (r.text.clone(), g.id, g.x)))
+        .collect()
+}
+
+/// ECMA-376 Part 1 §17.3.1.6 and §17.3.1.13: a right-to-left paragraph
+/// starts at the right margin; its Hebrew runs right to left and an
+/// English word inside it keeps its own order. Run text stays in logical
+/// order.
+#[test]
+fn right_to_left_paragraphs_start_at_the_right_margin() {
+    let layout = layout(
+        &doc(vec![rtl_para(vec![
+            complex_run("שלום ", "Noto Sans Hebrew", true),
+            run("abc"),
+        ])]),
+        &script_fonts(),
+    );
+    let runs = runs(&layout, 0);
+    let hebrew = runs.iter().find(|r| r.text == "שלום").unwrap();
+    let xs: Vec<f32> = hebrew.glyphs.iter().map(|g| g.x).collect();
+    assert!(xs.windows(2).all(|w| w[1] < w[0]), "{xs:?}");
+    assert!(
+        xs[0] > 612.0 - 72.0 - 12.0 && xs[0] < 612.0 - 72.0,
+        "{xs:?}"
+    );
+    let latin = runs.iter().find(|r| r.text == "abc").unwrap();
+    let ls: Vec<f32> = latin.glyphs.iter().map(|g| g.x).collect();
+    assert!(ls.windows(2).all(|w| w[1] > w[0]), "{ls:?}");
+    assert!(
+        ls[2] < xs[3],
+        "the English word sits left of the Hebrew: {ls:?} {xs:?}"
+    );
+}
+
+/// ECMA-376 Part 1 §17.3.1.13: `end` alignment in a right-to-left
+/// paragraph puts its text at the left margin.
+#[test]
+fn end_alignment_of_a_right_to_left_paragraph_is_the_left_margin() {
+    let layout = layout(
+        &doc(vec![para_with(
+            ParagraphProperties {
+                bidi: Some(true),
+                justification: Some(Justification::Right),
+                ..ParagraphProperties::default()
+            },
+            vec![complex_run("שלום", "Noto Sans Hebrew", true)],
+        )]),
+        &script_fonts(),
+    );
+    let xs: Vec<f32> = runs(&layout, 0)[0].glyphs.iter().map(|g| g.x).collect();
+    let left = xs.iter().copied().fold(f32::MAX, f32::min);
+    assert!((left - 72.0).abs() < 0.5, "{xs:?}");
+}
+
+/// ECMA-376 Part 1 §17.3.2.30: brackets of a right-to-left run are drawn
+/// mirrored, and digits inside it keep their left-to-right order.
+#[test]
+fn right_to_left_runs_mirror_brackets_and_keep_numbers_in_order() {
+    let layout = layout(
+        &doc(vec![rtl_para(vec![complex_run(
+            "(א) 12",
+            "Noto Sans Hebrew",
+            true,
+        )])]),
+        &script_fonts(),
+    );
+    let fonts = script_fonts();
+    let glyphs = placed_glyphs(&layout);
+    let run = runs(&layout, 0)[0];
+    let face = fonts.font(run.font).unwrap();
+    let (open, close) = (
+        face.glyph_index('(').unwrap(),
+        face.glyph_index(')').unwrap(),
+    );
+    assert_eq!(glyphs[0].1, close, "{glyphs:?}");
+    assert_eq!(glyphs[2].1, open, "{glyphs:?}");
+    assert!(glyphs[0].2 > glyphs[2].2);
+    let one = glyphs
+        .iter()
+        .find(|g| g.1 == face.glyph_index('1').unwrap())
+        .unwrap();
+    let two = glyphs
+        .iter()
+        .find(|g| g.1 == face.glyph_index('2').unwrap())
+        .unwrap();
+    assert!(one.2 < two.2, "{glyphs:?}");
+    assert!(two.2 < glyphs[2].2, "the number sits left of the brackets");
+}
+
+/// Arabic letters take their joined forms and marks attach to them; the
+/// glyphs are those HarfBuzz gives Noto Sans Arabic.
+#[test]
+fn arabic_words_join_and_carry_their_marks() {
+    let layout = layout(
+        &doc(vec![rtl_para(vec![complex_run(
+            "بِسْمِ",
+            "Noto Sans Arabic",
+            true,
+        )])]),
+        &script_fonts(),
+    );
+    let runs = runs(&layout, 0);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].text, "بِسْمِ");
+    let mut ids: Vec<u16> = runs[0].glyphs.iter().map(|g| g.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec![14, 28, 67, 220, 249, 269, 269]);
+    let kasra_below = runs[0]
+        .glyphs
+        .iter()
+        .filter(|g| g.id == 269)
+        .map(|g| g.y)
+        .fold(f32::MIN, f32::max);
+    assert!(kasra_below > 0.5, "a kasra hangs below the baseline");
+}
+
+/// ECMA-376 Part 1 §17.3.2.26 (step 2a), §17.3.2.2, §17.3.2.7 and
+/// §17.3.2.39: Arabic characters take the complex script font, size and
+/// bold; Latin ones keep the run's own, unless the run asks for complex
+/// script formatting.
+#[test]
+fn complex_script_characters_take_the_complex_script_formatting() {
+    let mut properties = RunProperties {
+        size: Some(20),
+        size_complex: Some(40),
+        bold_complex: Some(true),
+        ..RunProperties::default()
+    };
+    properties.fonts.complex = Some("Noto Sans Arabic".into());
+    let mixed = Inline::Run(Run {
+        properties: properties.clone(),
+        content: vec![RunContent::Text("ab بسم".into())],
+    });
+    let forced = Inline::Run(Run {
+        properties: RunProperties {
+            complex_script: Some(true),
+            ..properties
+        },
+        content: vec![RunContent::Text("cd".into())],
+    });
+    let layout = layout(
+        &doc(vec![para_with(
+            ParagraphProperties::default(),
+            vec![mixed, forced],
+        )]),
+        &script_fonts(),
+    );
+    let fonts = script_fonts();
+    let runs = runs(&layout, 0);
+    let latin = runs.iter().find(|r| r.text == "ab").unwrap();
+    assert_eq!(latin.size, 10.0);
+    let arabic = runs.iter().find(|r| r.text == "بسم").unwrap();
+    assert_eq!(arabic.size, 20.0);
+    assert_eq!(
+        fonts.font(arabic.font).unwrap().names().family,
+        "Noto Sans Arabic"
+    );
+    assert!(arabic.synthetic_bold);
+    let forced = runs.iter().find(|r| r.text == "cd").unwrap();
+    assert_eq!(forced.size, 20.0);
+}
+
+/// ECMA-376 Part 1 §17.4.1: a visually right-to-left table puts its first
+/// cell at the right.
+#[test]
+fn visually_right_to_left_tables_start_at_the_right() {
+    let cell = |text: &str| TableCell {
+        blocks: vec![para(text)],
+        ..TableCell::default()
+    };
+    let table = Table {
+        properties: TableProperties {
+            bidi_visual: true,
+            ..TableProperties::default()
+        },
+        grid: vec![2880, 2880],
+        rows: vec![TableRow {
+            cells: vec![cell("one"), cell("two")],
+            ..TableRow::default()
+        }],
+    };
+    let layout = laid(&doc(vec![Block::Table(table)]));
+    let runs = runs(&layout, 0);
+    let x_of = |text: &str| runs.iter().find(|r| r.text == text).unwrap().glyphs[0].x;
+    assert!(x_of("one") > x_of("two"));
+    assert!(
+        (x_of("one") - (612.0 - 72.0 - 144.0 + 5.4)).abs() < 0.01,
+        "{}",
+        x_of("one")
+    );
+}

@@ -7,7 +7,9 @@
 //! greedy line breaking, tab stops, lists, tables, sections with columns,
 //! headers, footers and footnotes.
 
+mod bidi;
 mod breaks;
+mod complex;
 mod drawn;
 mod flow;
 mod geometry;
@@ -16,6 +18,7 @@ mod presets;
 mod shape;
 mod table;
 mod textbox;
+mod ucd;
 mod units;
 
 use std::sync::Arc;
@@ -67,8 +70,11 @@ impl Rect {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PositionedGlyph {
     pub id: u16,
-    /// Horizontal pen position of the glyph origin in points.
+    /// Horizontal position of the glyph origin in points.
     pub x: f32,
+    /// Offset of the glyph origin below the run's baseline in points, as
+    /// mark attachment places accents.
+    pub y: f32,
 }
 
 /// Glyphs sharing a face, size, color and baseline.

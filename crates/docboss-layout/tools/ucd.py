@@ -1,0 +1,188 @@
+"""Generate `crates/docboss-layout/src/ucd.rs` from the Unicode Character
+Database: bidirectional classes, mirrored glyphs and paired brackets for the
+bidirectional algorithm (UAX #9), and Arabic joining types for shaping.
+
+Usage, from the repository root, with the UCD 16.0.0 files in a directory
+(`make ucd` fetches them into ledger/specs/ucd when they are missing):
+
+    python3 crates/docboss-layout/tools/ucd.py ledger/specs/ucd \\
+        crates/docboss-layout/src/ucd.rs
+
+Inputs, from https://www.unicode.org/Public/16.0.0/ucd/:
+extracted/DerivedBidiClass.txt, extracted/DerivedGeneralCategory.txt,
+BidiMirroring.txt, BidiBrackets.txt and ArabicShaping.txt. Code points a
+file leaves out take the values of its `@missing` lines; code points
+ArabicShaping.txt leaves out join as U, except general categories Mn, Me
+and Cf, which are transparent (T).
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import sys
+
+VERSION = "16.0.0"
+LIMIT = 0x110000
+
+LONG = {
+    "Left_To_Right": "L", "Right_To_Left": "R", "Arabic_Letter": "AL",
+    "European_Number": "EN", "European_Separator": "ES",
+    "European_Terminator": "ET", "Arabic_Number": "AN",
+    "Common_Separator": "CS", "Nonspacing_Mark": "NSM",
+    "Boundary_Neutral": "BN", "Paragraph_Separator": "B",
+    "Segment_Separator": "S", "White_Space": "WS", "Other_Neutral": "ON",
+    "Left_To_Right_Embedding": "LRE", "Left_To_Right_Override": "LRO",
+    "Right_To_Left_Embedding": "RLE", "Right_To_Left_Override": "RLO",
+    "Pop_Directional_Format": "PDF", "Left_To_Right_Isolate": "LRI",
+    "Right_To_Left_Isolate": "RLI", "First_Strong_Isolate": "FSI",
+    "Pop_Directional_Isolate": "PDI",
+}
+
+CLASSES = [
+    "L", "R", "AL", "EN", "ES", "ET", "AN", "CS", "NSM", "BN", "B", "S", "WS",
+    "ON", "LRE", "LRO", "RLE", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI",
+]
+
+JOINING = {"U": "NonJoin", "R": "Right", "L": "Left", "D": "Dual", "C": "Causing", "T": "Transparent"}
+
+
+def lines(path: str):
+    with open(path, encoding="utf-8") as handle:
+        for raw in handle:
+            yield raw.rstrip("\n")
+
+
+def code_range(field: str) -> range:
+    field = field.strip()
+    if ".." in field:
+        start, end = field.split("..")
+        return range(int(start, 16), int(end, 16) + 1)
+    value = int(field, 16)
+    return range(value, value + 1)
+
+
+def derived(path: str, names: dict[str, str] | None = None) -> list[str]:
+    """Values for every code point: `@missing` lines first, then the data."""
+    values = [""] * LIMIT
+    missing = re.compile(r"#\s*@missing:\s*([0-9A-F.]+)\s*;\s*(\S+)")
+    data = []
+    for line in lines(path):
+        found = missing.match(line)
+        if found:
+            value = found.group(2)
+            value = (names or {}).get(value, value)
+            for cp in code_range(found.group(1)):
+                values[cp] = value
+            continue
+        body = line.split("#", 1)[0].strip()
+        if body:
+            data.append(body)
+    for body in data:
+        field, value = [part.strip() for part in body.split(";")[:2]]
+        for cp in code_range(field):
+            values[cp] = value
+    return values
+
+
+def ranges(values: list[str], skip: str | None = None) -> list[tuple[int, int, str]]:
+    out: list[tuple[int, int, str]] = []
+    start = 0
+    for cp in range(1, LIMIT + 1):
+        if cp < LIMIT and values[cp] == values[start]:
+            continue
+        if values[start] != skip:
+            out.append((start, cp - 1, values[start]))
+        start = cp
+    return out
+
+
+def main(ucd: str, out: str) -> None:
+    bidi = derived(os.path.join(ucd, "DerivedBidiClass.txt"), LONG)
+    unknown = sorted(set(bidi) - set(CLASSES))
+    if unknown:
+        sys.exit(f"unknown bidi classes {unknown}")
+    category = derived(os.path.join(ucd, "DerivedGeneralCategory.txt"))
+
+    joining = ["T" if category[cp] in ("Mn", "Me", "Cf") else "U" for cp in range(LIMIT)]
+    for line in lines(os.path.join(ucd, "ArabicShaping.txt")):
+        body = line.split("#", 1)[0].strip()
+        if not body:
+            continue
+        fields = [part.strip() for part in body.split(";")]
+        joining[int(fields[0], 16)] = fields[2]
+
+    mirrors = []
+    for line in lines(os.path.join(ucd, "BidiMirroring.txt")):
+        body = line.split("#", 1)[0].strip()
+        if body:
+            a, b = [int(part.strip(), 16) for part in body.split(";")]
+            mirrors.append((a, b))
+    brackets = []
+    for line in lines(os.path.join(ucd, "BidiBrackets.txt")):
+        body = line.split("#", 1)[0].strip()
+        if body:
+            a, b, kind = [part.strip() for part in body.split(";")]
+            brackets.append((int(a, 16), int(b, 16), kind == "o"))
+
+    bidi_ranges = ranges(bidi, skip="L")
+    join_ranges = ranges(joining, skip="U")
+    w = []
+    w.append(f"//! Unicode {VERSION} character data for the bidirectional algorithm and")
+    w.append("//! Arabic joining, generated by `tools/ucd.py` (`make ucd`). Do not edit.")
+    w.append("")
+    w.append("/// A bidirectional character type (UAX #9, table 4).")
+    w.append("#[allow(clippy::upper_case_acronyms)]")
+    w.append("#[derive(Debug, Clone, Copy, PartialEq, Eq)]")
+    w.append("pub(crate) enum Bidi {")
+    for name in CLASSES:
+        w.append(f"    {name},")
+    w.append("}")
+    w.append("")
+    w.append("/// How a character joins its neighbours (ArabicShaping.txt).")
+    w.append("#[derive(Debug, Clone, Copy, PartialEq, Eq)]")
+    w.append("pub(crate) enum Joining {")
+    for name in JOINING.values():
+        w.append(f"    {name},")
+    w.append("}")
+    w.append("")
+    w.append("/// The class of each ASCII character.")
+    w.append("pub(crate) static ASCII: [Bidi; 128] = [")
+    for row in range(0, 128, 8):
+        w.append("    " + " ".join(f"Bidi::{bidi[cp]}," for cp in range(row, row + 8)))
+    w.append("];")
+    w.append("")
+    w.append("/// Code point ranges whose class is not L, sorted.")
+    w.append("pub(crate) static BIDI: &[(u32, u32, Bidi)] = &[")
+    for start, end, value in bidi_ranges:
+        w.append(f"    (0x{start:04X}, 0x{end:04X}, Bidi::{value}),")
+    w.append("];")
+    w.append("")
+    w.append("/// Code point ranges that join, or are transparent to joining, sorted.")
+    w.append("pub(crate) static JOINING: &[(u32, u32, Joining)] = &[")
+    for start, end, value in join_ranges:
+        w.append(f"    (0x{start:04X}, 0x{end:04X}, Joining::{JOINING[value]}),")
+    w.append("];")
+    w.append("")
+    w.append("/// Bidi_Mirroring_Glyph pairs, sorted by the first code point.")
+    w.append("pub(crate) static MIRRORS: &[(u32, u32)] = &[")
+    for a, b in sorted(mirrors):
+        w.append(f"    (0x{a:04X}, 0x{b:04X}),")
+    w.append("];")
+    w.append("")
+    w.append("/// Bidi_Paired_Bracket pairs and whether the first is the opening one,")
+    w.append("/// sorted by the first code point.")
+    w.append("pub(crate) static BRACKETS: &[(u32, u32, bool)] = &[")
+    for a, b, opening in sorted(brackets):
+        w.append(f"    (0x{a:04X}, 0x{b:04X}, {'true' if opening else 'false'}),")
+    w.append("];")
+    with open(out, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(w) + "\n")
+    print(f"{len(bidi_ranges)} bidi ranges, {len(join_ranges)} joining ranges, "
+          f"{len(mirrors)} mirrors, {len(brackets)} brackets")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit(__doc__)
+    main(sys.argv[1], sys.argv[2])

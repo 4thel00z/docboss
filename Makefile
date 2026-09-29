@@ -110,6 +110,16 @@ ledger-outline: ## Regenerate the clause outlines from the specification texts i
 presets: ## Regenerate the DrawingML preset geometries from the ECMA-376 Part 1 zip in ledger/specs
 	python3 crates/docboss-layout/tools/presets.py ledger/specs/ECMA-376-1_5th_edition_december_2016.zip crates/docboss-layout/src/presets.rs
 
+UCD := https://www.unicode.org/Public/16.0.0/ucd
+UCD_FILES := extracted/DerivedBidiClass.txt extracted/DerivedGeneralCategory.txt BidiMirroring.txt BidiBrackets.txt ArabicShaping.txt
+
+.PHONY: ucd
+ucd: ## Regenerate the Unicode bidi and joining tables, fetching the UCD 16.0.0 files into ledger/specs/ucd
+	mkdir -p ledger/specs/ucd
+	for f in $(UCD_FILES); do test -f ledger/specs/ucd/$$(basename $$f) || curl -sSfL -o ledger/specs/ucd/$$(basename $$f) $(UCD)/$$f; done
+	python3 crates/docboss-layout/tools/ucd.py ledger/specs/ucd crates/docboss-layout/src/ucd.rs
+	rustfmt --edition 2021 crates/docboss-layout/src/ucd.rs
+
 ##@ Benchmarks
 
 .PHONY: bench

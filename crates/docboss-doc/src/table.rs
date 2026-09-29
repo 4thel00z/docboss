@@ -124,6 +124,7 @@ impl RowInfo {
                     }
                 }
                 0x3615 => row.table.fixed_layout = prl.u8() == 0,
+                0x560B | 0x5664 => row.table.bidi_visual |= prl.u16() != 0,
                 0x563A => {}
                 0xD605 => {
                     let operand = prl.variable();
@@ -303,5 +304,14 @@ mod tests {
         let borders = super::tc80(&tc).borders.unwrap();
         assert!(borders.top.is_none());
         assert_eq!(borders.bottom.unwrap().size, 4);
+    }
+
+    /// [MS-DOC] §2.6.3: sprmTFBiDi and sprmTFBiDi90 make the table right to
+    /// left.
+    #[test]
+    fn bidi_sprms_make_the_table_right_to_left() {
+        assert!(!RowInfo::parse(&prl(0x560B, &[0, 0])).table.bidi_visual);
+        assert!(RowInfo::parse(&prl(0x560B, &[1, 0])).table.bidi_visual);
+        assert!(RowInfo::parse(&prl(0x5664, &[1, 0])).table.bidi_visual);
     }
 }

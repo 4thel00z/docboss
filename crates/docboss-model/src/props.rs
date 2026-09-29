@@ -244,6 +244,10 @@ pub struct RunProperties {
     pub style_id: Option<String>,
     pub bold: Option<bool>,
     pub italic: Option<bool>,
+    /// Bold for complex script text (`w:bCs`).
+    pub bold_complex: Option<bool>,
+    /// Italic for complex script text (`w:iCs`).
+    pub italic_complex: Option<bool>,
     pub underline: Option<Underline>,
     pub strike: Option<bool>,
     pub double_strike: Option<bool>,
@@ -254,6 +258,8 @@ pub struct RunProperties {
     pub fonts: FontSlots,
     /// Font size in half-points.
     pub size: Option<u32>,
+    /// Font size of complex script text in half-points (`w:szCs`).
+    pub size_complex: Option<u32>,
     /// Text color; `Some(None)` states `auto`.
     pub color: Option<Option<Color>>,
     pub highlight: Option<Highlight>,
@@ -265,4 +271,6 @@ pub struct RunProperties {
     pub position: Option<i32>,
     pub language: Option<String>,
     pub right_to_left: Option<bool>,
+    /// Format every character as complex script text (`w:cs`).
+    pub complex_script: Option<bool>,
 }

@@ -282,6 +282,7 @@ fn effective_properties(ctx: &Ctx<'_>, table: &Table) -> TableProperties {
         props.cell_margins = style.cell_margins.or(props.cell_margins);
         props.justification = style.justification.or(props.justification);
         props.indent = style.indent.or(props.indent);
+        props.bidi_visual |= style.bidi_visual;
     }
     let direct = &table.properties;
     props.borders = overlay(props.borders, direct.borders);
@@ -292,6 +293,7 @@ fn effective_properties(ctx: &Ctx<'_>, table: &Table) -> TableProperties {
     props.width = direct.width;
     props.width_pct = direct.width_pct;
     props.fixed_layout = direct.fixed_layout;
+    props.bidi_visual |= direct.bidi_visual;
     props.style_id = direct.style_id.clone();
     props
 }
@@ -354,6 +356,10 @@ fn cell_starting_at(
 /// ECMA-376 Part 1 §17.4: lays out a table at `width` points as one slab
 /// per row. Borders inside a vertically merged cell (§17.4.84) are not
 /// drawn.
+/// ECMA-376 Part 1 §17.4.1, §17.4.28: a visually right-to-left table runs
+/// its cells from the right, with each cell's left and right borders and
+/// margins swapped, its indent from the right margin and its alignment
+/// reversed.
 pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<Slab> {
     let props = effective_properties(ctx, table);
     let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
@@ -379,10 +385,13 @@ fn layout_table_rows(
         })
         .collect();
     let indent = props.indent.map_or(0.0, twips_to_pt);
-    let table_x = match props.justification {
-        Some(Justification::Center) => ((width - total) / 2.0).max(0.0),
-        Some(Justification::Right) => (width - total).max(0.0),
-        _ => indent,
+    let rtl = props.bidi_visual;
+    let table_x = match (props.justification, rtl) {
+        (Some(Justification::Center), _) => ((width - total) / 2.0).max(0.0),
+        (Some(Justification::Right), false) => (width - total).max(0.0),
+        (Some(Justification::Right), true) => 0.0,
+        (_, true) => (width - total).max(0.0) - indent,
+        (_, false) => indent,
     };
     let default_margins =
         props
@@ -400,19 +409,26 @@ fn layout_table_rows(
         let cell_count = row.cells.len();
         for (c, cell) in row.cells.iter().enumerate() {
             let span = span(cell);
-            let x = offsets.get(column).copied().unwrap_or(total) + table_x;
             let end = (column + span).min(grid.len());
             let w = grid
                 .get(column..end)
                 .map_or(0.0, |g| g.iter().sum::<f32>())
                 .max(1.0);
+            let offset = offsets.get(column).copied().unwrap_or(total);
+            let x = match rtl {
+                true => table_x + total - offset - w,
+                false => table_x + offset,
+            };
             columns.push(column);
             column += span;
-            let m = cell
+            let mut m = cell
                 .properties
                 .margins
                 .unwrap_or(default_margins)
                 .map(twips_to_pt);
+            if rtl {
+                m.swap(1, 3);
+            }
             let continues = cell.properties.vertical_merge == Some(VerticalMerge::Continue);
             let fill = cell
                 .properties
@@ -462,7 +478,7 @@ fn layout_table_rows(
             } else {
                 edge_h(false)
             });
-            let sides = Sides {
+            let mut sides = Sides {
                 top: top.filter(|_| !continues),
                 bottom: bottom.filter(|_| !merged_below),
                 left: own.left.or(if c == 0 {
@@ -476,6 +492,9 @@ fn layout_table_rows(
                     borders.inside_vertical
                 }),
             };
+            if rtl {
+                std::mem::swap(&mut sides.left, &mut sides.right);
+            }
             cells.push(CellPlan {
                 x,
                 width: w,

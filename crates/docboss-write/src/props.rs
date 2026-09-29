@@ -115,9 +115,9 @@ fn run_properties_inner(xml: &mut Xml, props: &RunProperties, with_style: bool) 
         xml.empty("w:rFonts", &slots);
     }
     toggle(xml, "w:b", props.bold);
-    toggle(xml, "w:bCs", props.bold);
+    toggle(xml, "w:bCs", props.bold_complex.or(props.bold));
     toggle(xml, "w:i", props.italic);
-    toggle(xml, "w:iCs", props.italic);
+    toggle(xml, "w:iCs", props.italic_complex.or(props.italic));
     toggle(xml, "w:caps", props.caps);
     toggle(xml, "w:smallCaps", props.small_caps);
     toggle(xml, "w:strike", props.strike);
@@ -129,7 +129,7 @@ fn run_properties_inner(xml: &mut Xml, props: &RunProperties, with_style: bool) 
     number(xml, "w:spacing", props.spacing);
     number(xml, "w:position", props.position);
     number(xml, "w:sz", props.size);
-    number(xml, "w:szCs", props.size);
+    number(xml, "w:szCs", props.size_complex.or(props.size));
     if let Some(highlight) = props.highlight {
         xml.val("w:highlight", highlight_name(highlight));
     }
@@ -148,6 +148,7 @@ fn run_properties_inner(xml: &mut Xml, props: &RunProperties, with_style: bool) 
         xml.val("w:vertAlign", name);
     }
     toggle(xml, "w:rtl", props.right_to_left);
+    toggle(xml, "w:cs", props.complex_script);
     if let Some(language) = &props.language {
         xml.val("w:lang", language);
     }
@@ -367,6 +368,9 @@ pub fn table_properties(xml: &mut Xml, props: &TableProperties) {
     if let Some(style) = &props.style_id {
         xml.val("w:tblStyle", style);
     }
+    if props.bidi_visual {
+        xml.empty("w:bidiVisual", &[]);
+    }
     match (props.width, props.width_pct) {
         (Some(width), _) => xml.empty("w:tblW", &[("w:w", &width.to_string()), ("w:type", "dxa")]),
         (None, Some(pct)) => xml.empty("w:tblW", &[("w:w", &pct.to_string()), ("w:type", "pct")]),
@@ -390,6 +394,7 @@ pub fn table_properties(xml: &mut Xml, props: &TableProperties) {
     if props.fixed_layout {
         xml.empty("w:tblLayout", &[("w:type", "fixed")]);
     }
+
     if let Some(values) = props.cell_margins {
         margins(xml, "w:tblCellMar", values);
     }

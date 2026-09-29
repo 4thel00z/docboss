@@ -31,6 +31,7 @@ pub struct Context<'p> {
 }
 
 /// A paragraph's content before complex fields are folded.
+#[allow(clippy::large_enum_variant)]
 enum Piece {
     Inline(Inline),
     Begin,

@@ -3,6 +3,7 @@
 //! extension lookups) of the `kern` feature.
 
 use crate::bytes::{i16_at, u16_at, u32_at};
+use crate::otl::{class_of, coverage_index};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Kerning {
@@ -127,76 +128,6 @@ fn gpos_pair_subtables(data: &[u8], gpos: usize) -> Option<Vec<usize>> {
         }
     }
     Some(out)
-}
-
-fn coverage_index(data: &[u8], table: usize, glyph: u16) -> Option<usize> {
-    let format = u16_at(data, table)?;
-    let count = u16_at(data, table + 2)? as usize;
-    let (mut lo, mut hi) = (0usize, count);
-    while lo < hi {
-        let m = (lo + hi) / 2;
-        if format == 1 {
-            let g = u16_at(data, table + 4 + m * 2)?;
-            if g == glyph {
-                return Some(m);
-            }
-            if g < glyph {
-                lo = m + 1;
-                continue;
-            }
-            hi = m;
-            continue;
-        }
-        let rec = table + 4 + m * 6;
-        let start = u16_at(data, rec)?;
-        let end = u16_at(data, rec + 2)?;
-        if glyph < start {
-            hi = m;
-            continue;
-        }
-        if glyph > end {
-            lo = m + 1;
-            continue;
-        }
-        return Some(u16_at(data, rec + 4)? as usize + (glyph - start) as usize);
-    }
-    None
-}
-
-fn class_of(data: &[u8], table: usize, glyph: u16) -> u16 {
-    let Some(format) = u16_at(data, table) else {
-        return 0;
-    };
-    if format == 1 {
-        let (Some(start), Some(count)) = (u16_at(data, table + 2), u16_at(data, table + 4)) else {
-            return 0;
-        };
-        if glyph < start || glyph - start >= count {
-            return 0;
-        }
-        return u16_at(data, table + 6 + (glyph - start) as usize * 2).unwrap_or(0);
-    }
-    let Some(count) = u16_at(data, table + 2) else {
-        return 0;
-    };
-    let (mut lo, mut hi) = (0usize, count as usize);
-    while lo < hi {
-        let m = (lo + hi) / 2;
-        let rec = table + 4 + m * 6;
-        let (Some(start), Some(end)) = (u16_at(data, rec), u16_at(data, rec + 2)) else {
-            return 0;
-        };
-        if glyph < start {
-            hi = m;
-            continue;
-        }
-        if glyph > end {
-            lo = m + 1;
-            continue;
-        }
-        return u16_at(data, rec + 4).unwrap_or(0);
-    }
-    0
 }
 
 fn value_size(format: u16) -> usize {

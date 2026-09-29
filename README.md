@@ -29,7 +29,7 @@ Reading a Word document should not require LibreOffice, a JVM or a C library. do
 - **Complete text**: word recall of 0.992 against LibreOffice's text export on DOCX, the highest of the six engines measured, and 0.976 on DOC: tables, headers, footers, footnotes, comments and text boxes included.
 - **Survives damaged files**: text from 140 of 150 damaged DOCX files, where the other engines return text for 1 to 8; no crash and no hang on 300 damaged DOCX and DOC files.
 - **Markdown and HTML**: headings from styles, nested lists with the document's own labels, GFM tables with merged cells, footnotes, links and images, in one pass.
-- **Layout and rendering**: Word-like line breaking, tab stops, list labels, keep and widow rules, tables split across pages with repeated header rows, sections and columns, headers and footers with page numbers, footnotes, inline and floating images; an anti-aliased rasterizer over its own TrueType and CFF parsers, with metric-compatible font substitution (Carlito for Calibri, Liberation for Arial and Times New Roman). PNG, PPM, BMP and JPEG output, pages rendered on all cores.
+- **Layout and rendering**: Word-like line breaking, the Unicode bidirectional algorithm for right-to-left paragraphs, runs and tables, OpenType shaping (GSUB and GPOS, Arabic joining) for Arabic and Hebrew, tab stops, list labels, keep and widow rules, tables split across pages with repeated header rows, sections and columns, headers and footers with page numbers, footnotes, inline and floating images; an anti-aliased rasterizer over its own TrueType and CFF parsers, with metric-compatible font substitution (Carlito for Calibri, Liberation for Arial and Times New Roman). PNG, PPM, BMP and JPEG output, pages rendered on all cores.
 - **DOCX writing**: model to DOCX, a builder API, Markdown to DOCX, and DOC to DOCX conversion, with deterministic output: the same input gives identical bytes.
 - **Encrypted files**: password-protected DOCX (Agile and Standard encryption, [MS-OFFCRYPTO]) and DOC (RC4 and RC4 CryptoAPI).
 - **Range-fetching I/O**: documents open over files or `http(s)://` URLs and fetch only the byte ranges they need: the ZIP central directory and the XML parts of a DOCX, the sectors of the Word streams of a DOC.
@@ -212,7 +212,7 @@ The low tail is what layout does not draw yet (groups, gradient fills, SmartArt)
 | `docboss-crypt` | Password-protected DOCX ([MS-OFFCRYPTO] Agile and Standard) |
 | `docboss-core` | Format detection and one `open`/`read` over both readers |
 | `docboss-output` | Text, Markdown, HTML, JSON and the per-block view |
-| `docboss-font` | TrueType, OpenType CFF and collections; system font discovery and metric-compatible substitution |
+| `docboss-font` | TrueType, OpenType CFF and collections, GSUB and GPOS layout features; system font discovery and metric-compatible substitution |
 | `docboss-layout` | Pages from the model: line breaking, tabs, lists, tables, sections, headers and footers, footnotes, images |
 | `docboss-render` | Anti-aliased rasterizer and the PNG, PPM, BMP and JPEG encoders |
 | `docboss-write` | DOCX from the model, a builder API, Markdown to DOCX |
@@ -227,7 +227,7 @@ The low tail is what layout does not draw yet (groups, gradient fills, SmartArt)
 
 The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` property in Python, the `diagnostics` field of `Document` in Rust) lists every item that was approximated or dropped. The largest gaps:
 
-- **Layout**: no right-to-left or bidirectional text and no complex-script shaping; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
+- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left sections lay out left to right; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; DrawingML charts, SmartArt, math (OMML) and ActiveX controls are not read as content; ruby text is ignored.
 - **DOC reading**: XOR-obfuscated files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.

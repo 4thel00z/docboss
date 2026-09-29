@@ -8,9 +8,11 @@ use docboss_model::{
 };
 
 use crate::breaks;
+use crate::complex::{self, Letter};
 use crate::flow::{Ctx, Floating, Slab};
 use crate::shape::{Glyph, RunStyle};
 use crate::textbox::{layout_drawing, picture_items};
+use crate::ucd::Bidi;
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{GlyphRun, Item, LineStyle, PositionedGlyph, Rect};
 
@@ -33,12 +35,32 @@ enum Kind {
     Object,
 }
 
+/// One glyph of an atom: `x` is its pen position from the atom's start in
+/// the reading direction, `dx` and `dy` its offset (y down), and `text` the
+/// byte range of the atom's text its cluster shows, when it was shaped.
 #[derive(Debug, Clone)]
 struct AtomGlyph {
     glyph: Glyph,
     style: usize,
     ch: char,
     x: f32,
+    dx: f32,
+    dy: f32,
+    text: Option<(u16, u16)>,
+}
+
+impl AtomGlyph {
+    fn plain(glyph: Glyph, style: usize, ch: char, x: f32) -> AtomGlyph {
+        AtomGlyph {
+            glyph,
+            style,
+            ch,
+            x,
+            dx: 0.0,
+            dy: 0.0,
+            text: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +74,12 @@ struct Atom {
     style: usize,
     object: Option<Box<Drawing>>,
     notes: Vec<i64>,
+    /// The embedding level of the atom's characters (UAX #9).
+    level: u8,
+    /// The atom's glyphs come from shaping its text.
+    shaped: bool,
+    /// The text of a shaped atom.
+    text: String,
 }
 
 impl Atom {
@@ -66,6 +94,22 @@ impl Atom {
             style,
             object: None,
             notes: Vec::new(),
+            level: 0,
+            shaped: false,
+            text: String::new(),
+        }
+    }
+
+    fn rtl(&self) -> bool {
+        self.level % 2 == 1
+    }
+
+    /// Where a glyph's origin sits from the atom's left edge: mirrored
+    /// within the atom when it runs right to left.
+    fn glyph_left(&self, glyph: &AtomGlyph) -> f32 {
+        match self.rtl() {
+            true => self.width - (glyph.x + glyph.glyph.advance) + glyph.dx,
+            false => glyph.x + glyph.dx,
         }
     }
 
@@ -115,6 +159,16 @@ impl Geometry {
         (self.width - self.right).max(self.left + 1.0)
     }
 
+    /// The paragraph's left and right edges on the page: its start and end
+    /// indents, swapped in a right-to-left paragraph (ECMA-376 Part 1
+    /// §17.3.1.6, §17.3.1.12).
+    fn extent(&self, rtl: bool) -> (f32, f32) {
+        match rtl {
+            true => (self.width - self.max_x(), self.width - self.left),
+            false => (self.left, self.max_x()),
+        }
+    }
+
     /// ECMA-376 Part 1 §17.3.1 (`w:tabs`): the first custom stop right of
     /// `x`, else the hanging indent, else the next default stop
     /// (`w:defaultTabStop`, ECMA-376 Part 1 §17.15.1).
@@ -136,6 +190,12 @@ impl Geometry {
         let next = ((x + 0.01) / step).floor() * step + step;
         (next, TabAlignment::Left, TabLeader::None)
     }
+}
+
+/// Characters of the complex script ranges, which take a run's complex
+/// script font and formatting.
+fn complex_script(c: char) -> bool {
+    matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
 }
 
 fn field_kind(instruction: &str) -> String {
@@ -186,18 +246,47 @@ impl Flattener<'_, '_> {
         self.styles.len() - 1
     }
 
-    fn resolve(&mut self, props: &docboss_model::RunProperties) -> RunStyle {
-        let resolved = self.ctx.doc.styles.resolve_run_in(
+    fn resolved(&self, props: &docboss_model::RunProperties) -> docboss_model::RunProperties {
+        self.ctx.doc.styles.resolve_run_in(
             self.paragraph_style.as_deref(),
             props,
             self.ctx.table_style.as_deref(),
-        );
+        )
+    }
+
+    fn resolve(&mut self, props: &docboss_model::RunProperties) -> RunStyle {
+        let resolved = self.resolved(props);
         RunStyle::from_properties(&resolved).with_background(&resolved, self.background)
     }
 
     fn push_text(&mut self, text: &str, style: usize) {
         self.elems
             .extend(text.chars().map(|c| Elem::Char(c, style)));
+    }
+
+    /// ECMA-376 Part 1 §17.3.2.26 (step 2a), §17.3.2.7 and §17.3.2.30:
+    /// pushes a run's text, complex script characters in the complex
+    /// script style `complex`, and every character when the run is right
+    /// to left or asks for complex script formatting. Neutral and weak
+    /// characters keep the style of the character before them.
+    fn push_run_text(&mut self, text: &str, style: usize, complex: Option<usize>, whole: bool) {
+        let Some(complex) = complex else {
+            self.push_text(text, style);
+            return;
+        };
+        if whole {
+            self.push_text(text, complex);
+            return;
+        }
+        let mut current = style;
+        for c in text.chars() {
+            if complex_script(c) {
+                current = complex;
+            } else if matches!(crate::bidi::class(c), Bidi::L | Bidi::R | Bidi::AL) {
+                current = style;
+            }
+            self.elems.push(Elem::Char(c, current));
+        }
     }
 
     fn inlines(&mut self, inlines: &[Inline]) {
@@ -260,14 +349,32 @@ impl Flattener<'_, '_> {
     }
 
     fn run(&mut self, run: &docboss_model::Run) {
-        let style = self.resolve(&run.properties);
+        let resolved = self.resolved(&run.properties);
+        let style =
+            RunStyle::from_properties(&resolved).with_background(&resolved, self.background);
         if style.hidden {
             return;
         }
         let index = self.style_index(style.clone());
+        let whole = resolved.right_to_left == Some(true) || resolved.complex_script == Some(true);
+        let wanted = whole
+            || run.content.iter().any(|content| match content {
+                RunContent::Text(text) => {
+                    text.bytes().any(|b| b >= 0xD6) && text.chars().any(complex_script)
+                }
+                _ => false,
+            });
+        let complex = wanted.then(|| {
+            let complex = RunStyle::complex(&resolved).with_background(&resolved, self.background);
+            self.style_index(complex)
+        });
+        let index = match (whole, complex) {
+            (true, Some(complex)) => complex,
+            _ => index,
+        };
         for content in &run.content {
             match content {
-                RunContent::Text(text) => self.push_text(text, index),
+                RunContent::Text(text) => self.push_run_text(text, index, complex, whole),
                 RunContent::Tab => self.elems.push(Elem::Tab(index)),
                 RunContent::Break(kind) => self.elems.push(Elem::Break(*kind, index)),
                 RunContent::CarriageReturn => self.elems.push(Elem::Break(Break::Line, index)),
@@ -374,7 +481,9 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         tabs: props.tabs.clone(),
         default_tab: twips_to_pt(doc.settings.default_tab_stop),
     };
-    let (mut atoms, floats, notes) = build_atoms(ctx, &styles, &elems);
+    let rtl = props.bidi.unwrap_or(false);
+    let levels = paragraph_levels(&styles, &elems, rtl);
+    let (mut atoms, floats, notes) = build_atoms(ctx, &styles, &elems, levels.as_deref());
     let lines = break_lines(ctx, &styles, &mut atoms, &geometry);
 
     let spacing = props.spacing;
@@ -426,9 +535,9 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         };
         let mut items = Vec::new();
         if let Some(fill) = shading {
-            let x = geometry.left;
+            let (x0, x1) = geometry.extent(rtl);
             items.push(Item::Rect {
-                rect: Rect::new(x, 0.0, geometry.max_x() - x, height),
+                rect: Rect::new(x0, 0.0, x1 - x0, height),
                 color: fill,
             });
         }
@@ -442,13 +551,14 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
             justification,
             baseline,
             is_last,
+            rtl,
             &mut items,
         );
         if let Some(borders) = borders {
             let (joins_previous, joins_next) = ctx.border_group;
             paragraph_borders(
                 &borders,
-                &geometry,
+                geometry.extent(rtl),
                 height,
                 index == 0 && !joins_previous,
                 is_last && !joins_next,
@@ -499,14 +609,13 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
 /// paragraphs.
 fn paragraph_borders(
     borders: &docboss_model::Borders,
-    g: &Geometry,
+    (x0, x1): (f32, f32),
     height: f32,
     first: bool,
     last: bool,
     between: bool,
     items: &mut Vec<Item>,
 ) {
-    let (x0, x1) = (g.left, g.max_x());
     let mut edge = |border: Option<docboss_model::Border>, from: (f32, f32), to: (f32, f32)| {
         let Some(border) = border else { return };
         if let Some(item) = crate::table::border_line(&border, from, to) {
@@ -526,6 +635,46 @@ fn paragraph_borders(
     edge(borders.right, (x1, 0.0), (x1, height));
 }
 
+/// ECMA-376 Part 1 §17.3.1.6 and §17.3.2.30: the embedding level of each
+/// element of a paragraph under the bidirectional algorithm, at level 1
+/// when the paragraph is right to left; neutral characters of a right to
+/// left run count as right to left. `None` when every level is 0.
+fn paragraph_levels(styles: &[RunStyle], elems: &[Elem], rtl: bool) -> Option<Vec<u8>> {
+    let needed = rtl
+        || elems.iter().any(|elem| match elem {
+            Elem::Char(c, style) => {
+                styles[*style].rtl
+                    || ((*c as u32) >= 0x0590 && crate::bidi::is_complex(crate::bidi::class(*c)))
+            }
+            _ => false,
+        });
+    if !needed {
+        return None;
+    }
+    let mut chars = Vec::with_capacity(elems.len());
+    let mut classes = Vec::with_capacity(elems.len());
+    for elem in elems {
+        let (c, class) = match elem {
+            Elem::Char(c, style) => {
+                let class = crate::bidi::class(*c);
+                let class = match (styles[*style].rtl, class) {
+                    (true, Bidi::WS | Bidi::ON) => Bidi::R,
+                    (_, class) => class,
+                };
+                (*c, class)
+            }
+            Elem::Tab(_) => ('\t', Bidi::S),
+            Elem::Break(..) => ('\u{2028}', Bidi::WS),
+            Elem::Object(..) => ('\u{FFFC}', Bidi::ON),
+            Elem::Float(_) | Elem::Note(_) => ('\u{200B}', Bidi::BN),
+        };
+        chars.push(c);
+        classes.push(class);
+    }
+    let levels = crate::bidi::resolve(&chars, &classes, u8::from(rtl));
+    levels.iter().any(|&l| l > 0).then_some(levels)
+}
+
 fn metrics_for(ctx: &mut Ctx<'_>, glyph: &Glyph, style: &RunStyle) -> (f32, f32) {
     let base = ctx.shaper.metrics(Some(glyph.font), style.base_size);
     let drawn = ctx.shaper.metrics(Some(glyph.font), glyph.size);
@@ -539,41 +688,46 @@ fn build_atoms(
     ctx: &mut Ctx<'_>,
     styles: &[RunStyle],
     elems: &[Elem],
+    levels: Option<&[u8]>,
 ) -> (Vec<Atom>, Vec<Floating>, Vec<i64>) {
     let mut atoms: Vec<Atom> = Vec::new();
     let mut floats = Vec::new();
     let mut loose_notes = Vec::new();
     let mut word: Option<Atom> = None;
     let mut prev: Option<char> = None;
-    let flush = |word: &mut Option<Atom>, atoms: &mut Vec<Atom>, break_after: bool| {
-        if let Some(mut w) = word.take() {
-            w.break_after = break_after;
-            atoms.push(w);
-        }
-    };
-    for elem in elems {
+    let flush =
+        |ctx: &mut Ctx<'_>, word: &mut Option<Atom>, atoms: &mut Vec<Atom>, break_after: bool| {
+            if let Some(mut w) = word.take() {
+                w.break_after = break_after;
+                if w.shaped {
+                    shape_atom(ctx, styles, &mut w);
+                }
+                atoms.push(w);
+            }
+        };
+    for (index, elem) in elems.iter().enumerate() {
+        let level = levels.map_or(0, |l| l.get(index).copied().unwrap_or(0));
         match elem {
             Elem::Char(c, style) => {
                 let c = *c;
                 let glyph = ctx.shaper.glyph(c, &styles[*style]);
                 let (ascent, descent) = metrics_for(ctx, &glyph, &styles[*style]);
                 if breaks::is_space(c) {
-                    flush(&mut word, &mut atoms, false);
+                    flush(ctx, &mut word, &mut atoms, false);
                     let continues = atoms
                         .last()
-                        .is_some_and(|a| a.is_space() && a.style == *style);
+                        .is_some_and(|a| a.is_space() && a.style == *style && a.level == level);
                     if !continues {
-                        atoms.push(Atom::new(Kind::Space, *style));
+                        let mut space = Atom::new(Kind::Space, *style);
+                        space.level = level;
+                        atoms.push(space);
                     }
                     let Some(space) = atoms.last_mut() else {
                         continue;
                     };
-                    space.glyphs.push(AtomGlyph {
-                        glyph,
-                        style: *style,
-                        ch: c,
-                        x: space.width,
-                    });
+                    space
+                        .glyphs
+                        .push(AtomGlyph::plain(glyph, *style, c, space.width));
                     space.width += glyph.advance;
                     space.ascent = space.ascent.max(ascent);
                     space.descent = space.descent.max(descent);
@@ -584,20 +738,26 @@ fn build_atoms(
                     space.break_after = prev.is_none_or(|p| breaks::allowed(p, c));
                 }
                 if word.is_some() && prev.is_some_and(|p| breaks::allowed(p, c)) {
-                    flush(&mut word, &mut atoms, true);
+                    flush(ctx, &mut word, &mut atoms, true);
                 }
-                let w = word.get_or_insert_with(|| Atom::new(Kind::Word, *style));
-                let kern = w
-                    .glyphs
-                    .last()
-                    .map_or(0.0, |last| ctx.shaper.kern(&last.glyph, &glyph));
-                w.width += kern;
-                w.glyphs.push(AtomGlyph {
-                    glyph,
-                    style: *style,
-                    ch: c,
-                    x: w.width,
+                if word.as_ref().is_some_and(|w| w.level != level) {
+                    flush(ctx, &mut word, &mut atoms, false);
+                }
+                let w = word.get_or_insert_with(|| {
+                    let mut atom = Atom::new(Kind::Word, *style);
+                    atom.level = level;
+                    atom
                 });
+                w.shaped |= level % 2 == 1 || complex::needs_shaping(c);
+                let kern = match w.shaped {
+                    true => 0.0,
+                    false => w
+                        .glyphs
+                        .last()
+                        .map_or(0.0, |last| ctx.shaper.kern(&last.glyph, &glyph)),
+                };
+                w.width += kern;
+                w.glyphs.push(AtomGlyph::plain(glyph, *style, c, w.width));
                 w.width += glyph.advance;
                 w.ascent = w.ascent.max(ascent);
                 w.descent = w.descent.max(descent);
@@ -605,24 +765,28 @@ fn build_atoms(
                 prev = Some(c);
             }
             Elem::Tab(style) => {
-                flush(&mut word, &mut atoms, false);
+                flush(ctx, &mut word, &mut atoms, false);
                 let mut tab = Atom::new(Kind::Tab, *style);
                 tab.break_after = true;
+                tab.level = level;
                 atoms.push(tab);
                 prev = Some('\t');
             }
             Elem::Break(kind, style) => {
-                flush(&mut word, &mut atoms, true);
-                atoms.push(Atom::new(Kind::Break(*kind), *style));
+                flush(ctx, &mut word, &mut atoms, true);
+                let mut atom = Atom::new(Kind::Break(*kind), *style);
+                atom.level = level;
+                atoms.push(atom);
                 prev = None;
             }
             Elem::Object(drawing, style) => {
-                flush(&mut word, &mut atoms, true);
+                flush(ctx, &mut word, &mut atoms, true);
                 let mut object = Atom::new(Kind::Object, *style);
                 object.width = emu_to_pt(drawing.width).max(0.0);
                 object.ascent = emu_to_pt(drawing.height).max(0.0);
                 object.object = Some(drawing.clone());
                 object.break_after = true;
+                object.level = level;
                 atoms.push(object);
                 prev = None;
             }
@@ -659,8 +823,37 @@ fn build_atoms(
             },
         }
     }
-    flush(&mut word, &mut atoms, true);
+    flush(ctx, &mut word, &mut atoms, true);
     (atoms, floats, loose_notes)
+}
+
+/// Replaces a word's glyphs, one per character so far, with the glyphs
+/// shaping gives them.
+fn shape_atom(ctx: &mut Ctx<'_>, styles: &[RunStyle], atom: &mut Atom) {
+    let letters: Vec<Letter> = atom
+        .glyphs
+        .iter()
+        .map(|g| Letter {
+            ch: g.ch,
+            style: g.style,
+            glyph: g.glyph,
+        })
+        .collect();
+    let (placed, width, text) = ctx.shaper.shape_word(&letters, styles, atom.rtl());
+    atom.glyphs = placed
+        .into_iter()
+        .map(|p| AtomGlyph {
+            glyph: p.glyph,
+            style: p.style,
+            ch: p.ch,
+            x: p.x,
+            dx: p.dx,
+            dy: p.dy,
+            text: p.text,
+        })
+        .collect();
+    atom.width = width;
+    atom.text = text;
 }
 
 /// Widths of the atoms after a tab up to the next tab or break, and up to
@@ -827,12 +1020,8 @@ fn hyphenate(ctx: &mut Ctx<'_>, styles: &[RunStyle], atoms: &mut [Atom], placed:
     let hyphen = ctx.shaper.glyph('-', &styles[tail.style]);
     atom.glyphs.pop();
     let x = atom.glyphs.last().map_or(0.0, |g| g.x + g.glyph.advance);
-    atom.glyphs.push(AtomGlyph {
-        glyph: hyphen,
-        style: tail.style,
-        ch: '-',
-        x,
-    });
+    atom.glyphs
+        .push(AtomGlyph::plain(hyphen, tail.style, '-', x));
     atom.width = x + hyphen.advance;
     last.width = atom.width;
 }
@@ -852,6 +1041,58 @@ fn line_extent(atoms: &[Atom], line: &Line, g: &Geometry) -> f32 {
     end + g.right
 }
 
+/// The left edge of each atom of a line after bidirectional reordering
+/// (UAX #9 rules L1 and L2): tab stops and the spaces before them run at
+/// the paragraph level, every stretch between tabs is reordered by level,
+/// and a right-to-left paragraph mirrors the line within `width`.
+fn visual_lefts(
+    atoms: &[Atom],
+    placed: &[Placed],
+    spans: &[(f32, f32)],
+    rtl: bool,
+    width: f32,
+) -> Vec<f32> {
+    let paragraph = u8::from(rtl);
+    let mut levels: Vec<u8> = placed.iter().map(|p| atoms[p.atom].level).collect();
+    let mut before_tab = true;
+    for i in (0..placed.len()).rev() {
+        let atom = &atoms[placed[i].atom];
+        if matches!(atom.kind, Kind::Tab | Kind::Break(_)) {
+            levels[i] = paragraph;
+            before_tab = true;
+            continue;
+        }
+        if before_tab && atom.is_space() {
+            levels[i] = paragraph;
+            continue;
+        }
+        before_tab = false;
+    }
+    let mut lefts = vec![0.0; placed.len()];
+    let mut start = 0;
+    while start < placed.len() {
+        if atoms[placed[start].atom].kind == Kind::Tab {
+            let (x, w) = spans[start];
+            lefts[start] = if rtl { width - x - w } else { x };
+            start += 1;
+            continue;
+        }
+        let mut end = start;
+        while end < placed.len() && atoms[placed[end].atom].kind != Kind::Tab {
+            end += 1;
+        }
+        let from = spans[start].0;
+        let to = spans[end - 1].0 + spans[end - 1].1;
+        let mut cursor = if rtl { width - to } else { from };
+        for k in crate::bidi::visual_order(&levels[start..end]) {
+            lefts[start + k] = cursor;
+            cursor += spans[start + k].1;
+        }
+        start = end;
+    }
+    lefts
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_line(
     ctx: &mut Ctx<'_>,
@@ -862,6 +1103,7 @@ fn emit_line(
     justification: Justification,
     baseline: f32,
     is_last: bool,
+    rtl: bool,
     items: &mut Vec<Item>,
 ) {
     let content_end = line.placed.iter().rposition(|p| {
@@ -892,22 +1134,26 @@ fn emit_line(
         _ if justify && !stretchable.is_empty() => (0.0, slack / stretchable.len() as f32),
         _ => (0.0, 0.0),
     };
+    let mut spans = Vec::with_capacity(placed.len());
+    let mut extra = 0.0;
+    for (index, p) in placed.iter().enumerate() {
+        let stretch = if stretchable.contains(&index) {
+            per_space
+        } else {
+            0.0
+        };
+        spans.push((p.x + shift + extra, p.width + stretch));
+        extra += stretch;
+    }
+    let reorder = rtl || placed.iter().any(|p| atoms[p.atom].level > 0);
+    let lefts = reorder.then(|| visual_lefts(atoms, placed, &spans, rtl, g.width));
     let mut backgrounds = Vec::new();
     let mut glyphs: Vec<Item> = Vec::new();
     let mut decorations = Vec::new();
-    let mut extra = 0.0;
     for (index, p) in placed.iter().enumerate() {
         let atom = &atoms[p.atom];
-        let x0 = p.x + shift + extra;
-        let width = p.width
-            + if stretchable.contains(&index) {
-                per_space
-            } else {
-                0.0
-            };
-        if stretchable.contains(&index) {
-            extra += per_space;
-        }
+        let x0 = lefts.as_ref().map_or(spans[index].0, |l| l[index]);
+        let width = spans[index].1;
         let style = &styles[atom.style];
         match atom.kind {
             Kind::Object => {
@@ -963,17 +1209,24 @@ fn emit_line(
             continue;
         }
         for glyph in &atom.glyphs {
-            if glyph.ch == '\u{00AD}' || glyph.ch == '\u{200B}' {
+            if !atom.shaped && (glyph.ch == '\u{00AD}' || glyph.ch == '\u{200B}') {
                 continue;
             }
             let run_style = &styles[glyph.style];
+            let text = match (atom.shaped, glyph.text) {
+                (true, Some((from, to))) => atom.text.get(from as usize..to as usize).unwrap_or(""),
+                (true, None) => "",
+                (false, _) => "",
+            };
             push_glyph(
                 ctx,
                 &mut glyphs,
                 run_style,
                 glyph,
-                x0 + glyph.x,
+                (x0 + atom.glyph_left(glyph), glyph.dy),
                 baseline - run_style.rise,
+                (!atom.shaped).then_some(glyph.ch),
+                text,
             );
         }
     }
@@ -982,15 +1235,23 @@ fn emit_line(
     items.extend(decorations);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_glyph(
     ctx: &mut Ctx<'_>,
     items: &mut Vec<Item>,
     style: &RunStyle,
     glyph: &AtomGlyph,
-    x: f32,
+    (x, y): (f32, f32),
     baseline: f32,
+    ch: Option<char>,
+    text: &str,
 ) {
     let (bold, italic) = ctx.shaper.synthetic(glyph.glyph.font, style);
+    let positioned = PositionedGlyph {
+        id: glyph.glyph.id,
+        x,
+        y,
+    };
     if let Some(Item::Glyphs(run)) = items.last_mut() {
         let same = run.font == glyph.glyph.font
             && run.size == glyph.glyph.size
@@ -999,24 +1260,22 @@ fn push_glyph(
             && run.synthetic_bold == bold
             && run.synthetic_italic == italic;
         if same {
-            run.glyphs.push(PositionedGlyph {
-                id: glyph.glyph.id,
-                x,
-            });
-            run.text.push(glyph.ch);
+            run.glyphs.push(positioned);
+            run.text.extend(ch);
+            run.text.push_str(text);
             return;
         }
     }
+    let mut shown = String::with_capacity(text.len() + 1);
+    shown.extend(ch);
+    shown.push_str(text);
     items.push(Item::Glyphs(GlyphRun {
         font: glyph.glyph.font,
         size: glyph.glyph.size,
         color: style.color,
         baseline,
-        glyphs: vec![PositionedGlyph {
-            id: glyph.glyph.id,
-            x,
-        }],
-        text: glyph.ch.to_string(),
+        glyphs: vec![positioned],
+        text: shown,
         synthetic_bold: bold,
         synthetic_italic: italic,
     }));
@@ -1045,19 +1304,16 @@ fn leader_glyphs(
     let count = ((width - glyph.advance * 0.5) / glyph.advance).floor() as usize;
     let start = x + width - count as f32 * glyph.advance;
     for k in 0..count.min(2000) {
-        let atom_glyph = AtomGlyph {
-            glyph,
-            style: 0,
-            ch: c,
-            x: 0.0,
-        };
+        let atom_glyph = AtomGlyph::plain(glyph, 0, c, 0.0);
         push_glyph(
             ctx,
             items,
             style,
             &atom_glyph,
-            start + k as f32 * glyph.advance,
+            (start + k as f32 * glyph.advance, 0.0),
             baseline - style.rise,
+            Some(c),
+            "",
         );
     }
 }

@@ -59,6 +59,8 @@ pub struct TableProperties {
     pub cell_margins: Option<[i32; 4]>,
     /// Fixed layout: column widths come from the grid, not the content.
     pub fixed_layout: bool,
+    /// The cells run right to left (`w:bidiVisual`).
+    pub bidi_visual: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

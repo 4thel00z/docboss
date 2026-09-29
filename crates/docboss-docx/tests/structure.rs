@@ -515,6 +515,34 @@ fn alternative_format_chunks_are_reported() {
         .any(|d| d.message.contains("altChunk")));
 }
 
+/// ECMA-376 Part 1 §17.3.2.2, §17.3.2.17, §17.3.2.39: complex script bold, italic and size.
+/// ECMA-376 Part 1 §17.3.2.7, §17.3.2.30: complex script and right-to-left runs.
+/// ECMA-376 Part 1 §17.3.1.6, §17.4.1: right-to-left paragraphs and visually right-to-left tables.
+#[test]
+fn complex_script_runs_and_right_to_left_tables() {
+    let body = r#"<w:p><w:pPr><w:bidi/></w:pPr><w:r><w:rPr><w:bCs/><w:iCs w:val="0"/><w:szCs w:val="32"/><w:rtl/><w:cs/></w:rPr><w:t>שלום</w:t></w:r></w:p><w:tbl><w:tblPr><w:bidiVisual/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#;
+    let doc = read(&Docx::new(body).build()).unwrap();
+    let p = paragraphs(&doc)[0];
+    assert_eq!(p.properties.bidi, Some(true));
+    let Inline::Run(run) = &p.inlines[0] else {
+        panic!()
+    };
+    let r = &run.properties;
+    assert_eq!(
+        (r.bold_complex, r.italic_complex, r.size_complex),
+        (Some(true), Some(false), Some(32))
+    );
+    assert_eq!(
+        (r.right_to_left, r.complex_script),
+        (Some(true), Some(true))
+    );
+    assert_eq!(r.bold, None);
+    let Some(Block::Table(table)) = doc.blocks().nth(1) else {
+        panic!()
+    };
+    assert!(table.properties.bidi_visual);
+}
+
 /// ECMA-376 Part 1 §17.4.62, §17.4.28, §17.4.50, §17.4.38, §17.4.31, §17.4.42, §17.4.52: table-level properties.
 /// ECMA-376 Part 1 §17.4.80, §17.4.6: row height and rows that cannot split.
 /// ECMA-376 Part 1 §17.4.76, §17.4.3, §17.4.34: a table top border, a cell bottom border and a leading default margin.

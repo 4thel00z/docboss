@@ -2,7 +2,8 @@
 //!
 //! [`Font`] reads TrueType and OpenType faces (`glyf` and `CFF ` outlines,
 //! collections included): character mapping, advance widths, vertical
-//! metrics, kerning from `kern` and GPOS, and glyph outlines.
+//! metrics, kerning from `kern` and GPOS, glyph substitution and
+//! positioning from `GSUB` and `GPOS`, and glyph outlines.
 //! [`FontDatabase`] finds faces on the system and in documents and picks
 //! one for a requested family, with metric-compatible substitutes and
 //! per-character fallback.
@@ -14,13 +15,18 @@ mod cmap;
 mod database;
 mod font;
 mod glyf;
+mod gpos;
+mod gsub;
 mod kern;
+mod otl;
 mod outline;
+mod shape;
 mod symbol;
 
 pub use database::{FaceInfo, FontDatabase, FontId};
 pub use font::{face_count, FaceNames, FaceStyle, Font, Metrics};
 pub use outline::{bounds, Seg};
+pub use shape::{Feature, ShapeInput, Shaped};
 pub use symbol::symbol_to_unicode;
 
 /// Why a font could not be read.

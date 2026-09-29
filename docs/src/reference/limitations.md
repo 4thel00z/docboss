@@ -18,7 +18,11 @@ missing. The largest gaps:
 
 ## Layout and rendering
 
-- No right-to-left or bidirectional text and no complex-script shaping.
+- Shaping covers Arabic, Hebrew and combining marks; Indic, Thai and other
+  scripts that reorder or stack glyphs are not shaped, cursive attachment
+  (GPOS type 3) is not applied, and Latin text gets no discretionary
+  ligatures. Right-to-left sections (`w:bidi` in `w:sectPr`: column order,
+  gutter side) lay out left to right.
 - No column balancing; text does not wrap around floating images.
 - Groups, canvases, SmartArt, charts and equations are not drawn. Shapes
   draw their preset or custom geometry with solid fills only; gradient,

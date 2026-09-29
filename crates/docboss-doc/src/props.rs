@@ -303,6 +303,10 @@ fn apply_chp_prl(
         0x4845 => props.position = Some(i32::from(prl.i16())),
         0x486D | 0x4873 => props.language = Some(language(prl.u16())),
         0x085A => props.right_to_left = Some(prl.u8() & 1 != 0),
+        0x085C => props.bold_complex = toggle(prl, base.bold_complex),
+        0x085D => props.italic_complex = toggle(prl, base.italic_complex),
+        0x4A61 => props.size_complex = Some(u32::from(prl.u16())),
+        0x0882 => props.complex_script = toggle(prl, base.complex_script),
         0x4866 => props.shading = shd80(prl.u16()),
         0xCA71 => props.shading = shd(prl.variable()),
         _ => {}
@@ -706,5 +710,27 @@ mod tests {
         assert_eq!(props.bold, Some(false));
         apply_chp(&[0x35, 0x08, 0x80], &mut props, &mut extra, &context);
         assert_eq!(props.bold, Some(true));
+    }
+
+    /// [MS-DOC] §2.6.1: sprmCFBoldBi, sprmCFItalicBi, sprmCHpsBi and
+    /// sprmCFComplexScripts set the complex script formatting.
+    #[test]
+    fn complex_script_character_properties() {
+        let base = RunProperties::default();
+        let context = CharContext {
+            fonts: &[],
+            styles: &[],
+            base: &base,
+        };
+        let mut props = RunProperties::default();
+        let mut extra = CharExtra::default();
+        let grpprl = [
+            0x5C, 0x08, 0x01, 0x5D, 0x08, 0x00, 0x61, 0x4A, 0x1C, 0x00, 0x82, 0x08, 0x01,
+        ];
+        apply_chp(&grpprl, &mut props, &mut extra, &context);
+        assert_eq!(props.bold_complex, Some(true));
+        assert_eq!(props.italic_complex, Some(false));
+        assert_eq!(props.size_complex, Some(28));
+        assert_eq!(props.complex_script, Some(true));
     }
 }

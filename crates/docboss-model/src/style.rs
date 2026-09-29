@@ -293,6 +293,8 @@ impl RunProperties {
         overlay(&mut self.style_id, &over.style_id);
         overlay(&mut self.bold, &over.bold);
         overlay(&mut self.italic, &over.italic);
+        overlay(&mut self.bold_complex, &over.bold_complex);
+        overlay(&mut self.italic_complex, &over.italic_complex);
         overlay(&mut self.underline, &over.underline);
         overlay(&mut self.strike, &over.strike);
         overlay(&mut self.double_strike, &over.double_strike);
@@ -304,6 +306,7 @@ impl RunProperties {
         overlay(&mut self.fonts.east_asia, &over.fonts.east_asia);
         overlay(&mut self.fonts.complex, &over.fonts.complex);
         overlay(&mut self.size, &over.size);
+        overlay(&mut self.size_complex, &over.size_complex);
         overlay(&mut self.color, &over.color);
         overlay(&mut self.highlight, &over.highlight);
         overlay(&mut self.shading, &over.shading);
@@ -312,12 +315,15 @@ impl RunProperties {
         overlay(&mut self.position, &over.position);
         overlay(&mut self.language, &over.language);
         overlay(&mut self.right_to_left, &over.right_to_left);
+        overlay(&mut self.complex_script, &over.complex_script);
     }
 
-    fn toggles(&self) -> [Option<bool>; 7] {
+    fn toggles(&self) -> [Option<bool>; 9] {
         [
             self.bold,
             self.italic,
+            self.bold_complex,
+            self.italic_complex,
             self.caps,
             self.small_caps,
             self.strike,
@@ -326,8 +332,8 @@ impl RunProperties {
         ]
     }
 
-    fn toggles_xor(&self, other: &RunProperties) -> [Option<bool>; 7] {
-        let mut out = [None; 7];
+    fn toggles_xor(&self, other: &RunProperties) -> [Option<bool>; 9] {
+        let mut out = [None; 9];
         for (slot, (a, b)) in out
             .iter_mut()
             .zip(self.toggles().into_iter().zip(other.toggles()))
@@ -340,10 +346,12 @@ impl RunProperties {
         out
     }
 
-    fn set_toggles(&mut self, toggles: [Option<bool>; 7]) {
+    fn set_toggles(&mut self, toggles: [Option<bool>; 9]) {
         let slots = [
             &mut self.bold,
             &mut self.italic,
+            &mut self.bold_complex,
+            &mut self.italic_complex,
             &mut self.caps,
             &mut self.small_caps,
             &mut self.strike,

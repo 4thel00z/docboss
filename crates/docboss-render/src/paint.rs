@@ -248,7 +248,10 @@ impl Renderer {
         for glyph in &run.glyphs {
             let outline = font.outline(glyph.id);
             for dx in offsets {
-                let m = compose(device, [k, 0.0, shear, -k, glyph.x + dx, run.baseline]);
+                let m = compose(
+                    device,
+                    [k, 0.0, shear, -k, glyph.x + dx, run.baseline + glyph.y],
+                );
                 let mask = rasterize(&flatten(&outline, m), Some(canvas.clip.pixels()));
                 canvas.blit(&mask, 0, 0, run.color);
             }
@@ -302,8 +305,9 @@ impl Renderer {
         };
         for glyph in &run.glyphs {
             let x = glyph.x * scale;
+            let y = baseline + glyph.y * scale;
             let (ix, fx) = (x.floor(), x - x.floor());
-            let (iy, fy) = (baseline.floor(), baseline - baseline.floor());
+            let (iy, fy) = (y.floor(), y - y.floor());
             let key = GlyphKey {
                 font: run.font,
                 glyph: glyph.id,

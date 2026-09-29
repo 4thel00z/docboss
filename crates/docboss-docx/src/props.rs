@@ -279,6 +279,7 @@ fn fonts(e: &Element<'_>, theme: &Theme) -> FontSlots {
 }
 
 /// `w:rPr` (ECMA-376 Part 1 §17.3.2.28).
+/// ECMA-376 Part 1 §17.3.2.2, §17.3.2.17, §17.3.2.39, §17.3.2.7: complex script bold, italic, size and formatting.
 pub fn run_properties<'a>(reader: &mut Reader<'a>, theme: &Theme) -> RunProperties {
     let mut p = RunProperties::default();
     children(reader, |_, e| {
@@ -289,6 +290,9 @@ pub fn run_properties<'a>(reader: &mut Reader<'a>, theme: &Theme) -> RunProperti
             "rStyle" => p.style_id = val(&e).map(Into::into),
             "b" => p.bold = Some(on_off(&e)),
             "i" => p.italic = Some(on_off(&e)),
+            "bCs" => p.bold_complex = Some(on_off(&e)),
+            "iCs" => p.italic_complex = Some(on_off(&e)),
+            "cs" => p.complex_script = Some(on_off(&e)),
             "u" => p.underline = Some(val(&e).map_or(Underline::Single, |v| underline(&v))),
             "strike" => p.strike = Some(on_off(&e)),
             "dstrike" => p.double_strike = Some(on_off(&e)),
@@ -304,6 +308,7 @@ pub fn run_properties<'a>(reader: &mut Reader<'a>, theme: &Theme) -> RunProperti
                 f.complex = slots.complex.or(f.complex.take());
             }
             "sz" => p.size = u32_attr(&e, "val"),
+            "szCs" => p.size_complex = u32_attr(&e, "val"),
             "color" => {
                 let themed = attr(&e, "themeColor").is_some();
                 p.color = val(&e).and_then(|c| color(&c)).or(themed.then_some(None));
@@ -369,8 +374,8 @@ fn margins(reader: &mut Reader<'_>) -> [i32; 4] {
 }
 
 /// `w:tblPr` (ECMA-376 Part 1 §17.4.59): style, width, alignment, indent,
-/// borders, shading, default cell margins and layout.
-/// ECMA-376 Part 1 §17.4.62, §17.4.63, §17.4.28, §17.4.50, §17.4.38, §17.4.31, §17.4.42, §17.4.52.
+/// borders, shading, default cell margins, layout and direction.
+/// ECMA-376 Part 1 §17.4.62, §17.4.63, §17.4.28, §17.4.50, §17.4.38, §17.4.31, §17.4.42, §17.4.52, §17.4.1.
 pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
     let mut p = TableProperties::default();
     children(reader, |reader, e| match e.local {
@@ -382,6 +387,7 @@ pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
         "shd" => p.shading = shading(&e),
         "tblCellMar" => p.cell_margins = Some(margins(reader)),
         "tblLayout" => p.fixed_layout = attr(&e, "type").as_deref() == Some("fixed"),
+        "bidiVisual" => p.bidi_visual = on_off(&e),
         _ => {}
     });
     p

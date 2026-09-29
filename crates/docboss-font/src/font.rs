@@ -2,14 +2,16 @@
 //! outlines.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use crate::bytes::{i16_at, u16_at, u32_at};
 use crate::cff::CffFont;
 use crate::cmap::Cmap;
 use crate::glyf::Glyf;
 use crate::kern::Kerning;
+use crate::otl::{Gdef, LayoutTable};
 use crate::outline::Seg;
+use crate::shape::ScriptFeatures;
 use crate::FontError;
 
 const TAG_TTCF: u32 = 0x7474_6366;
@@ -208,7 +210,7 @@ pub(crate) fn read_style(
 
 /// A parsed font face.
 pub struct Font {
-    data: Arc<[u8]>,
+    pub(crate) data: Arc<[u8]>,
     names: FaceNames,
     style: FaceStyle,
     metrics: Metrics,
@@ -217,7 +219,13 @@ pub struct Font {
     loca: Vec<u32>,
     cff: Option<CffFont>,
     cmap: Cmap,
-    kerning: Kerning,
+    pub(crate) kerning: Kerning,
+    gsub_table: Option<(usize, usize)>,
+    gpos_table: Option<(usize, usize)>,
+    gsub: OnceLock<Option<LayoutTable>>,
+    gpos: OnceLock<Option<LayoutTable>>,
+    pub(crate) gdef: Gdef,
+    pub(crate) script_cache: Mutex<HashMap<(bool, [u8; 4]), ScriptFeatures>>,
     outlines: Mutex<HashMap<u16, Arc<[Seg]>>>,
     kern_cache: Mutex<HashMap<(u16, u16), i16>>,
 }
@@ -286,6 +294,9 @@ impl Font {
             .map(|(o, _)| Cmap::parse(bytes, o))
             .unwrap_or_default();
         let kerning = Kerning::parse(bytes, table(b"kern"), table(b"GPOS"));
+        let gsub_table = table(b"GSUB");
+        let gpos_table = table(b"GPOS");
+        let gdef = Gdef::parse(bytes, table(b"GDEF"));
         Ok(Font {
             data,
             names,
@@ -297,9 +308,34 @@ impl Font {
             cff,
             cmap,
             kerning,
+            gsub_table,
+            gpos_table,
+            gsub: OnceLock::new(),
+            gpos: OnceLock::new(),
+            gdef,
+            script_cache: Mutex::new(HashMap::new()),
             outlines: Mutex::new(HashMap::new()),
             kern_cache: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// The `GSUB` lists, read on first use.
+    pub(crate) fn gsub(&self) -> Option<&LayoutTable> {
+        self.gsub
+            .get_or_init(|| LayoutTable::parse(&self.data, self.gsub_table, 7))
+            .as_ref()
+    }
+
+    /// The `GPOS` lists, read on first use.
+    pub(crate) fn gpos(&self) -> Option<&LayoutTable> {
+        self.gpos
+            .get_or_init(|| LayoutTable::parse(&self.data, self.gpos_table, 9))
+            .as_ref()
+    }
+
+    /// Whether the face has glyph substitutions or positions to apply.
+    pub fn has_layout(&self) -> bool {
+        self.gsub_table.is_some() || self.gpos_table.is_some()
     }
 
     pub fn names(&self) -> &FaceNames {

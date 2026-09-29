@@ -33,6 +33,8 @@ pub(crate) struct RunStyle {
     /// Extra space after each character in points.
     pub spacing: f32,
     pub hidden: bool,
+    /// The run is right-to-left text (`w:rtl`).
+    pub rtl: bool,
 }
 
 /// The color `auto` text takes over a background: white over a dark fill,
@@ -96,7 +98,25 @@ impl RunStyle {
             rise: script_rise + p.position.unwrap_or(0) as f32 / 2.0,
             spacing: p.spacing.unwrap_or(0) as f32 / 20.0,
             hidden: p.is_hidden(),
+            rtl: p.right_to_left.unwrap_or(false),
         }
+    }
+
+    /// ECMA-376 Part 1 §17.3.2.26 (step 2a), §17.3.2.2, §17.3.2.17 and
+    /// §17.3.2.39: the style of complex script text, in the complex script
+    /// font with the `bCs`, `iCs` and `szCs` values. A run that states no
+    /// complex script size keeps its own.
+    pub(crate) fn complex(p: &RunProperties) -> RunStyle {
+        let mut complex = p.clone();
+        complex.bold = Some(p.bold_complex.unwrap_or(false));
+        complex.italic = Some(p.italic_complex.unwrap_or(false));
+        complex.size = p.size_complex.or(p.size);
+        let face = p.fonts.complex.clone().or_else(|| p.fonts.ascii.clone());
+        complex.fonts.ascii = face.clone();
+        complex.fonts.high_ansi = face.clone();
+        complex.fonts.east_asia = face.clone();
+        complex.fonts.complex = face;
+        RunStyle::from_properties(&complex)
     }
 
     fn slot(&self, c: char) -> Option<&str> {
@@ -138,7 +158,7 @@ pub(crate) struct LineMetrics {
     pub strikeout_thickness: f32,
 }
 
-/// Face selection and glyph lookup, cached for one layout.
+/// Face selection, glyph lookup and shaped words, cached for one layout.
 pub(crate) struct Shaper<'a> {
     db: &'a FontDatabase,
     entries: &'a [FontEntry],
@@ -147,6 +167,7 @@ pub(crate) struct Shaper<'a> {
     selected: HashMap<(String, bool, bool), Option<FontId>>,
     loaded: HashMap<FontId, Arc<Font>>,
     glyphs: HashMap<(FontId, char), Option<(u16, u16)>>,
+    pub(crate) shaped: HashMap<crate::complex::ShapeKey, Arc<[docboss_font::Shaped]>>,
 }
 
 impl<'a> Shaper<'a> {
@@ -164,6 +185,7 @@ impl<'a> Shaper<'a> {
             selected: HashMap::new(),
             loaded: HashMap::new(),
             glyphs: HashMap::new(),
+            shaped: HashMap::new(),
         }
     }
 
@@ -192,7 +214,7 @@ impl<'a> Shaper<'a> {
         found
     }
 
-    fn lookup(&mut self, font: FontId, c: char) -> Option<(u16, u16)> {
+    pub(crate) fn lookup(&mut self, font: FontId, c: char) -> Option<(u16, u16)> {
         if let Some(found) = self.glyphs.get(&(font, c)) {
             return *found;
         }
