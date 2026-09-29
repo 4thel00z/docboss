@@ -113,6 +113,10 @@ pub enum Item {
         media: Option<MediaId>,
         rect: Rect,
     },
+    /// Confines the items that follow, up to the matching [`Item::ClipEnd`],
+    /// to a rectangle.
+    ClipBegin(Rect),
+    ClipEnd,
 }
 
 impl Item {
@@ -122,11 +126,14 @@ impl Item {
                 run.baseline += dy;
                 run.glyphs.iter_mut().for_each(|g| g.x += dx);
             }
-            Item::Rect { rect, .. } | Item::Image { rect, .. } => *rect = rect.offset(dx, dy),
+            Item::Rect { rect, .. } | Item::Image { rect, .. } | Item::ClipBegin(rect) => {
+                *rect = rect.offset(dx, dy)
+            }
             Item::Line { from, to, .. } => {
                 *from = (from.0 + dx, from.1 + dy);
                 *to = (to.0 + dx, to.1 + dy);
             }
+            Item::ClipEnd => {}
         }
     }
 }

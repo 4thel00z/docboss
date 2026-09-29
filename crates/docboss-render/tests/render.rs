@@ -4,9 +4,10 @@ use std::sync::Arc;
 use docboss_font::FontDatabase;
 use docboss_layout::layout;
 use docboss_model::{
-    Block, Border, BorderStyle, Borders, Color, Document, Drawing, DrawingPlacement, Inline, Media,
-    MediaId, Paragraph, ParagraphProperties, Run, RunContent, RunProperties, Section, Style,
-    StyleKind, Styles, Table, TableCell, TableProperties, TableRow,
+    Block, Border, BorderStyle, Borders, Color, Document, Drawing, DrawingPlacement,
+    DrawingPosition, Inline, Media, MediaId, Paragraph, ParagraphProperties, PositionBase, Run,
+    RunContent, RunProperties, Section, ShapeFormat, Style, StyleKind, Styles, Table, TableCell,
+    TableProperties, TableRow,
 };
 use docboss_render::{render_page, render_pages, Format, Pixmap};
 
@@ -198,6 +199,55 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
     assert_eq!(pixmap.pixel(122, 100), Some([255, 0, 0, 255]));
     assert_eq!(pixmap.diagnostics.len(), 1);
     assert!(pixmap.diagnostics[0].message.contains("WMF"));
+}
+
+/// ECMA-376 Part 1 §20.4.2.22: text that overflows a text box without
+/// `a:spAutoFit` is cut off at the shape less its insets, while the fill
+/// and outline still paint.
+#[test]
+fn overflowing_text_box_content_is_clipped_to_its_insets() {
+    let yellow = Color(255, 255, 0);
+    let lines = (0..20)
+        .map(|_| para(vec![run("Clipped text", RunProperties::default())]))
+        .collect();
+    let drawing = Drawing {
+        media: None,
+        width: 2_540_000,
+        height: 1_270_000,
+        placement: DrawingPlacement::Anchored {
+            horizontal: DrawingPosition::offset(PositionBase::Page, 914_400),
+            vertical: DrawingPosition::offset(PositionBase::Page, 914_400),
+            behind_text: false,
+        },
+        name: None,
+        description: None,
+        text_box: lines,
+        shape: ShapeFormat {
+            fill: Some(yellow),
+            outline: Some(Color::BLACK),
+            outline_width: Some(12_700),
+            insets: Some([127_000; 4]),
+            text_anchor: None,
+            auto_fit: false,
+        },
+    };
+    let doc = document(vec![para(vec![Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(drawing)],
+    })])]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    let not_yellow = |x0: u32, y0: u32, x1: u32, y1: u32| {
+        (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| pixmap.pixel(x, y) != Some([255, 255, 0, 255]))
+            .count()
+    };
+    assert!(not_yellow(82, 82, 262, 162) > 100);
+    assert_eq!(not_yellow(80, 163, 264, 171), 0);
+    assert_eq!(ink(&pixmap, 60, 176, 290, 500), 0);
+    assert!(pixmap
+        .pixel(72, 120)
+        .is_some_and(|p| p[0] < 200 && p[2] == 0));
 }
 
 #[test]

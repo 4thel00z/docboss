@@ -847,6 +847,7 @@ def Generated.citations4 : List Citation := [
   ⟨.ecma376Part1, some (.clause [17, 3, 2, 41]), "crates/docboss-output/tests/text.rs", 41, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 16]), "crates/docboss-output/tests/text.rs", 81, true⟩,
   ⟨.ecma376Part1, some (.clause [20, 4, 2, 38]), "crates/docboss-output/tests/text.rs", 171, true⟩,
+  ⟨.ecma376Part1, some (.clause [20, 4, 2, 22]), "crates/docboss-render/tests/render.rs", 204, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 7, 2]), "crates/docboss-tui/tests/explorer.rs", 172, true⟩,
   ⟨.ecma376Part1, some (.clause [17, 3]), "crates/docboss-write/src/body.rs", 2, false⟩,
   ⟨.ecma376Part1, some (.clause [17, 16, 22]), "crates/docboss-write/src/body.rs", 121, false⟩,

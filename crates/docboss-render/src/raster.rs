@@ -109,8 +109,8 @@ pub(crate) struct Mask {
 }
 
 /// Rasterizes polygons into a coverage mask sized to their bounds and
-/// clipped to `[0, clip_w) x [0, clip_h)` when given.
-pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32)>) -> Mask {
+/// clipped to the pixel rectangle `(left, top, right, bottom)` when given.
+pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) -> Mask {
     let mut edges: Vec<Edge> = Vec::new();
     let (mut xmin, mut xmax, mut ymin, mut ymax) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     for poly in polys {
@@ -143,11 +143,11 @@ pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32)>) -> Mask {
     let mut y0 = ymin.floor() as i32;
     let mut x1 = xmax.ceil() as i32 + 1;
     let mut y1 = ymax.ceil() as i32;
-    if let Some((w, h)) = clip {
-        x0 = x0.max(0);
-        y0 = y0.max(0);
-        x1 = x1.min(w);
-        y1 = y1.min(h);
+    if let Some((left, top, right, bottom)) = clip {
+        x0 = x0.max(left);
+        y0 = y0.max(top);
+        x1 = x1.min(right);
+        y1 = y1.min(bottom);
     }
     if x1 <= x0 || y1 <= y0 {
         return Mask::default();

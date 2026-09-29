@@ -22,7 +22,11 @@ pub(crate) struct TextBox {
 /// supplies the blocks and §20.4.2.22 (`wps:bodyPr`) the insets, the
 /// vertical anchor and `a:spAutoFit`, which sizes the shape to its text;
 /// the fill and outline come from
-/// `wps:spPr` (§20.4.2.35).
+/// `wps:spPr` (§20.4.2.35). Text that does not fit is cut off at the shape
+/// less its insets: Word and LibreOffice clip text box content whatever
+/// `vertOverflow` and `horzOverflow` say, so their `overflow` default is not
+/// followed. A box whose stated height leaves no room inside its insets is
+/// left unclipped.
 pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
     if drawing.text_box.is_empty() {
         return None;
@@ -54,6 +58,11 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
             color,
         });
     }
+    let text_width = width - left - right;
+    let clipped = room > 0.0 && text_width > 0.0;
+    if clipped {
+        items.push(Item::ClipBegin(Rect::new(left, top, text_width, room)));
+    }
     let mut y = top + shift;
     for slab in slabs {
         y += slab.gap_before;
@@ -62,6 +71,9 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
             item
         }));
         y += slab.height;
+    }
+    if clipped {
+        items.push(Item::ClipEnd);
     }
     if let Some(color) = shape.outline {
         let line = emu_to_pt(shape.outline_width.unwrap_or(DEFAULT_OUTLINE)).max(0.25);

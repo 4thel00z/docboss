@@ -48,10 +48,17 @@ impl Renderer {
         let width = (page.width * scale).ceil().max(1.0) as u32;
         let height = (page.height * scale).ceil().max(1.0) as u32;
         let mut pixmap = Pixmap::new(width, height)?;
+        let full = Clip::of(&pixmap);
+        let mut clip = full;
+        let mut outer: Vec<Clip> = Vec::new();
         for item in &page.items {
+            let mut canvas = Canvas {
+                pixmap: &mut pixmap,
+                clip,
+            };
             match item {
-                Item::Glyphs(run) => self.glyphs(layout, &mut pixmap, run, scale),
-                Item::Rect { rect, color } => fill_rect(&mut pixmap, scaled(*rect, scale), *color),
+                Item::Glyphs(run) => self.glyphs(layout, &mut canvas, run, scale),
+                Item::Rect { rect, color } => canvas.fill_rect(scaled(*rect, scale), *color),
                 Item::Line {
                     from,
                     to,
@@ -61,17 +68,22 @@ impl Renderer {
                 } => {
                     let p = (from.0 * scale, from.1 * scale);
                     let q = (to.0 * scale, to.1 * scale);
-                    line(&mut pixmap, p, q, (width * scale).max(0.5), *color, *style);
+                    canvas.line(p, q, (width * scale).max(0.5), *color, *style);
                 }
                 Item::Image { media, rect } => {
-                    self.image(layout, &mut pixmap, *media, scaled(*rect, scale))
+                    self.image(layout, &mut canvas, *media, scaled(*rect, scale))
                 }
+                Item::ClipBegin(rect) => {
+                    outer.push(clip);
+                    clip = clip.intersect(scaled(*rect, scale));
+                }
+                Item::ClipEnd => clip = outer.pop().unwrap_or(full),
             }
         }
         Ok(pixmap)
     }
 
-    fn glyphs(&mut self, layout: &Layout, pixmap: &mut Pixmap, run: &GlyphRun, scale: f32) {
+    fn glyphs(&mut self, layout: &Layout, canvas: &mut Canvas<'_>, run: &GlyphRun, scale: f32) {
         let Some(font) = layout.fonts.font(run.font) else {
             return;
         };
@@ -113,20 +125,20 @@ impl Renderer {
                     ))
                 })
                 .clone();
-            blit(pixmap, &mask, ix as i32, iy as i32, run.color);
+            canvas.blit(&mask, ix as i32, iy as i32, run.color);
             if embolden > 0.0 {
-                blit(
-                    pixmap,
-                    &mask,
-                    (ix + embolden).round() as i32,
-                    iy as i32,
-                    run.color,
-                );
+                canvas.blit(&mask, (ix + embolden).round() as i32, iy as i32, run.color);
             }
         }
     }
 
-    fn image(&mut self, layout: &Layout, pixmap: &mut Pixmap, media: Option<MediaId>, rect: Rect) {
+    fn image(
+        &mut self,
+        layout: &Layout,
+        canvas: &mut Canvas<'_>,
+        media: Option<MediaId>,
+        rect: Rect,
+    ) {
         let decoded = media.and_then(|id| {
             let data = layout.media.get(id.0 as usize)?;
             Some(
@@ -137,20 +149,20 @@ impl Renderer {
             )
         });
         let Some(result) = decoded else {
-            placeholder(pixmap, rect);
+            canvas.placeholder(rect);
             return;
         };
         match result.as_ref() {
-            Ok(image) => draw_image(pixmap, image, rect),
+            Ok(image) => canvas.draw_image(image, rect),
             Err(error) => {
                 let name = media
                     .and_then(|id| layout.media.get(id.0 as usize))
                     .map_or("image", |m| m.name.as_str());
-                pixmap.diagnostics.push(Diagnostic::approximated(
+                canvas.pixmap.diagnostics.push(Diagnostic::approximated(
                     name,
                     format!("{error}; drawn as a placeholder"),
                 ));
-                placeholder(pixmap, rect);
+                canvas.placeholder(rect);
             }
         }
     }
@@ -180,179 +192,240 @@ fn blend(dst: &mut [u8], color: Color, alpha: u32) {
     dst[2] = ((u32::from(color.2) * alpha + u32::from(dst[2]) * inv + 127) / 255) as u8;
 }
 
-fn blit(pixmap: &mut Pixmap, mask: &Mask, dx: i32, dy: i32, color: Color) {
-    let (w, h) = (pixmap.width as i32, pixmap.height as i32);
-    for row in 0..mask.height as i32 {
-        let y = mask.y + row + dy;
-        if y < 0 || y >= h {
-            continue;
+/// The device rectangle, in pixels, that painting is confined to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Clip {
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+}
+
+impl Clip {
+    fn of(pixmap: &Pixmap) -> Clip {
+        Clip {
+            x0: 0.0,
+            y0: 0.0,
+            x1: pixmap.width as f32,
+            y1: pixmap.height as f32,
         }
-        let line = &mask.coverage[row as usize * mask.width..(row as usize + 1) * mask.width];
+    }
+
+    fn intersect(self, rect: Rect) -> Clip {
+        Clip {
+            x0: self.x0.max(rect.x),
+            y0: self.y0.max(rect.y),
+            x1: self.x1.min(rect.right()),
+            y1: self.y1.min(rect.bottom()),
+        }
+    }
+
+    /// The clip rounded to whole pixels: left, top, right, bottom.
+    fn pixels(self) -> (i32, i32, i32, i32) {
+        (
+            self.x0.round() as i32,
+            self.y0.round() as i32,
+            self.x1.round() as i32,
+            self.y1.round() as i32,
+        )
+    }
+}
+
+/// A pixmap and the clip the item being painted is confined to.
+struct Canvas<'a> {
+    pixmap: &'a mut Pixmap,
+    clip: Clip,
+}
+
+impl Canvas<'_> {
+    fn blit(&mut self, mask: &Mask, dx: i32, dy: i32, color: Color) {
+        let (cx0, cy0, cx1, cy1) = self.clip.pixels();
+        let stride = self.pixmap.width as usize;
         let x0 = mask.x + dx;
-        let start = (-x0).max(0) as usize;
-        let end = ((w - x0).max(0) as usize).min(mask.width);
-        for (col, &c) in line.iter().enumerate().take(end).skip(start) {
-            if c == 0 {
+        let start = (cx0 - x0).max(0) as usize;
+        let end = ((cx1 - x0).max(0) as usize).min(mask.width);
+        if start >= end {
+            return;
+        }
+        for row in 0..mask.height as i32 {
+            let y = mask.y + row + dy;
+            if y < cy0 || y >= cy1 {
                 continue;
             }
-            let at = (y as usize * pixmap.width as usize + (x0 + col as i32) as usize) * 4;
-            blend(&mut pixmap.data[at..at + 4], color, u32::from(c));
-        }
-    }
-}
-
-/// Fills an axis-aligned rectangle with exact fractional edge coverage.
-fn fill_rect(pixmap: &mut Pixmap, rect: Rect, color: Color) {
-    let (w, h) = (pixmap.width as f32, pixmap.height as f32);
-    let x0 = rect.x.max(0.0);
-    let y0 = rect.y.max(0.0);
-    let x1 = rect.right().min(w);
-    let y1 = rect.bottom().min(h);
-    if !(x1 > x0 && y1 > y0) {
-        return;
-    }
-    for py in y0.floor() as u32..y1.ceil() as u32 {
-        let cy = (y1.min(py as f32 + 1.0) - y0.max(py as f32)).clamp(0.0, 1.0);
-        for px in x0.floor() as u32..x1.ceil() as u32 {
-            let cx = (x1.min(px as f32 + 1.0) - x0.max(px as f32)).clamp(0.0, 1.0);
-            let alpha = (cx * cy * 255.0 + 0.5) as u32;
-            let at = (py as usize * pixmap.width as usize + px as usize) * 4;
-            blend(&mut pixmap.data[at..at + 4], color, alpha);
-        }
-    }
-}
-
-fn fill_polygons(pixmap: &mut Pixmap, polys: &Polygons, color: Color) {
-    let mask = rasterize(polys, Some((pixmap.width as i32, pixmap.height as i32)));
-    blit(pixmap, &mask, 0, 0, color);
-}
-
-fn segment(pixmap: &mut Pixmap, p: (f32, f32), q: (f32, f32), width: f32, color: Color) {
-    if p.1 == q.1 {
-        let (x0, x1) = (p.0.min(q.0), p.0.max(q.0));
-        fill_rect(
-            pixmap,
-            Rect::new(x0, p.1 - width / 2.0, x1 - x0, width),
-            color,
-        );
-        return;
-    }
-    if p.0 == q.0 {
-        let (y0, y1) = (p.1.min(q.1), p.1.max(q.1));
-        fill_rect(
-            pixmap,
-            Rect::new(p.0 - width / 2.0, y0, width, y1 - y0),
-            color,
-        );
-        return;
-    }
-    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
-    let length = (dx * dx + dy * dy).sqrt();
-    let (nx, ny) = (-dy / length * width / 2.0, dx / length * width / 2.0);
-    let quad = vec![
-        Point {
-            x: p.0 + nx,
-            y: p.1 + ny,
-        },
-        Point {
-            x: q.0 + nx,
-            y: q.1 + ny,
-        },
-        Point {
-            x: q.0 - nx,
-            y: q.1 - ny,
-        },
-        Point {
-            x: p.0 - nx,
-            y: p.1 - ny,
-        },
-    ];
-    fill_polygons(pixmap, &vec![quad], color);
-}
-
-fn line(
-    pixmap: &mut Pixmap,
-    p: (f32, f32),
-    q: (f32, f32),
-    width: f32,
-    color: Color,
-    style: LineStyle,
-) {
-    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
-    let length = (dx * dx + dy * dy).sqrt();
-    if length <= 0.0 || !length.is_finite() {
-        return;
-    }
-    let (ux, uy) = (dx / length, dy / length);
-    let at = |t: f32| (p.0 + ux * t, p.1 + uy * t);
-    match style {
-        LineStyle::Solid => segment(pixmap, p, q, width, color),
-        LineStyle::Double => {
-            let (nx, ny) = (-uy * width / 3.0, ux * width / 3.0);
-            let thin = width / 3.0;
-            segment(
-                pixmap,
-                (p.0 + nx, p.1 + ny),
-                (q.0 + nx, q.1 + ny),
-                thin,
-                color,
-            );
-            segment(
-                pixmap,
-                (p.0 - nx, p.1 - ny),
-                (q.0 - nx, q.1 - ny),
-                thin,
-                color,
-            );
-        }
-        LineStyle::Dotted | LineStyle::Dashed => {
-            let (on, off) = if style == LineStyle::Dotted {
-                (width, width)
-            } else {
-                (width * 3.0, width * 2.0)
-            };
-            let mut t = 0.0;
-            while t < length && t < 1e6 {
-                segment(pixmap, at(t), at((t + on).min(length)), width, color);
-                t += on + off;
-            }
-        }
-        LineStyle::Wave => {
-            let step = (width * 2.0).max(1.0);
-            let (nx, ny) = (-uy * width, ux * width);
-            let mut t = 0.0;
-            let mut up = true;
-            while t < length && t < 1e6 {
-                let a = at(t);
-                let b = at((t + step).min(length));
-                let (s0, s1) = if up { (1.0, -1.0) } else { (-1.0, 1.0) };
-                segment(
-                    pixmap,
-                    (a.0 + nx * s0, a.1 + ny * s0),
-                    (b.0 + nx * s1, b.1 + ny * s1),
-                    width * 0.7,
-                    color,
-                );
-                t += step;
-                up = !up;
+            let line = &mask.coverage[row as usize * mask.width..(row as usize + 1) * mask.width];
+            for (col, &c) in line.iter().enumerate().take(end).skip(start) {
+                if c == 0 {
+                    continue;
+                }
+                let at = (y as usize * stride + (x0 + col as i32) as usize) * 4;
+                blend(&mut self.pixmap.data[at..at + 4], color, u32::from(c));
             }
         }
     }
-}
 
-fn placeholder(pixmap: &mut Pixmap, rect: Rect) {
-    let grey = Color(0xC0, 0xC0, 0xC0);
-    fill_rect(pixmap, rect, Color(0xF0, 0xF0, 0xF0));
-    let (x0, y0, x1, y1) = (rect.x, rect.y, rect.right(), rect.bottom());
-    for (p, q) in [
-        ((x0, y0), (x1, y0)),
-        ((x1, y0), (x1, y1)),
-        ((x1, y1), (x0, y1)),
-        ((x0, y1), (x0, y0)),
-        ((x0, y0), (x1, y1)),
-        ((x0, y1), (x1, y0)),
-    ] {
-        segment(pixmap, p, q, 1.0, grey);
+    /// Fills an axis-aligned rectangle with exact fractional edge coverage.
+    fn fill_rect(&mut self, rect: Rect, color: Color) {
+        let x0 = rect.x.max(self.clip.x0);
+        let y0 = rect.y.max(self.clip.y0);
+        let x1 = rect.right().min(self.clip.x1);
+        let y1 = rect.bottom().min(self.clip.y1);
+        if !(x1 > x0 && y1 > y0) {
+            return;
+        }
+        let stride = self.pixmap.width as usize;
+        for py in y0.floor() as u32..y1.ceil() as u32 {
+            let cy = (y1.min(py as f32 + 1.0) - y0.max(py as f32)).clamp(0.0, 1.0);
+            for px in x0.floor() as u32..x1.ceil() as u32 {
+                let cx = (x1.min(px as f32 + 1.0) - x0.max(px as f32)).clamp(0.0, 1.0);
+                let alpha = (cx * cy * 255.0 + 0.5) as u32;
+                let at = (py as usize * stride + px as usize) * 4;
+                blend(&mut self.pixmap.data[at..at + 4], color, alpha);
+            }
+        }
+    }
+
+    fn fill_polygons(&mut self, polys: &Polygons, color: Color) {
+        let mask = rasterize(polys, Some(self.clip.pixels()));
+        self.blit(&mask, 0, 0, color);
+    }
+
+    fn segment(&mut self, p: (f32, f32), q: (f32, f32), width: f32, color: Color) {
+        if p.1 == q.1 {
+            let (x0, x1) = (p.0.min(q.0), p.0.max(q.0));
+            self.fill_rect(Rect::new(x0, p.1 - width / 2.0, x1 - x0, width), color);
+            return;
+        }
+        if p.0 == q.0 {
+            let (y0, y1) = (p.1.min(q.1), p.1.max(q.1));
+            self.fill_rect(Rect::new(p.0 - width / 2.0, y0, width, y1 - y0), color);
+            return;
+        }
+        let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+        let length = (dx * dx + dy * dy).sqrt();
+        let (nx, ny) = (-dy / length * width / 2.0, dx / length * width / 2.0);
+        let quad = vec![
+            Point {
+                x: p.0 + nx,
+                y: p.1 + ny,
+            },
+            Point {
+                x: q.0 + nx,
+                y: q.1 + ny,
+            },
+            Point {
+                x: q.0 - nx,
+                y: q.1 - ny,
+            },
+            Point {
+                x: p.0 - nx,
+                y: p.1 - ny,
+            },
+        ];
+        self.fill_polygons(&vec![quad], color);
+    }
+
+    fn line(&mut self, p: (f32, f32), q: (f32, f32), width: f32, color: Color, style: LineStyle) {
+        let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+        let length = (dx * dx + dy * dy).sqrt();
+        if length <= 0.0 || !length.is_finite() {
+            return;
+        }
+        let (ux, uy) = (dx / length, dy / length);
+        let at = |t: f32| (p.0 + ux * t, p.1 + uy * t);
+        match style {
+            LineStyle::Solid => self.segment(p, q, width, color),
+            LineStyle::Double => {
+                let (nx, ny) = (-uy * width / 3.0, ux * width / 3.0);
+                let thin = width / 3.0;
+                self.segment((p.0 + nx, p.1 + ny), (q.0 + nx, q.1 + ny), thin, color);
+                self.segment((p.0 - nx, p.1 - ny), (q.0 - nx, q.1 - ny), thin, color);
+            }
+            LineStyle::Dotted | LineStyle::Dashed => {
+                let (on, off) = if style == LineStyle::Dotted {
+                    (width, width)
+                } else {
+                    (width * 3.0, width * 2.0)
+                };
+                let mut t = 0.0;
+                while t < length && t < 1e6 {
+                    self.segment(at(t), at((t + on).min(length)), width, color);
+                    t += on + off;
+                }
+            }
+            LineStyle::Wave => {
+                let step = (width * 2.0).max(1.0);
+                let (nx, ny) = (-uy * width, ux * width);
+                let mut t = 0.0;
+                let mut up = true;
+                while t < length && t < 1e6 {
+                    let a = at(t);
+                    let b = at((t + step).min(length));
+                    let (s0, s1) = if up { (1.0, -1.0) } else { (-1.0, 1.0) };
+                    self.segment(
+                        (a.0 + nx * s0, a.1 + ny * s0),
+                        (b.0 + nx * s1, b.1 + ny * s1),
+                        width * 0.7,
+                        color,
+                    );
+                    t += step;
+                    up = !up;
+                }
+            }
+        }
+    }
+
+    fn placeholder(&mut self, rect: Rect) {
+        let grey = Color(0xC0, 0xC0, 0xC0);
+        self.fill_rect(rect, Color(0xF0, 0xF0, 0xF0));
+        let (x0, y0, x1, y1) = (rect.x, rect.y, rect.right(), rect.bottom());
+        for (p, q) in [
+            ((x0, y0), (x1, y0)),
+            ((x1, y0), (x1, y1)),
+            ((x1, y1), (x0, y1)),
+            ((x0, y1), (x0, y0)),
+            ((x0, y0), (x1, y1)),
+            ((x0, y1), (x1, y0)),
+        ] {
+            self.segment(p, q, 1.0, grey);
+        }
+    }
+
+    fn draw_image(&mut self, image: &Decoded, rect: Rect) {
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
+        }
+        let reduced = reduce(image, rect.width, rect.height);
+        let src = reduced.as_ref().unwrap_or(image);
+        let (sw, sh) = (src.width as usize, src.height as usize);
+        let (cx0, cy0, cx1, cy1) = self.clip.pixels();
+        let x0 = (rect.x.floor() as i32).max(cx0).max(0) as u32;
+        let y0 = (rect.y.floor() as i32).max(cy0).max(0) as u32;
+        let x1 = (rect.right().ceil() as i32).min(cx1).max(0) as u32;
+        let y1 = (rect.bottom().ceil() as i32).min(cy1).max(0) as u32;
+        let stride = self.pixmap.width as usize;
+        let sx = sw as f32 / rect.width;
+        let sy = sh as f32 / rect.height;
+        let sample = |x: usize, y: usize, c: usize| {
+            f32::from(src.rgba[(y.min(sh - 1) * sw + x.min(sw - 1)) * 4 + c])
+        };
+        for py in y0..y1 {
+            let v = ((py as f32 + 0.5 - rect.y) * sy - 0.5).max(0.0);
+            let (vy, fy) = (v.floor() as usize, v - v.floor());
+            for px in x0..x1 {
+                let u = ((px as f32 + 0.5 - rect.x) * sx - 0.5).max(0.0);
+                let (ux, fx) = (u.floor() as usize, u - u.floor());
+                let mut rgba = [0f32; 4];
+                for (c, slot) in rgba.iter_mut().enumerate() {
+                    let top = sample(ux, vy, c) * (1.0 - fx) + sample(ux + 1, vy, c) * fx;
+                    let bottom =
+                        sample(ux, vy + 1, c) * (1.0 - fx) + sample(ux + 1, vy + 1, c) * fx;
+                    *slot = top * (1.0 - fy) + bottom * fy;
+                }
+                let at = (py as usize * stride + px as usize) * 4;
+                let color = Color(rgba[0] as u8, rgba[1] as u8, rgba[2] as u8);
+                blend(&mut self.pixmap.data[at..at + 4], color, rgba[3] as u32);
+            }
+        }
     }
 }
 
@@ -390,40 +463,5 @@ fn reduce(image: &Decoded, target_w: f32, target_h: f32) -> Option<Decoded> {
             height: h,
             rgba,
         });
-    }
-}
-
-fn draw_image(pixmap: &mut Pixmap, image: &Decoded, rect: Rect) {
-    if rect.width <= 0.0 || rect.height <= 0.0 {
-        return;
-    }
-    let reduced = reduce(image, rect.width, rect.height);
-    let src = reduced.as_ref().unwrap_or(image);
-    let (sw, sh) = (src.width as usize, src.height as usize);
-    let x0 = rect.x.max(0.0).floor() as u32;
-    let y0 = rect.y.max(0.0).floor() as u32;
-    let x1 = (rect.right().min(pixmap.width as f32)).ceil().max(0.0) as u32;
-    let y1 = (rect.bottom().min(pixmap.height as f32)).ceil().max(0.0) as u32;
-    let sx = sw as f32 / rect.width;
-    let sy = sh as f32 / rect.height;
-    let sample = |x: usize, y: usize, c: usize| {
-        f32::from(src.rgba[(y.min(sh - 1) * sw + x.min(sw - 1)) * 4 + c])
-    };
-    for py in y0..y1 {
-        let v = ((py as f32 + 0.5 - rect.y) * sy - 0.5).max(0.0);
-        let (vy, fy) = (v.floor() as usize, v - v.floor());
-        for px in x0..x1 {
-            let u = ((px as f32 + 0.5 - rect.x) * sx - 0.5).max(0.0);
-            let (ux, fx) = (u.floor() as usize, u - u.floor());
-            let mut rgba = [0f32; 4];
-            for (c, slot) in rgba.iter_mut().enumerate() {
-                let top = sample(ux, vy, c) * (1.0 - fx) + sample(ux + 1, vy, c) * fx;
-                let bottom = sample(ux, vy + 1, c) * (1.0 - fx) + sample(ux + 1, vy + 1, c) * fx;
-                *slot = top * (1.0 - fy) + bottom * fy;
-            }
-            let at = (py as usize * pixmap.width as usize + px as usize) * 4;
-            let color = Color(rgba[0] as u8, rgba[1] as u8, rgba[2] as u8);
-            blend(&mut pixmap.data[at..at + 4], color, rgba[3] as u32);
-        }
     }
 }
