@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use docboss_font::FontDatabase;
 use docboss_model::{
-    Block, Break, Color, Diagnostic, Document, DrawingPosition, HeaderFooterRefs, Inline, MediaId,
-    NoteKind, NumberFormat, NumberingCounter, PositionAlign, PositionBase, RunContent,
+    Block, Break, Color, Diagnostic, Document, DrawingPosition, HeaderFooterRefs, Inline, LineCap,
+    MediaId, NoteKind, NumberFormat, NumberingCounter, PositionAlign, PositionBase, RunContent,
     SectionBreak, SectionProperties,
 };
 
@@ -943,6 +943,7 @@ fn separator_line(width: f32) -> Item {
         width: 0.5,
         color: Color::BLACK,
         style: LineStyle::Solid,
+        cap: LineCap::Flat,
     }
 }
 

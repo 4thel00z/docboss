@@ -77,14 +77,15 @@ pub(crate) fn layout_text_box(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<Te
     }
     if let Some(color) = shape.outline {
         let line = emu_to_pt(shape.outline_width.unwrap_or(DEFAULT_OUTLINE)).max(0.25);
-        let corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)];
-        items.extend((0..4).map(|i| Item::Line {
-            from: corners[i],
-            to: corners[(i + 1) % 4],
+        let style = shape.outline_dash.map_or(LineStyle::Solid, LineStyle::Dash);
+        items.push(Item::Outline {
+            rect: Rect::new(0.0, 0.0, width, height),
             width: line,
             color,
-            style: LineStyle::Solid,
-        }));
+            style,
+            cap: shape.outline_cap,
+            join: shape.outline_join,
+        });
     }
     Some(TextBox { items, height })
 }

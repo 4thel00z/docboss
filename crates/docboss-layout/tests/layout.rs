@@ -904,8 +904,7 @@ fn framed() -> docboss_model::ShapeFormat {
         outline: Some(docboss_model::Color::BLACK),
         outline_width: Some(12_700),
         insets: Some([127_000, 127_000, 127_000, 127_000]),
-        text_anchor: None,
-        auto_fit: false,
+        ..docboss_model::ShapeFormat::default()
     }
 }
 
@@ -958,9 +957,9 @@ fn anchored_text_boxes_paint_fill_text_and_outline() {
     let outline = page
         .items
         .iter()
-        .filter(|item| matches!(item, Item::Line { width, .. } if (*width - 1.0).abs() < 0.01))
+        .filter(|item| matches!(item, Item::Outline { width, .. } if (*width - 1.0).abs() < 0.01))
         .count();
-    assert_eq!(outline, 4);
+    assert_eq!(outline, 1);
     assert!(!page
         .items
         .iter()
@@ -1051,7 +1050,7 @@ fn word_text_box_is_centered_on_its_column() {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Line { from, to, .. } if from.0 == to.0 => Some(from.0),
+            Item::Outline { rect, .. } => Some(rect.x),
             _ => None,
         })
         .fold(f32::MAX, f32::min);

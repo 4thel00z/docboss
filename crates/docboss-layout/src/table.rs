@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Color, Justification, Table, TableProperties, VerticalAlign,
-    VerticalMerge,
+    Border, BorderStyle, Borders, Color, DashPattern, Justification, LineCap, Table,
+    TableProperties, VerticalAlign, VerticalMerge,
 };
 
 use crate::flow::{layout_blocks, stack_height, Ctx, Slab};
@@ -20,20 +20,33 @@ fn span(cell: &docboss_model::TableCell) -> usize {
     (cell.span() as usize).min(MAX_COLUMNS)
 }
 
-/// A border line along an edge, or `None` for no border.
+/// A border line along an edge, or `None` for no border. ECMA-376 Part 1
+/// §17.18.2 names the dashed border styles without lengths; they are drawn
+/// as LibreOffice draws them, with round caps and dash and space lengths in
+/// points that do not grow with the border's width.
 pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> Option<Item> {
-    let style = match border.style {
-        BorderStyle::None => return None,
-        BorderStyle::Dotted => LineStyle::Dotted,
-        BorderStyle::Dashed => LineStyle::Dashed,
-        BorderStyle::Double => LineStyle::Double,
-        _ => LineStyle::Solid,
-    };
     let width = (border.size as f32 / 8.0).max(0.25);
     let width = if border.style == BorderStyle::Thick {
         width * 1.5
     } else {
         width
+    };
+    let dashes: &[(f32, f32)] = match border.style {
+        BorderStyle::None => return None,
+        BorderStyle::Dotted => &[(0.5, 1.0)],
+        BorderStyle::Dashed => &[(8.0, 2.5)],
+        BorderStyle::DashSmallGap => &[(3.0, 1.0)],
+        BorderStyle::DotDash => &[(2.5, 2.5), (8.0, 2.5)],
+        BorderStyle::DotDotDash => &[(2.5, 2.5), (2.5, 2.5), (8.0, 2.5)],
+        _ => &[],
+    };
+    let style = match border.style {
+        BorderStyle::Double => LineStyle::Double,
+        _ => dash_in_points(dashes, width).map_or(LineStyle::Solid, LineStyle::Dash),
+    };
+    let cap = match style {
+        LineStyle::Dash(_) => LineCap::Round,
+        _ => LineCap::Flat,
     };
     Some(Item::Line {
         from,
@@ -41,7 +54,19 @@ pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> 
         width,
         color: border.color.unwrap_or(Color::BLACK),
         style,
+        cap,
     })
+}
+
+/// A dash pattern from dash and space lengths in points, for a line
+/// `width` points wide.
+fn dash_in_points(dashes: &[(f32, f32)], width: f32) -> Option<DashPattern> {
+    let hundredths = |points: f32| (points / width * 100.0).round() as u32;
+    let stops: Vec<(u32, u32)> = dashes
+        .iter()
+        .map(|(dash, space)| (hundredths(*dash), hundredths(*space)))
+        .collect();
+    DashPattern::new(&stops)
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

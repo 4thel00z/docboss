@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use docboss_font::FontId;
 use docboss_layout::{GlyphRun, Item, Layout, LineStyle, Rect};
-use docboss_model::{Color, Diagnostic, MediaId};
+use docboss_model::{Color, DashPattern, Diagnostic, LineCap, LineJoin, MediaId};
 
 use crate::image::{decode, Decoded, ImageError};
 use crate::raster::{flatten, rasterize, Mask, Point, Polygons};
@@ -13,6 +13,8 @@ use crate::{Error, Pixmap, Result};
 
 const SUBPIXEL: f32 = 4.0;
 const SLANT: f32 = 0.21;
+/// The most dashes one line is cut into.
+const MAX_DASHES: usize = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct GlyphKey {
@@ -65,14 +67,30 @@ impl Renderer {
                     width,
                     color,
                     style,
+                    cap,
                 } => {
                     let p = (from.0 * scale, from.1 * scale);
                     let q = (to.0 * scale, to.1 * scale);
-                    canvas.line(p, q, (width * scale).max(0.5), *color, *style);
+                    canvas.line(p, q, (width * scale).max(0.5), *color, *style, *cap);
                 }
                 Item::Image { media, rect } => {
                     self.image(layout, &mut canvas, *media, scaled(*rect, scale))
                 }
+                Item::Outline {
+                    rect,
+                    width,
+                    color,
+                    style,
+                    cap,
+                    join,
+                } => canvas.outline(
+                    scaled(*rect, scale),
+                    (width * scale).max(0.5),
+                    *color,
+                    *style,
+                    *cap,
+                    *join,
+                ),
                 Item::ClipBegin(rect) => {
                     outer.push(clip);
                     clip = clip.intersect(scaled(*rect, scale));
@@ -190,6 +208,16 @@ fn blend(dst: &mut [u8], color: Color, alpha: u32) {
     dst[0] = ((u32::from(color.0) * alpha + u32::from(dst[0]) * inv + 127) / 255) as u8;
     dst[1] = ((u32::from(color.1) * alpha + u32::from(dst[1]) * inv + 127) / 255) as u8;
     dst[2] = ((u32::from(color.2) * alpha + u32::from(dst[2]) * inv + 127) / 255) as u8;
+}
+
+/// The unit vector from `p` to `q`, or `(1, 0)` when they coincide.
+fn direction(p: (f32, f32), q: (f32, f32)) -> (f32, f32) {
+    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+    let length = (dx * dx + dy * dy).sqrt();
+    if length <= 0.0 || !length.is_finite() {
+        return (1.0, 0.0);
+    }
+    (dx / length, dy / length)
 }
 
 /// The device rectangle, in pixels, that painting is confined to.
@@ -324,7 +352,15 @@ impl Canvas<'_> {
         self.fill_polygons(&vec![quad], color);
     }
 
-    fn line(&mut self, p: (f32, f32), q: (f32, f32), width: f32, color: Color, style: LineStyle) {
+    fn line(
+        &mut self,
+        p: (f32, f32),
+        q: (f32, f32),
+        width: f32,
+        color: Color,
+        style: LineStyle,
+        cap: LineCap,
+    ) {
         let (dx, dy) = (q.0 - p.0, q.1 - p.1);
         let length = (dx * dx + dy * dy).sqrt();
         if length <= 0.0 || !length.is_finite() {
@@ -333,24 +369,15 @@ impl Canvas<'_> {
         let (ux, uy) = (dx / length, dy / length);
         let at = |t: f32| (p.0 + ux * t, p.1 + uy * t);
         match style {
-            LineStyle::Solid => self.segment(p, q, width, color),
+            LineStyle::Solid => self.capped(p, q, (ux, uy), width, color, cap),
+            LineStyle::Dash(pattern) => {
+                self.dashed_path(&[p, q], false, width, color, pattern, cap, None)
+            }
             LineStyle::Double => {
                 let (nx, ny) = (-uy * width / 3.0, ux * width / 3.0);
                 let thin = width / 3.0;
                 self.segment((p.0 + nx, p.1 + ny), (q.0 + nx, q.1 + ny), thin, color);
                 self.segment((p.0 - nx, p.1 - ny), (q.0 - nx, q.1 - ny), thin, color);
-            }
-            LineStyle::Dotted | LineStyle::Dashed => {
-                let (on, off) = if style == LineStyle::Dotted {
-                    (width, width)
-                } else {
-                    (width * 3.0, width * 2.0)
-                };
-                let mut t = 0.0;
-                while t < length && t < 1e6 {
-                    self.segment(at(t), at((t + on).min(length)), width, color);
-                    t += on + off;
-                }
             }
             LineStyle::Wave => {
                 let step = (width * 2.0).max(1.0);
@@ -372,6 +399,190 @@ impl Canvas<'_> {
                 }
             }
         }
+    }
+
+    /// Strokes the polyline through `points`, closed back to the first when
+    /// `closed`, with the pattern's dashes running on across its corners.
+    /// A dash that runs through a corner gets `join` there. A pattern whose
+    /// period is under a pixel is drawn solid.
+    #[allow(clippy::too_many_arguments)]
+    fn dashed_path(
+        &mut self,
+        points: &[(f32, f32)],
+        closed: bool,
+        width: f32,
+        color: Color,
+        pattern: DashPattern,
+        cap: LineCap,
+        join: Option<LineJoin>,
+    ) {
+        let unit = width / 100.0;
+        let stops = pattern.stops();
+        let period: f32 = stops
+            .iter()
+            .map(|(dash, space)| (f32::from(*dash) + f32::from(*space)) * unit)
+            .sum();
+        let sides = if closed {
+            points.len()
+        } else {
+            points.len().saturating_sub(1)
+        };
+        let side = |i: usize| (points[i], points[(i + 1) % points.len()]);
+        if period < 1.0 {
+            for i in 0..sides {
+                let (p, q) = side(i);
+                self.line(p, q, width, color, LineStyle::Solid, cap);
+            }
+            return;
+        }
+        let mut index = 0;
+        let mut on = true;
+        let mut left = f32::from(stops[0].0) * unit;
+        let mut pieces = 0;
+        for i in 0..sides {
+            let (p, q) = side(i);
+            let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+            let length = (dx * dx + dy * dy).sqrt();
+            if length <= 0.0 || !length.is_finite() {
+                continue;
+            }
+            let u = (dx / length, dy / length);
+            let at = |t: f32| (p.0 + u.0 * t, p.1 + u.1 * t);
+            let mut t = 0.0;
+            while t < length && pieces < MAX_DASHES {
+                let step = left.min(length - t);
+                if on {
+                    self.capped(at(t), at(t + step), u, width, color, cap);
+                }
+                t += step;
+                left -= step;
+                if left > 0.0 {
+                    continue;
+                }
+                pieces += 1;
+                if on {
+                    on = false;
+                    left = f32::from(stops[index].1) * unit;
+                    continue;
+                }
+                index = (index + 1) % stops.len();
+                on = true;
+                left = f32::from(stops[index].0) * unit;
+            }
+            let Some(join) = join.filter(|_| on && left > 0.0) else {
+                continue;
+            };
+            let next = side((i + 1) % points.len());
+            self.join(q, u, direction(next.0, next.1), width, color, join);
+        }
+    }
+
+    /// A rectangle's outline, stroked clockwise from the top-left corner.
+    fn outline(
+        &mut self,
+        rect: Rect,
+        width: f32,
+        color: Color,
+        style: LineStyle,
+        cap: LineCap,
+        join: LineJoin,
+    ) {
+        let corners = [
+            (rect.x, rect.y),
+            (rect.right(), rect.y),
+            (rect.right(), rect.bottom()),
+            (rect.x, rect.bottom()),
+        ];
+        if let LineStyle::Dash(pattern) = style {
+            self.dashed_path(&corners, true, width, color, pattern, cap, Some(join));
+            return;
+        }
+        for i in 0..4 {
+            let (p, q) = (corners[i], corners[(i + 1) % 4]);
+            self.line(p, q, width, color, style, LineCap::Flat);
+        }
+        if style != LineStyle::Solid {
+            return;
+        }
+        for i in 0..4 {
+            let incoming = direction(corners[(i + 3) % 4], corners[i]);
+            let outgoing = direction(corners[i], corners[(i + 1) % 4]);
+            self.join(corners[i], incoming, outgoing, width, color, join);
+        }
+    }
+
+    /// The corner at `c` where a stroke arriving along `a` leaves along `b`.
+    fn join(
+        &mut self,
+        c: (f32, f32),
+        a: (f32, f32),
+        b: (f32, f32),
+        width: f32,
+        color: Color,
+        join: LineJoin,
+    ) {
+        let half = width / 2.0;
+        let normal = |d: (f32, f32)| (d.1 * half, -d.0 * half);
+        let (na, nb) = (normal(a), normal(b));
+        let point = |x: f32, y: f32| Point { x, y };
+        let polygon = match join {
+            LineJoin::Round if half >= 1.0 => return self.capsule(c, c, a, half, color),
+            LineJoin::Bevel => vec![
+                point(c.0, c.1),
+                point(c.0 + na.0, c.1 + na.1),
+                point(c.0 + nb.0, c.1 + nb.1),
+            ],
+            LineJoin::Miter | LineJoin::Round => vec![
+                point(c.0 - na.0 - nb.0, c.1 - na.1 - nb.1),
+                point(c.0 + na.0 - nb.0, c.1 + na.1 - nb.1),
+                point(c.0 + na.0 + nb.0, c.1 + na.1 + nb.1),
+                point(c.0 - na.0 + nb.0, c.1 - na.1 + nb.1),
+            ],
+        };
+        self.fill_polygons(&vec![polygon], color);
+    }
+
+    /// A straight piece from `p` to `q` along the unit vector `u`, its
+    /// ends drawn with `cap`. A round cap under a pixel across is drawn
+    /// square.
+    fn capped(
+        &mut self,
+        p: (f32, f32),
+        q: (f32, f32),
+        u: (f32, f32),
+        width: f32,
+        color: Color,
+        cap: LineCap,
+    ) {
+        let half = width / 2.0;
+        match cap {
+            LineCap::Flat if p != q => self.segment(p, q, width, color),
+            LineCap::Flat => {}
+            LineCap::Round if half >= 1.0 => self.capsule(p, q, u, half, color),
+            LineCap::Square | LineCap::Round => {
+                let (ex, ey) = (u.0 * half, u.1 * half);
+                self.segment((p.0 - ex, p.1 - ey), (q.0 + ex, q.1 + ey), width, color);
+            }
+        }
+    }
+
+    /// The piece from `p` to `q` with a half disc of `radius` on each end.
+    fn capsule(&mut self, p: (f32, f32), q: (f32, f32), u: (f32, f32), radius: f32, color: Color) {
+        let steps = ((radius * 1.5).ceil() as usize).clamp(4, 32);
+        let base = u.1.atan2(u.0) - std::f32::consts::FRAC_PI_2;
+        let arc = |center: (f32, f32), from: f32| {
+            (0..=steps).map(move |i| {
+                let angle = from + std::f32::consts::PI * i as f32 / steps as f32;
+                Point {
+                    x: center.0 + radius * angle.cos(),
+                    y: center.1 + radius * angle.sin(),
+                }
+            })
+        };
+        let outline: Vec<Point> = arc(q, base)
+            .chain(arc(p, base + std::f32::consts::PI))
+            .collect();
+        self.fill_polygons(&vec![outline], color);
     }
 
     fn placeholder(&mut self, rect: Rect) {

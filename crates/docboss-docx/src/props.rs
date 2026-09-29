@@ -197,7 +197,8 @@ fn tabs(reader: &mut Reader<'_>) -> Vec<TabStop> {
     stops
 }
 
-/// One border (ECMA-376 Part 1 §17.3.4): style, width, spacing and color.
+/// One border (ECMA-376 Part 1 §17.3.4): style (§17.18.2), width, spacing
+/// and color.
 fn border(e: &Element<'_>) -> Border {
     let style = match val(e).as_deref() {
         Some("nil" | "none") => BorderStyle::None,
@@ -206,6 +207,9 @@ fn border(e: &Element<'_>) -> Border {
         Some("double") => BorderStyle::Double,
         Some("dotted") => BorderStyle::Dotted,
         Some("dashed") => BorderStyle::Dashed,
+        Some("dotDash") => BorderStyle::DotDash,
+        Some("dotDotDash") => BorderStyle::DotDotDash,
+        Some("dashSmallGap") => BorderStyle::DashSmallGap,
         _ => BorderStyle::Other,
     };
     Border {

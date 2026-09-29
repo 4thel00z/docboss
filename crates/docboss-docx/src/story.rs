@@ -4,10 +4,10 @@
 use std::collections::HashMap;
 
 use docboss_model::{
-    Block, Break, Color, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink,
-    Inline, MediaId, Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run,
-    RunContent, RunProperties, Section, SectionProperties, Table, TableCell, TableRow,
-    VerticalAlign,
+    Block, Break, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement, DrawingPosition,
+    Field, Hyperlink, Inline, LineCap, LineJoin, MediaId, Paragraph, PositionAlign, PositionBase,
+    Revision, RevisionKind, Run, RunContent, RunProperties, Section, SectionProperties, Table,
+    TableCell, TableRow, VerticalAlign,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -353,8 +353,19 @@ fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
 }
 
 /// A shape's fill and outline from `wps:spPr` (ECMA-376 Part 1 §20.4.2.35,
-/// §20.1.2.2.24 `a:ln`), recording which of the two it states.
-fn shape_properties(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingInfo) {
+/// §20.1.2.2.24 `a:ln`), recording which of the two it states: the dash
+/// (§20.1.8.48, §20.1.8.21), the cap (§20.1.10.31) and the join
+/// (§20.1.8.9, §20.1.8.43, §20.1.8.52). An outline without `cap` takes
+/// round caps, as LibreOffice draws it, not the square the clause names.
+/// Returns a note when a preset dash is unknown or a custom dash has more
+/// stops than a pattern holds.
+fn shape_properties(
+    reader: &mut Reader<'_>,
+    theme: &Theme,
+    info: &mut DrawingInfo,
+) -> Option<String> {
+    let mut note = None;
+    info.drawing.shape.outline_cap = LineCap::Round;
     children(reader, |reader, e| {
         if e.ns != Ns::A {
             return;
@@ -369,20 +380,50 @@ fn shape_properties(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingIn
                 info.fill_stated = e.local == "noFill";
             }
             "ln" => {
-                info.drawing.shape.outline_width = e.attr_raw(Ns::NONE, "w").and_then(int);
+                let shape = &mut info.drawing.shape;
+                shape.outline_width = e.attr_raw(Ns::NONE, "w").and_then(int);
+                shape.outline_cap = match e.attr_raw(Ns::NONE, "cap") {
+                    Some("flat") => LineCap::Flat,
+                    Some("sq") => LineCap::Square,
+                    _ => LineCap::Round,
+                };
                 children(reader, |reader, fill| {
                     if fill.ns != Ns::A {
                         return;
                     }
+                    let shape = &mut info.drawing.shape;
                     match fill.local {
                         "solidFill" => {
-                            info.drawing.shape.outline = color_choice(reader, theme);
+                            shape.outline = color_choice(reader, theme);
                             info.line_stated = true;
                         }
                         "noFill" => {
-                            info.drawing.shape.outline = None;
+                            shape.outline = None;
                             info.line_stated = true;
                         }
+                        "prstDash" => {
+                            let name = fill.attr_raw(Ns::NONE, "val").unwrap_or_default();
+                            let Some(dash) = preset_dash(name) else {
+                                note = Some(format!("preset dash \"{name}\" is drawn solid"));
+                                shape.outline_dash = None;
+                                return;
+                            };
+                            shape.outline_dash = dash;
+                        }
+                        "custDash" => {
+                            let stops = dash_stops(reader);
+                            if stops.len() > DashPattern::MAX_STOPS {
+                                note = Some(format!(
+                                    "a custom dash of {} stops is drawn with its first {}",
+                                    stops.len(),
+                                    DashPattern::MAX_STOPS
+                                ));
+                            }
+                            shape.outline_dash = DashPattern::new(&stops);
+                        }
+                        "round" => shape.outline_join = LineJoin::Round,
+                        "bevel" => shape.outline_join = LineJoin::Bevel,
+                        "miter" => shape.outline_join = LineJoin::Miter,
                         _ => {}
                     }
                 });
@@ -390,6 +431,95 @@ fn shape_properties(reader: &mut Reader<'_>, theme: &Theme, info: &mut DrawingIn
             _ => {}
         }
     });
+    note
+}
+
+/// ECMA-376 Part 1 §20.1.8.48 and §20.1.10.49: the pattern of a preset
+/// dash, `Some(None)` for `solid`, `None` for an unknown name.
+fn preset_dash(name: &str) -> Option<Option<DashPattern>> {
+    let bits = match name {
+        "solid" => "1",
+        "dot" => "1000",
+        "dash" => "1111000",
+        "lgDash" => "11111111000",
+        "dashDot" => "11110001000",
+        "lgDashDot" => "111111110001000",
+        "lgDashDotDot" => "1111111100010001000",
+        "sysDash" => "1110",
+        "sysDot" => "10",
+        "sysDashDot" => "111010",
+        "sysDashDotDot" => "11101010",
+        _ => return None,
+    };
+    Some(DashPattern::from_bits(bits))
+}
+
+/// The `a:ds` stops of an `a:custDash` (ECMA-376 Part 1 §20.1.8.21,
+/// §20.1.8.22) in hundredths of the line width, capped at a thousand.
+fn dash_stops(reader: &mut Reader<'_>) -> Vec<(u32, u32)> {
+    let mut stops = Vec::new();
+    children(reader, |_, ds| {
+        if ds.local != "ds" || stops.len() >= 1000 {
+            return;
+        }
+        let length = |name: &str| {
+            ds.attr_raw(Ns::NONE, name)
+                .and_then(percentage)
+                .map_or(0, |v| (v / 1000).clamp(0, i64::from(u32::MAX)) as u32)
+        };
+        stops.push((length("d"), length("sp")));
+    });
+    stops
+}
+
+/// An ST_PositivePercentage in thousandths of a percent: `800000`, or
+/// `800%` as some producers write it.
+fn percentage(value: &str) -> Option<i64> {
+    let Some(percent) = value.trim().strip_suffix('%') else {
+        return int(value);
+    };
+    let percent: f64 = percent
+        .trim()
+        .parse()
+        .ok()
+        .filter(|p: &f64| p.is_finite())?;
+    Some((percent * 1000.0) as i64)
+}
+
+/// A VML `dashstyle` (ECMA-376 Part 1 §17.3.3.19 carries VML shapes): a
+/// preset name or a list of dash and space lengths in line widths.
+fn vml_dash(value: &str) -> Option<DashPattern> {
+    let value = value.trim();
+    let bits = match value.to_ascii_lowercase().as_str() {
+        "solid" => return None,
+        "shortdash" => "1110",
+        "shortdot" => "10",
+        "shortdashdot" => "111010",
+        "shortdashdotdot" => "11101010",
+        "dot" => "1000",
+        "dash" => "1111000",
+        "longdash" => "11111111000",
+        "dashdot" => "11110001000",
+        "longdashdot" => "111111110001000",
+        "longdashdotdot" => "1111111100010001000",
+        _ => {
+            let lengths: Vec<u32> = value
+                .split([' ', ','])
+                .filter(|v| !v.is_empty())
+                .take(2 * DashPattern::MAX_STOPS)
+                .map(|v| {
+                    v.parse::<f32>()
+                        .map_or(0, |f| (f.clamp(0.0, 600.0) * 100.0) as u32)
+                })
+                .collect();
+            let stops: Vec<(u32, u32)> = lengths
+                .chunks(2)
+                .map(|pair| (pair[0], pair.get(1).copied().unwrap_or(pair[0])))
+                .collect();
+            return DashPattern::new(&stops);
+        }
+    };
+    DashPattern::from_bits(bits)
 }
 
 /// The fill and line a shape takes from its `wps:style` references when its
@@ -1004,7 +1134,10 @@ impl<'p> StoryParser<'p> {
                     return;
                 }
                 (Ns::WPS, "spPr") => {
-                    shape_properties(reader, self.ctx.theme, info);
+                    if let Some(note) = shape_properties(reader, self.ctx.theme, info) {
+                        self.diagnostics
+                            .push(Diagnostic::approximated(self.ctx.part, note));
+                    }
                     return;
                 }
                 (Ns::WPS, "style") => {
@@ -1096,6 +1229,26 @@ impl<'p> StoryParser<'p> {
                             .and_then(css_length)
                             .unwrap_or(9_525),
                     );
+                    shape.outline_cap = LineCap::Round;
+                }
+                (Ns::V, "stroke") => {
+                    let shape = &mut info.drawing.shape;
+                    if let Some(style) = e.attr_raw(Ns::NONE, "dashstyle") {
+                        shape.outline_dash = vml_dash(style);
+                    }
+                    match e.attr_raw(Ns::NONE, "endcap") {
+                        Some("flat") => shape.outline_cap = LineCap::Flat,
+                        Some("round") => shape.outline_cap = LineCap::Round,
+                        Some("square") => shape.outline_cap = LineCap::Square,
+                        _ => {}
+                    }
+                    match e.attr_raw(Ns::NONE, "joinstyle") {
+                        Some("round") => shape.outline_join = LineJoin::Round,
+                        Some("bevel") => shape.outline_join = LineJoin::Bevel,
+                        Some("miter") => shape.outline_join = LineJoin::Miter,
+                        _ => {}
+                    }
+                    return;
                 }
                 (Ns::V, "textbox") => {
                     let shape = &mut info.drawing.shape;

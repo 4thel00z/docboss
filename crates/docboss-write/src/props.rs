@@ -172,6 +172,9 @@ fn border_style_name(style: BorderStyle) -> &'static str {
         BorderStyle::Double => "double",
         BorderStyle::Dotted => "dotted",
         BorderStyle::Dashed => "dashed",
+        BorderStyle::DotDash => "dotDash",
+        BorderStyle::DotDotDash => "dotDotDash",
+        BorderStyle::DashSmallGap => "dashSmallGap",
     }
 }
 

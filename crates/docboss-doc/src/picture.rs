@@ -4,7 +4,9 @@
 
 use std::io::Read;
 
-use docboss_model::{Color, PositionAlign, PositionBase, ShapeFormat, VerticalAlign};
+use docboss_model::{
+    Color, DashPattern, LineCap, LineJoin, PositionAlign, PositionBase, ShapeFormat, VerticalAlign,
+};
 
 use crate::bytes::{i16_at, i32_at, slice, u16_at, u32_at, u8_at};
 
@@ -215,12 +217,16 @@ pub fn shape_blip_index(bytes: &[u8], container: &Record) -> Option<u32> {
 /// OfficeArtFOPT, with the [MS-ODRAW] defaults for unstated ones: a white
 /// fill, a black 0.75 pt line, insets of 0.1 by 0.05 inch and text at the
 /// top. A color given as a scheme or system index is left unstated.
-/// [MS-ODRAW] §2.3.7.2, §2.3.7.43, §2.3.8.1, §2.3.8.14, §2.3.8.38, §2.3.21.2, §2.3.21.8, §2.3.21.15.
+/// [MS-ODRAW] §2.3.7.2, §2.3.7.43, §2.3.8.1, §2.3.8.14, §2.3.8.38, §2.3.21.2, §2.3.21.8, §2.3.21.15;
+/// the dash, join and cap from [MS-ODRAW] §2.3.8.17, §2.3.8.26, §2.3.8.27, §2.4.19 and §2.4.20.
 pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
     let mut format = ShapeFormat {
         fill: Some(Color::WHITE),
         outline: Some(Color::BLACK),
         outline_width: Some(9525),
+        outline_dash: None,
+        outline_cap: LineCap::Flat,
+        outline_join: LineJoin::Round,
         insets: Some([91440, 45720, 91440, 45720]),
         text_anchor: None,
         auto_fit: false,
@@ -255,12 +261,46 @@ pub fn shape_format(bytes: &[u8], container: &Record) -> ShapeFormat {
             0x01BF if value & 0x0010_0000 != 0 && value & 0x10 == 0 => format.fill = None,
             0x01C0 => format.outline = color(value),
             0x01CB => format.outline_width = Some(i64::from(value)),
+            0x01CE => format.outline_dash = line_dashing(value),
+            0x01D6 => {
+                format.outline_join = match value {
+                    0 => LineJoin::Bevel,
+                    1 => LineJoin::Miter,
+                    _ => LineJoin::Round,
+                }
+            }
+            0x01D7 => {
+                format.outline_cap = match value {
+                    0 => LineCap::Round,
+                    1 => LineCap::Square,
+                    _ => LineCap::Flat,
+                }
+            }
             0x01FF if value & 0x0008_0000 != 0 && value & 0x08 == 0 => format.outline = None,
             _ => {}
         }
     }
     format.insets = Some(insets);
     format
+}
+
+/// [MS-ODRAW] §2.4.15: the pattern of an MSOLINEDASHING value, `None` for
+/// a solid line or an unknown value.
+fn line_dashing(value: u32) -> Option<DashPattern> {
+    let bits = match value {
+        1 => "1110",
+        2 => "10",
+        3 => "111010",
+        4 => "11101010",
+        5 => "1000",
+        6 => "1111000",
+        7 => "11111111000",
+        8 => "11110001000",
+        9 => "111111110001000",
+        10 => "1111111100010001000",
+        _ => return None,
+    };
+    DashPattern::from_bits(bits)
 }
 
 /// A shape's alignment on each axis, horizontal then vertical: the posh
@@ -395,6 +435,32 @@ mod tests {
 
         let bytes = container(&[(0x01BF, 0x0010_0000)]);
         assert_eq!(shape_format(&bytes, &record(&bytes, 0).unwrap()).fill, None);
+    }
+
+    /// [MS-ODRAW] §2.3.8.17 and §2.4.15: lineDashing presets; §2.3.8.26,
+    /// §2.4.19, §2.3.8.27 and §2.4.20: the join and end cap, round and flat
+    /// when unstated.
+    #[test]
+    fn shape_format_reads_line_dashing_join_and_cap() {
+        let bytes = container(&[]);
+        let shape = shape_format(&bytes, &record(&bytes, 0).unwrap());
+        assert_eq!(shape.outline_dash, None);
+        assert_eq!(shape.outline_join, LineJoin::Round);
+        assert_eq!(shape.outline_cap, LineCap::Flat);
+
+        let bytes = container(&[(0x01CE, 6), (0x01D6, 1), (0x01D7, 0)]);
+        let shape = shape_format(&bytes, &record(&bytes, 0).unwrap());
+        assert_eq!(shape.outline_dash.unwrap().stops(), &[(400, 300)]);
+        assert_eq!(shape.outline_join, LineJoin::Miter);
+        assert_eq!(shape.outline_cap, LineCap::Round);
+
+        let bytes = container(&[(0x01CE, 0), (0x01D6, 0), (0x01D7, 1)]);
+        let shape = shape_format(&bytes, &record(&bytes, 0).unwrap());
+        assert_eq!(shape.outline_dash, None);
+        assert_eq!(shape.outline_join, LineJoin::Bevel);
+        assert_eq!(shape.outline_cap, LineCap::Square);
+        assert_eq!(line_dashing(2).unwrap().stops(), &[(100, 100)]);
+        assert_eq!(line_dashing(11), None);
     }
 
     /// [MS-ODRAW] §2.3.4.19, §2.3.4.20, §2.3.4.21, §2.3.4.22: msophAbs

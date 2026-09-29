@@ -112,6 +112,10 @@ pub enum BorderStyle {
     Double,
     Dotted,
     Dashed,
+    DotDash,
+    DotDotDash,
+    /// Dashes with small gaps between them.
+    DashSmallGap,
     /// Any other line style, drawn as single.
     Other,
 }

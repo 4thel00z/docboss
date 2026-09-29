@@ -18,7 +18,7 @@ mod units;
 use std::sync::Arc;
 
 use docboss_font::{FontDatabase, FontId};
-use docboss_model::{Color, Diagnostic, Document, Media, MediaId};
+use docboss_model::{Color, DashPattern, Diagnostic, Document, LineCap, LineJoin, Media, MediaId};
 
 pub use units::{emu_to_pt, twips_to_pt};
 
@@ -88,8 +88,8 @@ pub struct GlyphRun {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineStyle {
     Solid,
-    Dotted,
-    Dashed,
+    /// Dashes in the pattern's lengths, each capped by the line's cap.
+    Dash(DashPattern),
     Double,
     Wave,
 }
@@ -108,10 +108,21 @@ pub enum Item {
         width: f32,
         color: Color,
         style: LineStyle,
+        cap: LineCap,
     },
     Image {
         media: Option<MediaId>,
         rect: Rect,
+    },
+    /// A rectangle's outline, stroked clockwise from its top-left corner
+    /// with the dash pattern running on across the corners.
+    Outline {
+        rect: Rect,
+        width: f32,
+        color: Color,
+        style: LineStyle,
+        cap: LineCap,
+        join: LineJoin,
     },
     /// Confines the items that follow, up to the matching [`Item::ClipEnd`],
     /// to a rectangle.
@@ -126,9 +137,10 @@ impl Item {
                 run.baseline += dy;
                 run.glyphs.iter_mut().for_each(|g| g.x += dx);
             }
-            Item::Rect { rect, .. } | Item::Image { rect, .. } | Item::ClipBegin(rect) => {
-                *rect = rect.offset(dx, dy)
-            }
+            Item::Rect { rect, .. }
+            | Item::Image { rect, .. }
+            | Item::Outline { rect, .. }
+            | Item::ClipBegin(rect) => *rect = rect.offset(dx, dy),
             Item::Line { from, to, .. } => {
                 *from = (from.0 + dx, from.1 + dy);
                 *to = (to.0 + dx, to.1 + dy);

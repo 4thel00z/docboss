@@ -3,8 +3,8 @@
 //! decorations, and producing one slab per line.
 
 use docboss_model::{
-    Break, Drawing, DrawingPlacement, Inline, Justification, LineRule, NoteKind, Paragraph,
-    RevisionKind, RunContent, TabAlignment, TabLeader, TabStop, Underline,
+    Break, DashPattern, Drawing, DrawingPlacement, Inline, Justification, LineCap, LineRule,
+    NoteKind, Paragraph, RevisionKind, RunContent, TabAlignment, TabLeader, TabStop, Underline,
 };
 
 use crate::breaks;
@@ -1074,8 +1074,12 @@ fn decorate(
         let y = baseline - style.rise + m.underline_position + m.underline_thickness / 2.0;
         let line_style = match kind {
             Underline::Double => LineStyle::Double,
-            Underline::Dotted => LineStyle::Dotted,
-            Underline::Dashed => LineStyle::Dashed,
+            Underline::Dotted => {
+                DashPattern::new(&[(100, 100)]).map_or(LineStyle::Solid, LineStyle::Dash)
+            }
+            Underline::Dashed => {
+                DashPattern::new(&[(300, 200)]).map_or(LineStyle::Solid, LineStyle::Dash)
+            }
             Underline::Wave => LineStyle::Wave,
             _ => LineStyle::Solid,
         };
@@ -1090,6 +1094,7 @@ fn decorate(
             width: thickness,
             color: style.color,
             style: line_style,
+            cap: LineCap::Flat,
         });
     }
     if style.strike || style.double_strike {
@@ -1105,6 +1110,7 @@ fn decorate(
             width: m.strikeout_thickness,
             color: style.color,
             style: line_style,
+            cap: LineCap::Flat,
         });
     }
 }

@@ -103,6 +103,7 @@ pub fn language(lid: u16) -> String {
     tag.to_string()
 }
 
+/// [MS-DOC] §2.9.22: a BrcType as a border style.
 fn brc_style(kind: u8) -> BorderStyle {
     match kind {
         0 | 0xFF => BorderStyle::None,
@@ -110,7 +111,10 @@ fn brc_style(kind: u8) -> BorderStyle {
         2 => BorderStyle::Thick,
         3 => BorderStyle::Double,
         6 => BorderStyle::Dotted,
-        7 | 8 | 9 | 22 => BorderStyle::Dashed,
+        7 => BorderStyle::Dashed,
+        8 => BorderStyle::DotDash,
+        9 => BorderStyle::DotDotDash,
+        22 => BorderStyle::DashSmallGap,
         _ => BorderStyle::Other,
     }
 }
@@ -574,6 +578,17 @@ pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [MS-DOC] §2.9.22: the dashed BrcType values.
+    #[test]
+    fn dashed_border_types() {
+        assert_eq!(brc_style(6), BorderStyle::Dotted);
+        assert_eq!(brc_style(7), BorderStyle::Dashed);
+        assert_eq!(brc_style(8), BorderStyle::DotDash);
+        assert_eq!(brc_style(9), BorderStyle::DotDotDash);
+        assert_eq!(brc_style(0x16), BorderStyle::DashSmallGap);
+        assert_eq!(brc_style(0x17), BorderStyle::Other);
+    }
 
     /// [MS-DOC] §2.9.65 DTTM packs minutes, hours, day, month and years
     /// since 1900.

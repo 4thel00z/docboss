@@ -4,10 +4,10 @@ use std::sync::Arc;
 use docboss_font::FontDatabase;
 use docboss_layout::layout;
 use docboss_model::{
-    Block, Border, BorderStyle, Borders, Color, Document, Drawing, DrawingPlacement,
-    DrawingPosition, Inline, Media, MediaId, Paragraph, ParagraphProperties, PositionBase, Run,
-    RunContent, RunProperties, Section, ShapeFormat, Style, StyleKind, Styles, Table, TableCell,
-    TableProperties, TableRow,
+    Block, Border, BorderStyle, Borders, Color, DashPattern, Document, Drawing, DrawingPlacement,
+    DrawingPosition, Inline, LineCap, LineJoin, Media, MediaId, Paragraph, ParagraphProperties,
+    PositionBase, Run, RunContent, RunProperties, Section, ShapeFormat, Style, StyleKind, Styles,
+    Table, TableCell, TableProperties, TableRow,
 };
 use docboss_render::{render_page, render_pages, Format, Pixmap};
 
@@ -227,8 +227,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
             outline: Some(Color::BLACK),
             outline_width: Some(12_700),
             insets: Some([127_000; 4]),
-            text_anchor: None,
-            auto_fit: false,
+            ..ShapeFormat::default()
         },
     };
     let doc = document(vec![para(vec![Inline::Run(Run {
@@ -248,6 +247,100 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
     assert!(pixmap
         .pixel(72, 120)
         .is_some_and(|p| p[0] < 200 && p[2] == 0));
+}
+
+fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(Drawing {
+            media: None,
+            width: 2_540_000,
+            height: 1_270_000,
+            placement: DrawingPlacement::Anchored {
+                horizontal: DrawingPosition::offset(PositionBase::Page, x_pt * 12_700),
+                vertical: DrawingPosition::offset(PositionBase::Page, 914_400),
+                behind_text: false,
+            },
+            name: None,
+            description: None,
+            text_box: vec![para(vec![])],
+            shape,
+        })],
+    })
+}
+
+fn dark(pixmap: &Pixmap, x: u32, y: u32) -> bool {
+    pixmap.pixel(x, y).is_some_and(|p| p[0] < 128)
+}
+
+/// ECMA-376 Part 1 §20.1.8.48 and §20.1.10.49: a dashed outline runs its
+/// pattern on around the corners; §20.1.8.43: a miter join squares a
+/// corner a dash runs through; §20.1.10.31: flat caps end a dash at its
+/// length, round caps reach half the width past it.
+#[test]
+fn dashed_outlines_follow_their_pattern_caps_and_joins() {
+    let dashed = |cap: LineCap, bits: &str| ShapeFormat {
+        outline: Some(Color::BLACK),
+        outline_width: Some(25_400),
+        outline_dash: DashPattern::from_bits(bits),
+        outline_cap: cap,
+        outline_join: LineJoin::Miter,
+        insets: Some([0; 4]),
+        ..ShapeFormat::default()
+    };
+    let doc = document(vec![para(vec![
+        outlined_box(72, dashed(LineCap::Flat, "1111000")),
+        outlined_box(300, dashed(LineCap::Flat, "1000")),
+    ])]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    assert!(dark(&pixmap, 75, 72));
+    assert!(!dark(&pixmap, 83, 72));
+    assert!(dark(&pixmap, 89, 72));
+    assert!(dark(&pixmap, 272, 74));
+    assert!(!dark(&pixmap, 272, 79));
+    assert!(dark(&pixmap, 272, 71));
+    assert!(dark(&pixmap, 300, 72));
+    assert!(!dark(&pixmap, 302, 72));
+
+    let doc = document(vec![para(vec![outlined_box(
+        300,
+        dashed(LineCap::Round, "1000"),
+    )])]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 1.0).unwrap();
+    assert!(dark(&pixmap, 302, 72));
+    assert!(!dark(&pixmap, 304, 72));
+}
+
+/// ECMA-376 Part 1 §17.18.2: a dashed paragraph border is drawn as dashes
+/// with gaps between them, not as a solid line.
+#[test]
+fn dashed_borders_paint_dashes() {
+    let border = Border {
+        style: BorderStyle::Dashed,
+        size: 8,
+        space: 1,
+        color: None,
+    };
+    let doc = document(vec![Block::Paragraph(Paragraph {
+        properties: ParagraphProperties {
+            borders: Some(Borders {
+                bottom: Some(border),
+                ..Borders::default()
+            }),
+            ..ParagraphProperties::default()
+        },
+        inlines: vec![run("Bordered", RunProperties::default())],
+        ..Paragraph::default()
+    })]);
+    let pixmap = render_page(&layout(&doc, &fonts()), 0, 4.0).unwrap();
+    let row = (300..600)
+        .max_by_key(|&y| (300..2100).filter(|&x| dark(&pixmap, x, y)).count())
+        .unwrap();
+    let marks: Vec<bool> = (300..2100).map(|x| dark(&pixmap, x, row)).collect();
+    let gaps = marks.windows(2).filter(|w| w[0] && !w[1]).count();
+    let ink = marks.iter().filter(|&&m| m).count();
+    assert!((38..=46).contains(&gaps), "{gaps}");
+    assert!(ink > marks.len() * 7 / 10, "{ink}");
 }
 
 #[test]

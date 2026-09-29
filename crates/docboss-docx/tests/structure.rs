@@ -1,8 +1,9 @@
 use docboss_docx::read;
 use docboss_model::{
     plain_text, Block, BorderStyle, Break, Color, DrawingPlacement, DrawingPosition,
-    HeaderFooterKind, Inline, Justification, NumberFormat, NumberingRef, PositionAlign,
-    PositionBase, RevisionKind, RunContent, SectionBreak, VerticalAlign, VerticalMerge,
+    HeaderFooterKind, Inline, Justification, LineCap, LineJoin, NumberFormat, NumberingRef,
+    PositionAlign, PositionBase, RevisionKind, RunContent, SectionBreak, VerticalAlign,
+    VerticalMerge,
 };
 use docboss_testkit::Docx;
 
@@ -638,6 +639,78 @@ fn vml_text_box_shape_format() {
     assert_eq!(drawing.shape.outline, None);
     assert_eq!(drawing.shape.insets, Some([12_700, 25_400, 38_100, 50_800]));
     assert!(drawing.shape.auto_fit);
+}
+
+/// ECMA-376 Part 1 §20.1.8.48, §20.1.10.49: a preset dash; §20.1.10.31:
+/// the `cap` attribute; §20.1.8.43: a miter join; §20.1.8.21 and
+/// §20.1.8.22: custom dash stops, in thousandths of a percent or with a
+/// percent sign.
+#[test]
+fn text_box_outline_dashes_caps_and_joins() {
+    let shape = |ln: &str| {
+        let body = format!(
+            r#"<w:p><w:r><w:drawing><wp:anchor><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:spPr>{ln}</wps:spPr><wps:txbx><w:txbxContent><w:p/></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#
+        );
+        first_drawing(&read(&Docx::new(&body).build()).unwrap()).shape
+    };
+    let preset = shape(
+        r#"<a:ln w="12700" cap="flat"><a:prstDash val="lgDashDotDot"/><a:miter lim="800000"/></a:ln>"#,
+    );
+    assert_eq!(
+        preset.outline_dash.unwrap().stops(),
+        &[(800, 300), (100, 300), (100, 300)]
+    );
+    assert_eq!(preset.outline_cap, LineCap::Flat);
+    assert_eq!(preset.outline_join, LineJoin::Miter);
+    let solid = shape(r#"<a:ln><a:prstDash val="solid"/></a:ln>"#);
+    assert_eq!(solid.outline_dash, None);
+    assert_eq!(solid.outline_cap, LineCap::Round);
+    let custom = shape(
+        r#"<a:ln cap="sq"><a:custDash><a:ds d="800000" sp="300000"/><a:ds d="100%" sp="300%"/></a:custDash></a:ln>"#,
+    );
+    assert_eq!(
+        custom.outline_dash.unwrap().stops(),
+        &[(800, 300), (100, 300)]
+    );
+    assert_eq!(custom.outline_cap, LineCap::Square);
+}
+
+/// ECMA-376 Part 1 §17.3.3.19: a VML shape's `v:stroke` dash style, end
+/// cap and join style.
+#[test]
+fn vml_text_box_stroke_dashes() {
+    let body = r##"<w:p><w:r><w:pict xmlns:v="urn:schemas-microsoft-com:vml"><v:shape style="position:absolute;width:100pt;height:50pt"><v:stroke dashstyle="longDashDot" endcap="flat" joinstyle="miter"/><v:textbox><w:txbxContent><w:p/></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>"##;
+    let shape = first_drawing(&read(&Docx::new(body).build()).unwrap()).shape;
+    assert_eq!(
+        shape.outline_dash.unwrap().stops(),
+        &[(800, 300), (100, 300)]
+    );
+    assert_eq!(shape.outline_cap, LineCap::Flat);
+    assert_eq!(shape.outline_join, LineJoin::Miter);
+}
+
+/// ECMA-376 Part 1 §17.18.2: the dashed border styles.
+#[test]
+fn dashed_border_styles() {
+    let border = |val: &str| {
+        let body = format!(
+            r#"<w:p><w:pPr><w:pBdr><w:bottom w:val="{val}" w:sz="4" w:space="1" w:color="000000"/></w:pBdr></w:pPr></w:p>"#
+        );
+        let doc = read(&Docx::new(&body).build()).unwrap();
+        paragraphs(&doc)[0]
+            .properties
+            .borders
+            .unwrap()
+            .bottom
+            .unwrap()
+            .style
+    };
+    assert_eq!(border("dotted"), BorderStyle::Dotted);
+    assert_eq!(border("dashed"), BorderStyle::Dashed);
+    assert_eq!(border("dotDash"), BorderStyle::DotDash);
+    assert_eq!(border("dotDotDash"), BorderStyle::DotDotDash);
+    assert_eq!(border("dashSmallGap"), BorderStyle::DashSmallGap);
+    assert_eq!(border("dashDotStroked"), BorderStyle::Other);
 }
 
 /// ECMA-376 Part 1 §20.1.2.2.37, §20.1.4.2.10, §20.1.4.2.19: a shape whose
