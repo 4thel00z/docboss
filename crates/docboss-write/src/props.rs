@@ -510,6 +510,9 @@ pub fn section_properties(
         .zip(values.iter().map(String::as_str))
         .collect();
     xml.empty("w:pgMar", &margins);
+    if let Some(value) = &props.page_borders {
+        page_borders(&mut xml, value);
+    }
     if let Some(start) = props.page_number_start {
         xml.empty("w:pgNumType", &[("w:start", &start.to_string())]);
     }
@@ -519,6 +522,33 @@ pub fn section_properties(
     }
     xml.close("w:sectPr");
     xml.out
+}
+
+/// ECMA-376 Part 1 §17.6.10: `w:pgBorders` with its sides.
+fn page_borders(xml: &mut Xml, value: &docboss_model::PageBorders) {
+    let offset = match value.offset_from {
+        docboss_model::PageBorderOffset::Page => "page",
+        docboss_model::PageBorderOffset::Text => "text",
+    };
+    let display = match value.display {
+        docboss_model::PageBorderDisplay::AllPages => "allPages",
+        docboss_model::PageBorderDisplay::FirstPage => "firstPage",
+        docboss_model::PageBorderDisplay::NotFirstPage => "notFirstPage",
+    };
+    let z_order = if value.behind_text { "back" } else { "front" };
+    xml.open(
+        "w:pgBorders",
+        &[
+            ("w:offsetFrom", offset),
+            ("w:display", display),
+            ("w:zOrder", z_order),
+        ],
+    );
+    border(xml, "w:top", value.sides.top);
+    border(xml, "w:left", value.sides.left);
+    border(xml, "w:bottom", value.sides.bottom);
+    border(xml, "w:right", value.sides.right);
+    xml.close("w:pgBorders");
 }
 
 fn columns(xml: &mut Xml, columns: &docboss_model::Columns) {

@@ -42,8 +42,8 @@ pub use props::{
     TabLeader, TabStop, Underline, VerticalAlign,
 };
 pub use section::{
-    Columns, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Orientation, PageMargins, PageSize,
-    Section, SectionBreak, SectionProperties,
+    Columns, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Orientation, PageBorderDisplay,
+    PageBorderOffset, PageBorders, PageMargins, PageSize, Section, SectionBreak, SectionProperties,
 };
 pub use style::{Style, StyleKind, Styles};
 pub use text::{number_label, plain_text};

@@ -25,12 +25,7 @@ fn span(cell: &docboss_model::TableCell) -> usize {
 /// as LibreOffice draws them, with round caps and dash and space lengths in
 /// points that do not grow with the border's width.
 pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> Option<Item> {
-    let width = (border.size as f32 / 8.0).max(0.25);
-    let width = if border.style == BorderStyle::Thick {
-        width * 1.5
-    } else {
-        width
-    };
+    let width = border_width(border);
     let dashes: &[(f32, f32)] = match border.style {
         BorderStyle::None => return None,
         BorderStyle::Dotted => &[(0.5, 1.0)],
@@ -56,6 +51,15 @@ pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> 
         style,
         cap,
     })
+}
+
+/// The width a border line is drawn with, in points.
+pub(crate) fn border_width(border: &Border) -> f32 {
+    let width = (border.size as f32 / 8.0).max(0.25);
+    match border.style {
+        BorderStyle::Thick => width * 1.5,
+        _ => width,
+    }
 }
 
 /// A dash pattern from dash and space lengths in points, for a line

@@ -1,4 +1,4 @@
-use crate::Block;
+use crate::{Block, Borders};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -100,6 +100,42 @@ pub struct HeaderFooterRefs {
     pub even: Option<String>,
 }
 
+/// What a page border's `space` is measured from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum PageBorderOffset {
+    /// From the text area: the border lies `space` points outside the
+    /// page margins.
+    #[default]
+    Text,
+    /// From the page edge: the border lies `space` points inside it.
+    Page,
+}
+
+/// The pages of a section a page border is drawn on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum PageBorderDisplay {
+    #[default]
+    AllPages,
+    FirstPage,
+    NotFirstPage,
+}
+
+/// The borders drawn around each page of a section.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct PageBorders {
+    /// The four sides; the inside edges are unused.
+    pub sides: Borders,
+    pub offset_from: PageBorderOffset,
+    pub display: PageBorderDisplay,
+    /// Drawn under the page's text and drawings rather than over them.
+    pub behind_text: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct SectionProperties {
@@ -117,6 +153,7 @@ pub struct SectionProperties {
     /// lower-case Roman for front matter; decimal when absent (ECMA-376
     /// Part 1 §17.6.12).
     pub page_number_format: Option<crate::NumberFormat>,
+    pub page_borders: Option<PageBorders>,
 }
 
 /// A section: its page setup and the blocks laid out with it.

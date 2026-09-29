@@ -2,8 +2,8 @@
 
 use docboss_model::{
     Border, BorderStyle, Borders, Color, Justification, LineRule, NumberingRef, Orientation,
-    ParagraphProperties, RunProperties, SectionBreak, SectionProperties, Shading, TabAlignment,
-    TabLeader, TabStop, Underline, VerticalAlign,
+    PageBorderDisplay, PageBorderOffset, ParagraphProperties, RunProperties, SectionBreak,
+    SectionProperties, Shading, TabAlignment, TabLeader, TabStop, Underline, VerticalAlign,
 };
 
 use crate::bytes::{i16_at, u16_at, u32_at, u8_at};
@@ -496,7 +496,23 @@ pub fn default_section() -> SectionProperties {
     section
 }
 
-/// Applies a section grpprl ([MS-DOC] §2.6.4).
+/// Sets one side of the section's page borders: 0 top, 1 left, 2 bottom,
+/// 3 right, in the order of sprmSBrcTop80 to sprmSBrcRight80 and
+/// sprmSBrcTop to sprmSBrcRight ([MS-DOC] §2.6.4).
+fn page_border_side(section: &mut SectionProperties, side: u16, border: Option<Border>) {
+    let borders = section.page_borders.get_or_insert_with(Default::default);
+    let slot = match side {
+        0 => &mut borders.sides.top,
+        1 => &mut borders.sides.left,
+        2 => &mut borders.sides.bottom,
+        _ => &mut borders.sides.right,
+    };
+    *slot = border;
+}
+
+/// Applies a section grpprl ([MS-DOC] §2.6.4): page size, margins,
+/// columns, numbering and the page borders with their SPgbPropOperand
+/// ([MS-DOC] §2.9.255, §2.9.184, §2.9.185, §2.9.186, §2.9.21).
 pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
     let mut column_widths: Vec<(usize, i32)> = Vec::new();
     let mut column_spacings: Vec<(usize, i32)> = Vec::new();
@@ -551,6 +567,28 @@ pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
             0x501C => section.page_number_start = Some(u32::from(prl.u16())),
             0x300E => section.page_number_format = Some(crate::lists::format(prl.u8())),
             0x7044 => section.page_number_start = Some(prl.u32()),
+            0x702B..=0x702E => {
+                let border = brc80(prl.operand);
+                page_border_side(section, prl.sprm - 0x702B, border);
+            }
+            0xD234..=0xD237 => {
+                let border = brc(prl.variable());
+                page_border_side(section, prl.sprm - 0xD234, border);
+            }
+            0x522F => {
+                let value = prl.u16();
+                let borders = section.page_borders.get_or_insert_with(Default::default);
+                borders.display = match value & 0x7 {
+                    1 => PageBorderDisplay::FirstPage,
+                    2 => PageBorderDisplay::NotFirstPage,
+                    _ => PageBorderDisplay::AllPages,
+                };
+                borders.behind_text = (value >> 3) & 0x3 == 1;
+                borders.offset_from = match (value >> 5) & 0x7 {
+                    1 => PageBorderOffset::Page,
+                    _ => PageBorderOffset::Text,
+                };
+            }
             _ => {}
         }
     }
@@ -592,6 +630,32 @@ mod tests {
 
     /// [MS-DOC] §2.9.65 DTTM packs minutes, hours, day, month and years
     /// since 1900.
+    /// Page borders from sprmSBrcTop80, sprmSBrcRight and sprmSPgbProp.
+    /// [MS-DOC] §2.6.4, §2.9.255, §2.9.184, §2.9.185, §2.9.186, §2.9.17, §2.9.21.
+    #[test]
+    fn page_borders_from_section_sprms() {
+        let mut section = default_section();
+        let grpprl = [
+            0x2B, 0x70, 12, 7, 6, 24, 0x37, 0xD2, 8, 0, 0, 0xFF, 0, 16, 3, 5, 0, 0x2F, 0x52, 0x29,
+            0x00,
+        ];
+        apply_sep(&grpprl, &mut section);
+        let borders = section.page_borders.unwrap();
+        let top = borders.sides.top.unwrap();
+        assert_eq!(
+            (top.style, top.size, top.space),
+            (BorderStyle::Dashed, 12, 24)
+        );
+        let right = borders.sides.right.unwrap();
+        assert_eq!(right.style, BorderStyle::Double);
+        assert_eq!((right.size, right.space), (16, 5));
+        assert_eq!(right.color, Some(Color(0, 0, 0xFF)));
+        assert_eq!(borders.display, PageBorderDisplay::FirstPage);
+        assert!(borders.behind_text);
+        assert_eq!(borders.offset_from, PageBorderOffset::Page);
+        assert_eq!(borders.sides.left, None);
+    }
+
     #[test]
     fn dttm_unpacks() {
         let value = 30 | (14 << 6) | (5 << 11) | (3 << 16) | (124 << 20);

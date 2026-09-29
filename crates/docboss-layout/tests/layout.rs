@@ -174,6 +174,73 @@ fn border() -> Border {
     }
 }
 
+type Segment = ((f32, f32), (f32, f32), f32);
+
+fn border_lines(layout: &Layout, page: usize) -> Vec<Segment> {
+    layout.pages[page]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Line {
+                from, to, width, ..
+            } => Some((*from, *to, *width)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// ECMA-376 Part 1 §17.6.10: page borders measured from the page edge sit
+/// `space` points inside it; measured from the text, `space` points outside
+/// the margins; `display` picks the pages.
+#[test]
+fn page_borders_sit_at_their_offsets() {
+    let side = |size: u32, space: u32| {
+        Some(Border {
+            style: BorderStyle::Single,
+            size,
+            space,
+            color: None,
+        })
+    };
+    let mut document = doc(vec![para("one")]);
+    let sides = Borders {
+        top: side(8, 24),
+        left: side(16, 20),
+        bottom: side(8, 16),
+        right: None,
+        ..Borders::default()
+    };
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides,
+        offset_from: docboss_model::PageBorderOffset::Page,
+        ..Default::default()
+    });
+    let lines = border_lines(&laid(&document), 0);
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0], ((20.0, 24.5), (612.0, 24.5), 1.0));
+    assert_eq!(lines[1], ((20.0, 775.5), (612.0, 775.5), 1.0));
+    assert_eq!(lines[2], ((21.0, 24.0), (21.0, 776.0), 2.0));
+
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides,
+        offset_from: docboss_model::PageBorderOffset::Text,
+        behind_text: true,
+        ..Default::default()
+    });
+    let layout = laid(&document);
+    assert!(matches!(layout.pages[0].items[0], Item::Line { .. }));
+    let lines = border_lines(&layout, 0);
+    assert_eq!(lines[0], ((50.0, 47.5), (540.0, 47.5), 1.0));
+    assert_eq!(lines[2], ((51.0, 47.0), (51.0, 737.0), 2.0));
+
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides,
+        display: docboss_model::PageBorderDisplay::NotFirstPage,
+        ..Default::default()
+    });
+    assert!(border_lines(&laid(&document), 0).is_empty());
+}
+
 /// ECMA-376 Part 1 §17.4: cells sit on the table grid with their margins
 /// and borders.
 #[test]

@@ -147,6 +147,42 @@ fn sections_split_at_paragraph_section_properties() {
     assert_eq!(header.blocks.len(), 1);
 }
 
+/// Page borders, their sides and where they are measured from.
+/// ECMA-376 Part 1 §17.6.10, §17.6.21, §17.6.7, §17.6.2, §17.6.15.
+/// ECMA-376 Part 1 §17.18.62, §17.18.63, §17.18.64.
+#[test]
+fn page_borders() {
+    let body = r#"<w:p/><w:sectPr><w:pgBorders w:offsetFrom="page" w:display="notFirstPage" w:zOrder="back"><w:top w:val="dashed" w:sz="8" w:space="24" w:color="FF0000"/><w:left w:val="single" w:sz="4" w:space="12"/><w:bottom w:val="double" w:sz="4" w:space="24"/><w:right w:val="none" w:sz="0" w:space="0"/></w:pgBorders></w:sectPr>"#;
+    let doc = read(&Docx::new(body).build()).unwrap();
+    let borders = doc.sections[0].properties.page_borders.unwrap();
+    assert_eq!(borders.offset_from, docboss_model::PageBorderOffset::Page);
+    assert_eq!(
+        borders.display,
+        docboss_model::PageBorderDisplay::NotFirstPage
+    );
+    assert!(borders.behind_text);
+    let top = borders.sides.top.unwrap();
+    assert_eq!(
+        (top.style, top.size, top.space),
+        (BorderStyle::Dashed, 8, 24)
+    );
+    assert_eq!(top.color, Some(Color(0xFF, 0, 0)));
+    assert_eq!(borders.sides.left.unwrap().space, 12);
+    assert_eq!(borders.sides.bottom.unwrap().style, BorderStyle::Double);
+    assert_eq!(borders.sides.right.unwrap().style, BorderStyle::None);
+    let plain = read(
+        &Docx::new(
+            r#"<w:p/><w:sectPr><w:pgBorders><w:top w:val="single"/></w:pgBorders></w:sectPr>"#,
+        )
+        .build(),
+    )
+    .unwrap();
+    let plain = plain.sections[0].properties.page_borders.unwrap();
+    assert_eq!(plain.offset_from, docboss_model::PageBorderOffset::Text);
+    assert_eq!(plain.display, docboss_model::PageBorderDisplay::AllPages);
+    assert!(!plain.behind_text);
+}
+
 /// ECMA-376 Part 1 §17.16.18 and §17.16.5.25: complex fields, nested and
 /// spanning runs; HYPERLINK fields become hyperlinks.
 /// ECMA-376 Part 1 §17.16.23: the instruction comes from `w:instrText`.

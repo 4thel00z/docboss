@@ -8,13 +8,13 @@ use std::sync::Arc;
 use docboss_font::FontDatabase;
 use docboss_model::{
     Block, Break, Color, Diagnostic, Document, DrawingPosition, HeaderFooterRefs, Inline, LineCap,
-    MediaId, NoteKind, NumberFormat, NumberingCounter, PositionAlign, PositionBase, RunContent,
-    SectionBreak, SectionProperties,
+    MediaId, NoteKind, NumberFormat, NumberingCounter, PageBorderDisplay, PageBorderOffset,
+    PageBorders, PositionAlign, PositionBase, RunContent, SectionBreak, SectionProperties,
 };
 
 use crate::paragraph::layout_paragraph;
 use crate::shape::Shaper;
-use crate::table::{layout_table, RowPlan};
+use crate::table::{border_line, border_width, layout_table, RowPlan};
 use crate::units::{emu_to_pt, twips_to_pt};
 use crate::{Item, LayoutOptions, LineStyle, Page, Rect};
 
@@ -529,6 +529,23 @@ impl Paginator<'_, '_> {
             height
         });
         let bottom = bottom.max(top + 12.0);
+        let text = (
+            text_left,
+            twips_to_pt(m.top.abs()),
+            width - twips_to_pt(m.right),
+            height - twips_to_pt(m.bottom.abs()),
+        );
+        let (mut back, mut front) = (Vec::new(), Vec::new());
+        if let Some(borders) = props
+            .page_borders
+            .filter(|b| shows_on(b.display, self.section_first_page))
+        {
+            let lines = page_border_lines(&borders, (width, height), text);
+            match borders.behind_text {
+                true => back = lines,
+                false => front = lines,
+            }
+        }
         self.pages.push(PageState {
             width,
             height,
@@ -544,8 +561,8 @@ impl Paginator<'_, '_> {
             footer,
             body_bottom: bottom,
             body: Vec::new(),
-            back: Vec::new(),
-            front: Vec::new(),
+            back,
+            front,
             notes: Vec::new(),
             note_height: 0.0,
         });
@@ -934,6 +951,60 @@ pub(crate) fn run(
         .map(|state| finish_page(&mut ctx, state, &notes))
         .collect();
     (pages, ctx.diagnostics)
+}
+
+fn shows_on(display: PageBorderDisplay, first: bool) -> bool {
+    match display {
+        PageBorderDisplay::AllPages => true,
+        PageBorderDisplay::FirstPage => first,
+        PageBorderDisplay::NotFirstPage => !first,
+    }
+}
+
+/// ECMA-376 Part 1 §17.6.10: the lines of a page's borders on a page of
+/// `size` whose text area spans `text` (left, top, right, bottom). From
+/// the page, a border's outer edge lies `space` points inside the page
+/// edge; from the text, its inner edge lies `space` points outside the
+/// text area, as LibreOffice places them. Each line runs between the outer
+/// edges of its neighbours so that the corners close.
+fn page_border_lines(
+    borders: &PageBorders,
+    (width, height): (f32, f32),
+    (left, top, right, bottom): (f32, f32, f32, f32),
+) -> Vec<Item> {
+    let sides = borders.sides;
+    let half = |side: Option<docboss_model::Border>| side.map_or(0.0, |b| border_width(&b) / 2.0);
+    let space = |side: Option<docboss_model::Border>| side.map_or(0.0, |b| b.space as f32);
+    let (ht, hl, hb, hr) = (
+        half(sides.top),
+        half(sides.left),
+        half(sides.bottom),
+        half(sides.right),
+    );
+    let (st, sl, sb, sr) = (
+        space(sides.top),
+        space(sides.left),
+        space(sides.bottom),
+        space(sides.right),
+    );
+    let (y0, x0, y1, x1) = match borders.offset_from {
+        PageBorderOffset::Page => (st + ht, sl + hl, height - sb - hb, width - sr - hr),
+        PageBorderOffset::Text => (
+            top - st - ht,
+            left - sl - hl,
+            bottom + sb + hb,
+            right + sr + hr,
+        ),
+    };
+    [
+        (sides.top, (x0 - hl, y0), (x1 + hr, y0)),
+        (sides.right, (x1, y0 - ht), (x1, y1 + hb)),
+        (sides.bottom, (x0 - hl, y1), (x1 + hr, y1)),
+        (sides.left, (x0, y0 - ht), (x0, y1 + hb)),
+    ]
+    .into_iter()
+    .filter_map(|(side, from, to)| border_line(&side?, from, to))
+    .collect()
 }
 
 fn separator_line(width: f32) -> Item {

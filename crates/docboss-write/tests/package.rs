@@ -84,3 +84,35 @@ fn sections_close_where_the_schema_puts_them() {
     assert!(body.contains("w:orient=\"landscape\""));
     assert!(body.contains("<w:headerReference w:type=\"default\" r:id=\""));
 }
+
+/// ECMA-376 Part 1 §17.6.10: page borders are written after the margins
+/// with where they are measured from, their pages and their depth.
+#[test]
+fn page_borders_follow_the_margins() {
+    let mut builder = docboss_write::DocumentBuilder::new();
+    builder.text("Bordered.");
+    let mut document = builder.build();
+    let side = docboss_model::Border {
+        style: docboss_model::BorderStyle::Dashed,
+        size: 8,
+        space: 24,
+        color: None,
+    };
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides: docboss_model::Borders {
+            top: Some(side),
+            ..Default::default()
+        },
+        offset_from: docboss_model::PageBorderOffset::Page,
+        ..Default::default()
+    });
+    let body = part(
+        &docboss_write::to_bytes(&document).unwrap(),
+        "word/document.xml",
+    );
+    let margins = body.find("<w:pgMar").unwrap();
+    let borders = body
+        .find("<w:pgBorders w:offsetFrom=\"page\" w:display=\"allPages\" w:zOrder=\"front\"><w:top w:val=\"dashed\" w:sz=\"8\" w:space=\"24\" w:color=\"auto\"/></w:pgBorders>")
+        .unwrap();
+    assert!(margins < borders);
+}

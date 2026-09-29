@@ -3,10 +3,10 @@
 
 use docboss_model::{
     Border, BorderStyle, Borders, Color, Columns, FontSlots, Indentation, Justification, LineRule,
-    NumberingRef, Orientation, PageMargins, PageSize, ParagraphProperties, RunProperties,
-    SectionBreak, SectionProperties, Shading, Spacing, TabAlignment, TabLeader, TabStop,
-    TableCellProperties, TableProperties, TableRowProperties, Underline, VerticalAlign,
-    VerticalMerge,
+    NumberingRef, Orientation, PageBorderDisplay, PageBorderOffset, PageBorders, PageMargins,
+    PageSize, ParagraphProperties, RunProperties, SectionBreak, SectionProperties, Shading,
+    Spacing, TabAlignment, TabLeader, TabStop, TableCellProperties, TableProperties,
+    TableRowProperties, Underline, VerticalAlign, VerticalMerge,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -440,6 +440,7 @@ pub fn cell_properties(reader: &mut Reader<'_>) -> TableCellProperties {
 /// section type, page numbering, the first-page switch and the header and
 /// footer references.
 /// ECMA-376 Part 1 §17.6.13, §17.6.11, §17.6.4, §17.6.3, §17.6.22, §17.6.12, §17.10.6, §17.10.5, §17.10.2.
+/// Page borders: ECMA-376 Part 1 §17.6.10, §17.6.21, §17.6.7, §17.6.2, §17.6.15, §17.18.62, §17.18.63, §17.18.64.
 pub fn section_properties(reader: &mut Reader<'_>) -> SectionProperties {
     let mut p = SectionProperties::default();
     children(reader, |reader, e| {
@@ -471,6 +472,21 @@ pub fn section_properties(reader: &mut Reader<'_>) -> SectionProperties {
                 };
             }
             "cols" => p.columns = columns(reader, &e),
+            "pgBorders" => {
+                p.page_borders = Some(PageBorders {
+                    offset_from: match attr(&e, "offsetFrom").as_deref() {
+                        Some("page") => PageBorderOffset::Page,
+                        _ => PageBorderOffset::Text,
+                    },
+                    display: match attr(&e, "display").as_deref() {
+                        Some("firstPage") => PageBorderDisplay::FirstPage,
+                        Some("notFirstPage") => PageBorderDisplay::NotFirstPage,
+                        _ => PageBorderDisplay::AllPages,
+                    },
+                    behind_text: attr(&e, "zOrder").as_deref() == Some("back"),
+                    sides: borders(reader),
+                })
+            }
             "type" => {
                 p.start = match val(&e).as_deref() {
                     Some("continuous") => SectionBreak::Continuous,
