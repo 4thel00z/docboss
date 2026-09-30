@@ -184,3 +184,18 @@ fn wrapping_frames_and_floating_tables_are_read() {
         })
     );
 }
+
+/// An Equation Editor 3 object keeps its preview picture and gives the
+/// equation its `Equation Native` MTEF holds, which plain text reads.
+#[test]
+fn equation_editor_objects_give_their_equation() {
+    let doc = open("equation-editor.docx");
+    let found = drawings(&doc);
+    let equation = found
+        .iter()
+        .find_map(|d| d.math.as_deref().map(|m| (d.media, m)))
+        .expect("the object carries its equation");
+    assert!(equation.0.is_some());
+    assert_eq!(docboss_model::linear_text(&equation.1.nodes), "a=b/c");
+    assert!(plain_text(&doc).contains("Beforea=b/cafter."));
+}

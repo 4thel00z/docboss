@@ -223,6 +223,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         members: Vec::new(),
         data_text: Vec::new(),
         chart: None,
+        math: None,
     }));
     vec![
         paragraph(

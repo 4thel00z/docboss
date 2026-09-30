@@ -333,6 +333,7 @@ impl<'o, 'a> Converter<'o, 'a> {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         };
         self.push_inline(Inline::Run(Run {
             properties: RunProperties::default(),

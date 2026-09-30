@@ -1080,6 +1080,7 @@ fn text_box(
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         }))],
     })
 }
@@ -1370,6 +1371,7 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         }))],
     });
     let mut properties = ParagraphProperties::default();
@@ -1419,6 +1421,7 @@ fn run_position_lowers_inline_pictures() {
                 members: Vec::new(),
                 data_text: Vec::new(),
                 chart: None,
+                math: None,
             }))],
         })
     };
@@ -1497,6 +1500,7 @@ fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -
                 members: Vec::new(),
                 data_text: Vec::new(),
                 chart: None,
+                math: None,
             }))],
         })],
     )

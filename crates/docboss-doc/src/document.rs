@@ -112,7 +112,8 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         false => fib,
         true => Fib::parse(&word)?,
     };
-    let mut document = assemble(&word, &table, &data, &fib, &mut diagnostics);
+    let equations = equations(&file);
+    let mut document = assemble(&word, &table, &data, &fib, equations, &mut diagnostics);
     document.metadata = metadata;
     document.diagnostics = file.diagnostics().into_iter().chain(diagnostics).collect();
     Ok(document)
@@ -168,11 +169,35 @@ fn deobfuscate<'a>(
     Ok((clear(word, 68), clear(table, 0), clear(data, 0)))
 }
 
+/// The equations of the Equation Editor objects of the ObjectPool storage,
+/// by the object id their storage name `_<id>` gives: the MTEF data of each
+/// object's `Equation Native` stream.
+/// [MS-DOC] §2.1.4.
+fn equations(file: &CompoundFile<'_>) -> HashMap<u32, docboss_model::Math> {
+    let Some(pool) = file.find("ObjectPool") else {
+        return HashMap::new();
+    };
+    file.children(pool)
+        .into_iter()
+        .filter_map(|storage| {
+            let id = file.entries()[storage]
+                .name
+                .strip_prefix('_')?
+                .parse::<u32>()
+                .ok()?;
+            let stream = file.child(storage, "Equation Native")?;
+            let math = docboss_mtef::read(&file.stream(stream))?;
+            Some((id, math))
+        })
+        .collect()
+}
+
 fn assemble(
     word: &[u8],
     table: &[u8],
     data: &[u8],
     fib: &Fib,
+    equations: HashMap<u32, docboss_model::Math>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Document {
     let parts = Parts::of(fib);
@@ -209,6 +234,7 @@ fn assemble(
         numbering,
         fonts,
     );
+    context.equations = equations;
     context.authors = sttb::read(table_range(table, fib, slot::STTBF_RMARK))
         .into_iter()
         .map(|e| e.text)

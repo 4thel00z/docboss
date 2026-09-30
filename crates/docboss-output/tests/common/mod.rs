@@ -233,6 +233,7 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         members: Vec::new(),
         data_text: Vec::new(),
         chart: None,
+        math: None,
     })))
 }
 
@@ -255,5 +256,6 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         members: Vec::new(),
         data_text: Vec::new(),
         chart: None,
+        math: None,
     })))
 }

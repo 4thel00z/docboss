@@ -22,6 +22,8 @@ the Python bindings. Sister project of pdfboss; mirror its conventions.
   page layout, rasterization and image encoders.
 - `crates/docboss-metafile`: WMF ([MS-WMF]) and EMF ([MS-EMF]) pictures
   played into paths, text and bitmaps, and the DIB decoder.
+- `crates/docboss-mtef`: Equation Editor 3 equations (MTEF in an OLE
+  object's `Equation Native` stream) read into the math model.
 - `crates/docboss-write`: DOCX writer from the model.
 - `crates/docboss-cli`, `docboss-py`, `docboss-tui`: the `docboss` binary,
   the Python extension and the terminal explorer.

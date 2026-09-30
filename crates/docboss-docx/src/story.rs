@@ -985,6 +985,7 @@ impl DrawingInfo {
                 members: Vec::new(),
                 data_text: Vec::new(),
                 chart: None,
+                math: None,
             },
             fill_stated: false,
             line_stated: false,
@@ -1516,6 +1517,35 @@ impl<'p> StoryParser<'p> {
         false
     }
 
+    /// The equation of an embedded Equation Editor object: the MTEF data of
+    /// the `Equation Native` stream in the compound file the relationship
+    /// names. A stream that does not read is reported.
+    fn equation(&mut self, id: &str) -> Option<Box<docboss_model::Math>> {
+        let target = self
+            .ctx
+            .rels
+            .get(id)
+            .filter(|rel| !rel.external)?
+            .target
+            .clone();
+        let bytes = self.ctx.package.part_into(&target, &mut self.diagnostics)?;
+        let math = docboss_cfb::CompoundFile::parse(&bytes)
+            .ok()
+            .and_then(|file| {
+                file.open_stream("Equation Native")
+                    .ok()
+                    .map(|s| s.into_owned())
+            })
+            .and_then(|stream| docboss_mtef::read(&stream));
+        if math.is_none() {
+            self.diagnostics.push(Diagnostic::dropped(
+                target.as_str(),
+                "an Equation Editor object's equation does not read; its picture stays",
+            ));
+        }
+        math.map(Box::new)
+    }
+
     fn media_for(&mut self, id: &str) -> Option<MediaId> {
         let Some(rel) = self.ctx.rels.get(id) else {
             self.diagnostics.push(Diagnostic::dropped(
@@ -1889,6 +1919,15 @@ impl<'p> StoryParser<'p> {
                 }
                 (Ns::W10, "wrap") => {
                     vml_wrap(&e, &mut info.wrap);
+                    return;
+                }
+                (Ns::O, "OLEObject") => {
+                    let equation = e
+                        .attr_raw(Ns::NONE, "ProgID")
+                        .is_some_and(|id| id.starts_with("Equation."));
+                    if let Some(id) = e.attr(Ns::R, "id").filter(|_| equation) {
+                        info.drawing.math = self.equation(&id);
+                    }
                     return;
                 }
                 _ => {}

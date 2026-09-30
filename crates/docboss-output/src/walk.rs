@@ -394,7 +394,10 @@ fn flatten_content<'a>(info: RunInfo, content: &'a RunContent, out: &mut Vec<Pie
         RunContent::FootnoteReference(id) => Piece::Note(NoteKind::Footnote, *id),
         RunContent::EndnoteReference(id) => Piece::Note(NoteKind::Endnote, *id),
         RunContent::CommentReference(id) => Piece::Comment(*id),
-        RunContent::Drawing(drawing) => Piece::Image(drawing),
+        RunContent::Drawing(drawing) => match drawing.math.as_deref() {
+            Some(math) => Piece::Math(math),
+            None => Piece::Image(drawing),
+        },
         RunContent::Math(math) => Piece::Math(math),
         RunContent::SoftHyphen | RunContent::NoteNumber => return,
     };

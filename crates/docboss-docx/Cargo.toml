@@ -14,6 +14,8 @@ keywords.workspace = true
 docboss-model = { workspace = true }
 docboss-zip = { workspace = true }
 docboss-xml = { workspace = true }
+docboss-cfb = { workspace = true }
+docboss-mtef = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

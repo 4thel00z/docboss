@@ -164,6 +164,7 @@ impl Para {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         };
         self.content(
             RunContent::Drawing(Box::new(drawing)),

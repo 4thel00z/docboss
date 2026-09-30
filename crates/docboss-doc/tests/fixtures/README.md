@@ -16,3 +16,6 @@
 - `word6-sections.doc`, `word6-three-sections.doc`, `word95-tables.doc`
   and `word2.doc`: Apache POI test data (`Word6_sections2.doc`,
   `Word6_sections.doc`, `Bug49933.doc`, `word2.doc`), Apache License 2.0.
+- `wrap.doc` and `equation-editor.doc`: `soffice --headless --convert-to doc`
+  of the DOCX reader's `wrap.docx` and `equation-editor.docx` fixtures.
+- `drop-cap.doc`: Apache POI test data (`test.doc`), Apache License 2.0.

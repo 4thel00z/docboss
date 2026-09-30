@@ -620,3 +620,31 @@ fn drop_cap_frames() {
     assert_eq!(frame.wrap, WrapKind::Square);
     assert_eq!(frame.horizontal.base, PositionBase::Page);
 }
+
+/// [MS-DOC] §2.1.4: an Equation Editor object's ObjectPool storage, named
+/// by the sprmCPicLocation of its field separator, gives the equation of
+/// the field's preview picture.
+#[test]
+fn equation_editor_objects() {
+    let document = fixture("equation-editor");
+    let math = paragraphs(&document)
+        .iter()
+        .flat_map(|p| p.inlines.iter())
+        .filter_map(|inline| match inline {
+            Inline::Field(field) => Some(&field.result),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|inline| match inline {
+            Inline::Run(run) => Some(run),
+            _ => None,
+        })
+        .flat_map(|run| &run.content)
+        .find_map(|content| match content {
+            RunContent::Drawing(d) => d.math.clone(),
+            RunContent::Math(m) => Some(m.clone()),
+            _ => None,
+        })
+        .expect("the equation reads");
+    assert_eq!(docboss_model::linear_text(&math.nodes), "a=b/c");
+}

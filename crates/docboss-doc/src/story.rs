@@ -158,6 +158,9 @@ pub struct Context<'a> {
     pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
     /// Each shape's distances from the text, in EMU.
     pub shape_wrap_distances: HashMap<u32, [i64; 4]>,
+    /// The equations of the Equation Editor objects in the ObjectPool, by
+    /// object id.
+    pub equations: HashMap<u32, docboss_model::Math>,
     /// The preset geometry of each floating shape by shape id.
     pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
@@ -195,6 +198,9 @@ struct OpenField {
 struct Inlines {
     root: Vec<Inline>,
     fields: Vec<OpenField>,
+    /// The equation of the Equation Editor object whose field separator
+    /// was read last, for the preview picture of its result.
+    equation: Option<docboss_model::Math>,
 }
 
 impl Inlines {
@@ -394,6 +400,7 @@ impl<'a> Context<'a> {
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
             shape_wrap_distances: HashMap::new(),
+            equations: HashMap::new(),
             shape_groups: HashMap::new(),
             shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
@@ -625,6 +632,7 @@ impl<'a> Context<'a> {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         })))
     }
 
@@ -864,15 +872,30 @@ impl<'a> Context<'a> {
                     }
                     0x14 => {
                         out.separate_field();
+                        out.equation = extra
+                            .pic_location
+                            .and_then(|location| self.equations.get(&location))
+                            .cloned();
                         None
                     }
                     0x15 => {
+                        let equation = out.equation.take();
+                        if let Some(math) = equation {
+                            out.content(props, revision.as_ref(), RunContent::Math(Box::new(math)));
+                        }
                         out.end_field();
                         None
                     }
                     0x01 if extra.special && !extra.ole2 && !extra.data => extra
                         .pic_location
-                        .and_then(|location| self.picture(location)),
+                        .and_then(|location| self.picture(location))
+                        .map(|picture| match (picture, out.equation.take()) {
+                            (RunContent::Drawing(mut drawing), Some(math)) => {
+                                drawing.math = Some(Box::new(math));
+                                RunContent::Drawing(drawing)
+                            }
+                            (picture, _) => picture,
+                        }),
                     0x02 if extra.special => match (kind, self.references.get(&at)) {
                         (StoryKind::Main, Some(Reference::Footnote(id))) => {
                             Some(RunContent::FootnoteReference(*id))

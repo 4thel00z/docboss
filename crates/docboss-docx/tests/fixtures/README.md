@@ -11,3 +11,11 @@ Real DOCX files written by other producers, each next to its source:
 with `wp:align`.
 
 `red.png` is the image `textutil-lists.html` refers to.
+
+`equation-editor.docx` is LibreOffice's `mathtype.docx` from the same
+directory (MPL-2.0): an Equation Editor 3 object, `a = b/c`, with its WMF
+preview.
+
+`wrap.docx` is written by `python3 crates/docboss-docx/tools/wrap_fixture.py`:
+pictures wrapped square and tight, a text frame, a floating table and a VML
+shape wrapped top and bottom.

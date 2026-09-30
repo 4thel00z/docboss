@@ -176,6 +176,7 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         }))
     };
     let mut doc = document(vec![
@@ -232,6 +233,7 @@ fn metafile_pictures_draw_their_shapes() {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         };
         let mut doc = document(vec![para(vec![Inline::Run(Run {
             properties: RunProperties::default(),
@@ -305,6 +307,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
         members: Vec::new(),
         data_text: Vec::new(),
         chart: None,
+        math: None,
     };
     let doc = document(vec![para(vec![Inline::Run(Run {
         properties: RunProperties::default(),
@@ -346,6 +349,7 @@ fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         }))],
     })
 }
@@ -489,6 +493,7 @@ fn drawn_shape(x_pt: i64, name: &str, shape: ShapeFormat) -> Inline {
             members: Vec::new(),
             data_text: Vec::new(),
             chart: None,
+            math: None,
         }))],
     })
 }

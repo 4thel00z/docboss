@@ -651,6 +651,7 @@ dependencies = [
  "docboss-cfb",
  "docboss-crypt",
  "docboss-model",
+ "docboss-mtef",
  "flate2",
  "thiserror",
 ]
@@ -660,7 +661,9 @@ name = "docboss-docx"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "docboss-cfb",
  "docboss-model",
+ "docboss-mtef",
  "docboss-testkit",
  "docboss-xml",
  "docboss-zip",
@@ -696,6 +699,14 @@ name = "docboss-model"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "docboss-mtef"
+version = "0.1.0"
+dependencies = [
+ "docboss-font",
+ "docboss-model",
 ]
 
 [[package]]

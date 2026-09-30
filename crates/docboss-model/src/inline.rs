@@ -170,6 +170,9 @@ pub struct Drawing {
     pub data_text: Vec<crate::Block>,
     /// The chart the drawing shows, from its cached values.
     pub chart: Option<Box<crate::Chart>>,
+    /// The equation an embedded Equation Editor object holds, which text
+    /// output gives in place of the picture; the picture is its preview.
+    pub math: Option<Box<crate::Math>>,
 }
 
 /// A shape's geometry (ECMA-376 Part 1 §20.1.9).

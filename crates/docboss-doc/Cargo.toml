@@ -13,6 +13,7 @@ keywords.workspace = true
 [dependencies]
 docboss-model = { workspace = true }
 docboss-cfb = { workspace = true }
+docboss-mtef = { workspace = true }
 docboss-crypt = { workspace = true }
 thiserror = { workspace = true }
 flate2 = { workspace = true }

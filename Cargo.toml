@@ -11,6 +11,7 @@ members = [
     "crates/docboss-output",
     "crates/docboss-font",
     "crates/docboss-metafile",
+    "crates/docboss-mtef",
     "crates/docboss-layout",
     "crates/docboss-render",
     "crates/docboss-write",
@@ -43,6 +44,7 @@ docboss-core = { path = "crates/docboss-core", version = "0.1.0" } # x-release-p
 docboss-output = { path = "crates/docboss-output", version = "0.1.0" } # x-release-please-version
 docboss-font = { path = "crates/docboss-font", version = "0.1.0" } # x-release-please-version
 docboss-metafile = { path = "crates/docboss-metafile", version = "0.1.0" } # x-release-please-version
+docboss-mtef = { path = "crates/docboss-mtef", version = "0.1.0" } # x-release-please-version
 docboss-layout = { path = "crates/docboss-layout", version = "0.1.0" } # x-release-please-version
 docboss-render = { path = "crates/docboss-render", version = "0.1.0" } # x-release-please-version
 docboss-write = { path = "crates/docboss-write", version = "0.1.0" } # x-release-please-version

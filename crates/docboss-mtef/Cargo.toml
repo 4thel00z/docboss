@@ -1,0 +1,15 @@
+[package]
+name = "docboss-mtef"
+description = "Equation Editor 3 equations for docboss: the MTEF data of an Equation Native stream read into the docboss math model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+
+[dependencies]
+docboss-model = { workspace = true }
+docboss-font = { workspace = true }
