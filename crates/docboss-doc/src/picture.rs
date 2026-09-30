@@ -172,11 +172,13 @@ pub struct Picture {
 }
 
 /// Reads a PICFAndOfficeArtData at `at` in the Data stream
-/// ([MS-DOC] §2.9.192).
+/// ([MS-DOC] §2.9.192). A Word 6 or 95 PIC, in the WordDocument stream,
+/// has the same fields in a 58-byte header and the picture itself after
+/// it: a Windows metafile or a DIB.
 pub fn inline_picture(data: &[u8], at: usize) -> Option<Picture> {
     let lcb = i32_at(data, at)?.max(0) as usize;
     let cb_header = usize::from(u16_at(data, at + 4)?);
-    if cb_header < 0x44 || lcb < cb_header {
+    if cb_header < 0x3A || lcb < cb_header {
         return None;
     }
     let mm = u16_at(data, at + 6)?;
@@ -192,12 +194,34 @@ pub fn inline_picture(data: &[u8], at: usize) -> Option<Picture> {
         start += 1 + usize::from(u8_at(data, start).unwrap_or(0));
     }
     let end = at.saturating_add(lcb).min(data.len());
-    let image = find_blip(data, start, end, 0);
+    let image = find_blip(data, start, end, 0)
+        .or_else(|| raw_picture(slice(data, start, end - start.min(end))));
     Some(Picture {
         image,
         width,
         height,
     })
+}
+
+/// A picture stored bare after its header: a metafile starting with its
+/// METAHEADER ([MS-WMF] §2.3.2.2, type 1 or 2 and a 9-word header) or a
+/// DIB starting with a 40-byte BITMAPINFOHEADER.
+fn raw_picture(bytes: &[u8]) -> Option<Image> {
+    let kind = u16_at(bytes, 0)?;
+    let header = u16_at(bytes, 2)?;
+    if matches!(kind, 1 | 2) && header == 9 {
+        return Some(Image {
+            content_type: "image/x-wmf",
+            data: bytes.to_vec(),
+        });
+    }
+    if u32_at(bytes, 0)? == 40 {
+        return Some(Image {
+            content_type: "image/bmp",
+            data: dib_to_bmp(bytes)?,
+        });
+    }
+    None
 }
 
 /// A floating shape's BLIP store index from its shape container: the

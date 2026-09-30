@@ -1,7 +1,8 @@
 //! Assembles a model [`Document`] from the streams of a Word binary file.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
 
 use docboss_cfb::CompoundFile;
 use docboss_model::{
@@ -18,7 +19,7 @@ use crate::picture::{
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
 use crate::text::PieceTable;
-use crate::{crypt, fkp, lists, sttb, styles, Error, Result};
+use crate::{crypt, fkp, lists, sttb, styles, word6, Error, Result};
 
 /// The start CP of each document part ([MS-DOC] §2.3): main text, then
 /// footnotes, headers, comments, endnotes, text boxes, header text boxes.
@@ -60,7 +61,7 @@ fn table_range<'t>(table: &'t [u8], fib: &Fib, which: usize) -> &'t [u8] {
 }
 
 pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
-    if bytes.starts_with(&[0xDB, 0xA5]) {
+    if crate::is_word2(bytes) {
         return Ok(word2(bytes));
     }
     let file = CompoundFile::parse(bytes)?;
@@ -77,11 +78,9 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         ));
     }
     if !fib.is_word97() {
-        let mut document = legacy(&word_stream, &fib);
+        let mut document = word6_document(&word_stream, &fib, &mut diagnostics);
         document.metadata = metadata;
-        document
-            .diagnostics
-            .splice(0..0, file.diagnostics().into_iter().chain(diagnostics));
+        document.diagnostics = file.diagnostics().into_iter().chain(diagnostics).collect();
         return Ok(document);
     }
     let table_stream = match file.open_stream(fib.table_stream_name()) {
@@ -246,7 +245,7 @@ fn assemble(
         })
         .collect();
     let comments = comments(&context, table, fib, parts.comments);
-    let (sections, headers_footers) = sections(&context, word, table, fib, &parts);
+    let (sections, headers_footers) = sections(&context, word, table, fib, &parts, None);
     let dop = table_range(table, fib, slot::DOP);
     let settings = Settings {
         default_tab_stop: u16_at(dop, 10).map_or(720, |v| i32::from(v).max(1)),
@@ -550,9 +549,11 @@ fn sections(
     table: &[u8],
     fib: &Fib,
     parts: &Parts,
+    word6: Option<&RefCell<BTreeSet<u8>>>,
 ) -> (Vec<Section>, Vec<HeaderFooter>) {
     let (cps, seds) = plc(table_range(table, fib, slot::PLCF_SED), 12);
     let mut bounds: Vec<(u32, u32, SectionProperties)> = Vec::new();
+    let mut header_flags: Vec<u8> = Vec::new();
     let mut start = parts.main;
     for (i, sed) in seds.iter().enumerate() {
         let end = cps
@@ -562,22 +563,44 @@ fn sections(
             .min(fib.counts.text);
         let mut properties = default_section();
         let fc = u32_at(sed, 2).unwrap_or(u32::MAX);
+        let mut flags = 0;
         if fc != u32::MAX {
             let size = u16_at(word, fc as usize).unwrap_or(0) as usize;
-            apply_sep(slice(word, fc as usize + 2, size), &mut properties);
+            let grpprl = slice(word, fc as usize + 2, size);
+            match word6 {
+                None => apply_sep(grpprl, &mut properties),
+                Some(dropped) => {
+                    let translated = word6::translate(grpprl, &mut dropped.borrow_mut());
+                    apply_sep(&translated, &mut properties);
+                    flags = word6::header_flags(grpprl);
+                }
+            }
         }
         if end > start {
             bounds.push((start, end, properties));
+            header_flags.push(flags);
             start = end;
         }
     }
     if bounds.is_empty() || start < fib.counts.text {
         bounds.push((start, fib.counts.text, default_section()));
+        header_flags.push(0);
     }
+    let dop_flags = table_range(table, fib, slot::DOP)
+        .get(1)
+        .copied()
+        .unwrap_or(0);
+    let word6_stories = word6
+        .is_some()
+        .then(|| word6::header_stories(dop_flags, &header_flags));
+    let story_index = |section: usize, kind: usize| match &word6_stories {
+        None => Some(6 + section * 6 + kind),
+        Some(stories) => stories.get(section).and_then(|s| s[kind]),
+    };
     let (stories, _) = plc(table_range(table, fib, slot::PLCF_HDD), 0);
     let mut parts_out: Vec<HeaderFooter> = Vec::new();
     let mut ids: HashMap<usize, String> = HashMap::new();
-    let mut story_id = |index: usize| -> Option<String> {
+    let mut story_id = |index: usize, kind: usize| -> Option<String> {
         let (&story_start, &story_end) = (stories.get(index)?, stories.get(index + 1)?);
         if story_end <= story_start {
             return None;
@@ -586,10 +609,9 @@ fn sections(
             return Some(id.clone());
         }
         let id = format!("hdr{index}");
-        let kind = if (index - 6) % 6 == 2 || (index - 6) % 6 == 3 || (index - 6) % 6 == 5 {
-            HeaderFooterKind::Footer
-        } else {
-            HeaderFooterKind::Header
+        let kind = match kind {
+            2 | 3 | 5 => HeaderFooterKind::Footer,
+            _ => HeaderFooterKind::Header,
         };
         let guard = u32::from(story_end > story_start + 1);
         let blocks = context.story(
@@ -610,12 +632,14 @@ fn sections(
         .into_iter()
         .enumerate()
         .map(|(i, (start, end, mut properties))| {
-            let base = 6 + i * 6;
-            let slot = |offset: usize,
-                        old: &Option<String>,
-                        story_id: &mut dyn FnMut(usize) -> Option<String>| {
-                story_id(base + offset).or_else(|| old.clone())
-            };
+            let slot =
+                |offset: usize,
+                 old: &Option<String>,
+                 story_id: &mut dyn FnMut(usize, usize) -> Option<String>| {
+                    story_index(i, offset)
+                        .and_then(|index| story_id(index, offset))
+                        .or_else(|| old.clone())
+                };
             properties.headers.even = slot(0, &previous.headers.even, &mut story_id);
             properties.headers.default = slot(1, &previous.headers.default, &mut story_id);
             properties.footers.even = slot(2, &previous.footers.even, &mut story_id);
@@ -655,6 +679,147 @@ fn code_page(lid: u16) -> u32 {
         }
         0x12 => 949,
         _ => 1252,
+    }
+}
+
+/// Word 6 and Word 95 files: the Word 97 assembly over the one
+/// WordDocument stream, which also holds the tables, with the formatting
+/// translated by [`word6`] and the text in the code page of the document
+/// language (or Cyrillic when the bytes say so). Lists (ANLD), comments and
+/// drawing objects are left out and reported.
+fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> Document {
+    let stated = code_page(fib.lid);
+    let text_bytes = fib.fc_mac.saturating_sub(fib.fc_min).min(1 << 16);
+    let sample = slice(word, fib.fc_min as usize, text_bytes as usize);
+    let code_page = guess_code_page(sample, stated);
+    if code_page != stated {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            format!("text decoded as code page {code_page}, guessed from its bytes"),
+        ));
+    }
+    if !docboss_cfb::codepage::is_supported(code_page) {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            format!("code page {code_page} is not supported; text read as ISO 8859-1"),
+        ));
+    }
+    let dropped = RefCell::new(BTreeSet::new());
+    let parts = Parts::of(fib);
+    let clx = table_range(word, fib, slot::CLX);
+    let complex = match fib.complex && !clx.is_empty() {
+        true => PieceTable::parse(clx).filter(|p| !p.pieces.is_empty()),
+        false => None,
+    };
+    let mut pieces = match complex {
+        Some(pieces) if word6::unicode_pieces(word, &pieces) => pieces,
+        Some(pieces) => pieces.eight_bit(),
+        None => PieceTable::single(fib.fc_min, fib.fc_mac.saturating_sub(fib.fc_min), true),
+    }
+    .in_code_page(code_page);
+    pieces.prcs = pieces
+        .prcs
+        .iter()
+        .map(|prc| word6::translate(prc, &mut dropped.borrow_mut()))
+        .collect();
+    let font_entries = word6::fonts(table_range(word, fib, slot::STTBF_FFN), code_page);
+    let fonts: Vec<String> = font_entries.iter().map(|f| f.name.clone()).collect();
+    let sheet = styles::parse_word6(
+        table_range(word, fib, slot::STSHF),
+        code_page,
+        &mut dropped.borrow_mut(),
+    );
+    let model_styles = sheet.to_model(&fonts);
+    let mut arena = Vec::new();
+    let fkps = word6::fkps(
+        word,
+        table_range(word, fib, slot::PLCF_BTE_CHPX),
+        table_range(word, fib, slot::PLCF_BTE_PAPX),
+        &mut arena,
+        &mut dropped.borrow_mut(),
+    );
+    let mut extended = Vec::with_capacity(word.len() + arena.len());
+    extended.extend_from_slice(word);
+    extended.extend_from_slice(&arena);
+    let mut context = Context::new(
+        &extended,
+        word,
+        pieces,
+        fkps.chpx,
+        fkps.papx,
+        sheet,
+        model_styles,
+        docboss_model::Numbering::default(),
+        fonts,
+    );
+    let footnotes = notes(
+        &mut context,
+        word,
+        fib,
+        slot::PLCFFND_REF,
+        slot::PLCFFND_TXT,
+        parts.footnotes,
+        NoteKind::Footnote,
+    );
+    bookmarks(&mut context, word, fib);
+    context.markers.sort_by_key(|(cp, rank, _)| (*cp, *rank));
+    let footnotes: Vec<Note> = footnotes
+        .into_iter()
+        .map(|(id, start, end)| Note {
+            id,
+            kind: NoteKind::Footnote,
+            blocks: context.story(start, end, StoryKind::Note),
+        })
+        .collect();
+    let (sections, headers_footers) = sections(&context, word, word, fib, &parts, Some(&dropped));
+    let dop = table_range(word, fib, slot::DOP);
+    let settings = Settings {
+        default_tab_stop: u16_at(dop, 10).map_or(720, |v| i32::from(v).max(1)),
+        even_and_odd_headers: dop.first().is_some_and(|b| b & 1 != 0),
+    };
+    if fib.range(slot::PLCFAND_REF).is_some() {
+        diagnostics.push(Diagnostic::dropped(
+            "WordDocument",
+            "Word 6/95 comments are not read",
+        ));
+    }
+    if u32_at(word, 0x196).is_some_and(|lcb| lcb > 0) {
+        diagnostics.push(Diagnostic::dropped(
+            "WordDocument",
+            "Word 6/95 drawing objects are not read",
+        ));
+    }
+    let dropped = dropped.into_inner();
+    if dropped.contains(&12) {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            "Word 6/95 paragraph numbering (ANLD) is not read; numbered paragraphs lose their numbers",
+        ));
+    }
+    let others: Vec<String> = dropped
+        .iter()
+        .filter(|&&code| code != 12)
+        .map(|code| code.to_string())
+        .collect();
+    if !others.is_empty() {
+        diagnostics.push(Diagnostic::approximated(
+            "WordDocument",
+            format!("Word 6/95 sprms not read: {}", others.join(", ")),
+        ));
+    }
+    let media = context.media.take();
+    diagnostics.extend(context.diagnostics.take());
+    Document {
+        format: SourceFormat::Doc,
+        settings,
+        styles: context.styles,
+        numbering: context.numbering,
+        sections,
+        headers_footers,
+        footnotes,
+        media,
+        fonts: font_entries,
+        ..Document::default()
     }
 }
 

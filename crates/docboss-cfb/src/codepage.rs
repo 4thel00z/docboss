@@ -279,6 +279,11 @@ pub fn decode(code_page: u32, bytes: &[u8]) -> (String, Fidelity) {
     (text, Fidelity::Exact)
 }
 
+/// Whether a code page stores every character in one byte.
+pub fn is_single_byte(code_page: u32) -> bool {
+    double_byte_table(code_page).is_none() && !matches!(code_page, 1200 | 1201 | 65001)
+}
+
 /// The byte a single-byte code page (874, 1250 to 1258, Mac Roman) stores
 /// `c` as, or `None` when the page has no such character.
 pub fn encode_char(code_page: u32, c: char) -> Option<u8> {

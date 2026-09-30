@@ -52,6 +52,9 @@ pub fn detect(bytes: &[u8]) -> Format {
     if bytes.starts_with(b"{\\rtf") {
         return Format::Rtf;
     }
+    if docboss_doc::is_word2(bytes) {
+        return Format::Doc;
+    }
     if !docboss_cfb::is_compound_file(bytes) {
         return Format::Unknown;
     }

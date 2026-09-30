@@ -161,8 +161,9 @@ pub fn shd(bytes: &[u8]) -> Option<Shading> {
         return None;
     }
     let fore = u32_at(bytes, 0).and_then(colorref);
-    let fill = if pattern == 1 { fore } else { colorref(back) };
-    Some(Shading { fill })
+    Some(Shading {
+        fill: pattern_fill(pattern, fore, colorref(back)),
+    })
 }
 
 /// A Shd80 ([MS-DOC] §2.9.248).
@@ -172,9 +173,39 @@ pub fn shd80(value: u16) -> Option<Shading> {
     }
     let fore = ico((value & 0x1F) as u8);
     let back = ico(((value >> 5) & 0x1F) as u8);
-    let pattern = value >> 10;
-    let fill = if pattern == 1 { fore } else { back };
-    Some(Shading { fill })
+    Some(Shading {
+        fill: pattern_fill(value >> 10, fore, back),
+    })
+}
+
+/// [MS-DOC] §2.9.121 Ipat: a solid pattern fills with the foreground; a
+/// percentage pattern with the foreground (black when auto) mixed into the
+/// background (white when auto) by its percentage, as LibreOffice paints
+/// it; stripes and crosses keep the background.
+fn pattern_fill(pattern: u16, fore: Option<Color>, back: Option<Color>) -> Option<Color> {
+    let percent: u16 = match pattern {
+        1 => return fore,
+        2 => 5,
+        3 => 10,
+        4 => 20,
+        5 => 25,
+        6 => 30,
+        7 => 40,
+        8 => 50,
+        9 => 60,
+        0x0A => 70,
+        0x0B => 75,
+        0x0C => 80,
+        0x0D => 90,
+        0x25 => 12,
+        0x26 => 15,
+        _ => return back,
+    };
+    let Color(fr, fg, fb) = fore.unwrap_or(Color(0, 0, 0));
+    let Color(br, bg, bb) = back.unwrap_or(Color(255, 255, 255));
+    let mix =
+        |f: u8, b: u8| ((u16::from(f) * percent + u16::from(b) * (100 - percent)) / 100) as u8;
+    Some(Color(mix(fr, br), mix(fg, bg), mix(fb, bb)))
 }
 
 /// Character properties that the model does not carry but the story
@@ -624,6 +655,33 @@ pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [MS-DOC] §2.9.121, §2.9.247, §2.9.248: percentage patterns mix their
+    /// colors; clear keeps the background and solid takes the foreground.
+    #[test]
+    fn shading_patterns_mix_their_colors() {
+        let pct25 = 0x0005u16 << 10;
+        assert_eq!(
+            shd80(pct25).and_then(|s| s.fill),
+            Some(Color(191, 191, 191))
+        );
+        assert_eq!(
+            shd80(1 << 10 | 6).and_then(|s| s.fill),
+            Some(Color(255, 0, 0))
+        );
+        assert_eq!(
+            shd80(8 << 5).and_then(|s| s.fill),
+            Some(Color(255, 255, 255))
+        );
+        let mut red_on_white = [0u8; 10];
+        red_on_white[0..4].copy_from_slice(&0x0000_00FFu32.to_le_bytes());
+        red_on_white[4..8].copy_from_slice(&0x00FF_FFFFu32.to_le_bytes());
+        red_on_white[8] = 8;
+        assert_eq!(
+            shd(&red_on_white).and_then(|s| s.fill),
+            Some(Color(255, 127, 127))
+        );
+    }
 
     /// [MS-DOC] §2.9.17 and §2.9.16: the fShadow bit sits above dptSpace.
     #[test]

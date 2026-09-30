@@ -230,7 +230,7 @@ The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` p
 
 - **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left sections lay out left to right; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; DrawingML charts, SmartArt, math (OMML) and ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
+- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their paragraph numbering, comments and drawing objects, and Word 2 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.

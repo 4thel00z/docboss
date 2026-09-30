@@ -40,6 +40,9 @@ pub struct PieceTable {
     pub pieces: Vec<Piece>,
     /// The grpprls of Clx.RgPrc, which Prm1 values index.
     pub prcs: Vec<Vec<u8>>,
+    /// Word 6 and 95: the code page of the 8-bit text, in place of the
+    /// Windows-1252 of compressed Word 97 pieces.
+    pub code_page: Option<u32>,
 }
 
 /// Prm0 isprm values ([MS-DOC] §2.9.215) mapped to the sprms docboss reads.
@@ -128,6 +131,7 @@ impl PieceTable {
         PieceTable {
             pieces: vec![piece],
             prcs: Vec::new(),
+            code_page: None,
         }
     }
 
@@ -137,6 +141,12 @@ impl PieceTable {
         for piece in &mut self.pieces {
             piece.compressed = true;
         }
+        self
+    }
+
+    /// Reads the 8-bit text of every piece in `code_page`.
+    pub fn in_code_page(mut self, code_page: u32) -> PieceTable {
+        self.code_page = Some(code_page);
         self
     }
 
@@ -172,11 +182,16 @@ impl PieceTable {
     pub fn decode(&self, word: &[u8]) -> Vec<u16> {
         let length = (self.end() as usize).min(word.len());
         let mut text = vec![0u16; length];
+        let high = self.code_page.and_then(high_half);
         for piece in &self.pieces {
             let start = (piece.cp_start as usize).min(length);
             let count = (piece.cp_end as usize).min(length) - start;
             let bytes = slice(word, piece.fc as usize, count * piece.char_size() as usize);
             let target = &mut text[start..start + count];
+            if let (true, Some(code_page)) = (piece.compressed, self.code_page) {
+                legacy_units(code_page, high.as_deref(), bytes, target);
+                continue;
+            }
             if piece.compressed {
                 for (slot, &byte) in target.iter_mut().zip(bytes) {
                     *slot = compressed_char(byte);
@@ -189,6 +204,63 @@ impl PieceTable {
         }
         text
     }
+}
+
+/// Word 6 and 95 text in a Windows code page, one CP per byte: a
+/// double-byte character takes the slot of its lead byte and leaves U+0000,
+/// which stories drop, in the slot of its trail byte.
+fn legacy_units(code_page: u32, high: Option<&[u16]>, bytes: &[u8], target: &mut [u16]) {
+    if let Some(table) = high {
+        for (slot, &byte) in target.iter_mut().zip(bytes) {
+            *slot = match byte {
+                0..=0x7F => u16::from(byte),
+                _ => table
+                    .get(usize::from(byte - 0x80))
+                    .copied()
+                    .unwrap_or(0xFFFD),
+            };
+        }
+        return;
+    }
+    let mut at = 0;
+    while at < bytes.len().min(target.len()) {
+        let byte = bytes[at];
+        if byte < 0x80 {
+            target[at] = u16::from(byte);
+            at += 1;
+            continue;
+        }
+        if let Some(&trail) = bytes.get(at + 1).filter(|_| at + 1 < target.len()) {
+            let (pair, _) = docboss_cfb::codepage::decode(code_page, &[byte, trail]);
+            let mut chars = pair.chars();
+            if let (Some(c), None) = (chars.next(), chars.next()) {
+                if c != '\u{FFFD}' {
+                    target[at] = bmp(c);
+                    target[at + 1] = 0;
+                    at += 2;
+                    continue;
+                }
+            }
+        }
+        let (text, _) = docboss_cfb::codepage::decode(code_page, &[byte]);
+        target[at] = text.chars().next().map_or(0xFFFD, bmp);
+        at += 1;
+    }
+}
+
+/// The characters bytes 0x80 to 0xFF stand for in a single-byte code page,
+/// or `None` for a double-byte one.
+fn high_half(code_page: u32) -> Option<Vec<u16>> {
+    if !docboss_cfb::codepage::is_single_byte(code_page) {
+        return None;
+    }
+    let high: Vec<u8> = (0x80..=0xFF).collect();
+    let (decoded, _) = docboss_cfb::codepage::decode(code_page, &high);
+    Some(decoded.chars().map(bmp).collect())
+}
+
+fn bmp(c: char) -> u16 {
+    u16::try_from(u32::from(c)).unwrap_or(0xFFFD)
 }
 
 /// A compressed (8-bit) character: Windows-1252, with the exceptions

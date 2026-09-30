@@ -27,6 +27,11 @@ fn format_comes_from_bytes_not_names() {
     assert_eq!(detect(&bytes), Format::Doc);
     assert_eq!(detect(b"{\\rtf1 hello}"), Format::Rtf);
     assert!(matches!(read(b"plain text"), Err(Error::Unsupported(_))));
+    let word2 = std::fs::read(fixture("docboss-doc", "word2.doc")).unwrap();
+    assert_eq!(detect(&word2), Format::Doc);
+    assert!(!docboss_core::plain_text(&read(&word2).unwrap())
+        .trim()
+        .is_empty());
 }
 
 #[test]

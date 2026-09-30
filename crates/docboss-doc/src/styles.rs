@@ -5,7 +5,9 @@ use docboss_model::{
     ParagraphProperties, RunProperties, Style, StyleKind, Styles, TableProperties,
 };
 
-use crate::bytes::{slice, u16_at, utf16};
+use std::collections::BTreeSet;
+
+use crate::bytes::{slice, u16_at, u8_at, utf16};
 use crate::props::{apply_chp, apply_pap, CharContext, CharExtra, ParaExtra};
 
 /// A raw style definition: kind, base, next, name and its UPX grpprls.
@@ -42,8 +44,27 @@ fn sanitize(name: &str) -> String {
         .collect()
 }
 
+/// How a stylesheet stores style names and property modifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Version {
+    Word97,
+    /// Word 6 and 95: 8-bit names in this code page and 1-byte sprms.
+    Word6(u32),
+}
+
 /// Reads STSH ([MS-DOC] §2.9.271, §2.9.258 STD, §2.9.260 StdfBase).
 pub fn parse(bytes: &[u8]) -> Stylesheet {
+    parse_as(bytes, Version::Word97, &mut BTreeSet::new())
+}
+
+/// Reads a Word 6 or 95 stylesheet: the Word 97 layout with an 8-byte
+/// StdfBase, names of a size byte and 8-bit characters, and Word 6 sprms,
+/// translated. Codes left out are added to `dropped`.
+pub fn parse_word6(bytes: &[u8], code_page: u32, dropped: &mut BTreeSet<u8>) -> Stylesheet {
+    parse_as(bytes, Version::Word6(code_page), dropped)
+}
+
+fn parse_as(bytes: &[u8], version: Version, dropped: &mut BTreeSet<u8>) -> Stylesheet {
     let cb_stshi = usize::from(u16_at(bytes, 0).unwrap_or(0));
     let stshi = slice(bytes, 2, cb_stshi);
     let count = usize::from(u16_at(stshi, 0).unwrap_or(0));
@@ -61,7 +82,7 @@ pub fn parse(bytes: &[u8]) -> Stylesheet {
         };
         let std = slice(bytes, at + 2, usize::from(cb));
         at += 2 + usize::from(cb);
-        raw.push(parse_std(index, std, cb_base));
+        raw.push(parse_std(index, std, cb_base, version, dropped));
     }
     let mut ids: Vec<Option<String>> = Vec::with_capacity(raw.len());
     for style in &raw {
@@ -84,8 +105,14 @@ pub fn parse(bytes: &[u8]) -> Stylesheet {
     }
 }
 
-fn parse_std(index: usize, std: &[u8], cb_base: usize) -> Option<RawStyle> {
-    if std.len() < 10 {
+fn parse_std(
+    index: usize,
+    std: &[u8],
+    cb_base: usize,
+    version: Version,
+    dropped: &mut BTreeSet<u8>,
+) -> Option<RawStyle> {
+    if std.len() < 8 {
         return None;
     }
     let sti = u16_at(std, 0)? & 0x0FFF;
@@ -102,9 +129,18 @@ fn parse_std(index: usize, std: &[u8], cb_base: usize) -> Option<RawStyle> {
     let cupx = usize::from(word4 & 0xF);
     let next = istd(word4 >> 4);
     let name_at = cb_base;
-    let cch = usize::from(u16_at(std, name_at).unwrap_or(0));
-    let name = utf16(std, name_at + 2, cch);
-    let mut at = name_at + 2 + cch * 2 + 2;
+    let (name, mut at) = match version {
+        Version::Word97 => {
+            let cch = usize::from(u16_at(std, name_at).unwrap_or(0));
+            (utf16(std, name_at + 2, cch), name_at + 2 + cch * 2 + 2)
+        }
+        Version::Word6(code_page) => {
+            let cch = usize::from(u8_at(std, name_at).unwrap_or(0));
+            let bytes = slice(std, name_at + 1, cch);
+            let name = docboss_cfb::codepage::decode(code_page, bytes).0;
+            (name, name_at + 1 + cch + 1)
+        }
+    };
     let mut upxs: Vec<&[u8]> = Vec::with_capacity(cupx);
     for _ in 0..cupx {
         at += at & 1;
@@ -120,9 +156,15 @@ fn parse_std(index: usize, std: &[u8], cb_base: usize) -> Option<RawStyle> {
         StyleKind::Table => (upxs.get(1).copied(), upxs.get(2).copied()),
         StyleKind::Numbering => (upxs.first().copied(), None),
     };
-    let papx = papx
-        .map(|p| p.get(2..).unwrap_or(&[]).to_vec())
-        .unwrap_or_default();
+    let papx = papx.map_or(&[][..], |p| p.get(2..).unwrap_or(&[]));
+    let chpx = chpx.unwrap_or(&[]);
+    let (papx, chpx) = match version {
+        Version::Word97 => (papx.to_vec(), chpx.to_vec()),
+        Version::Word6(_) => (
+            crate::word6::translate(papx, dropped),
+            crate::word6::translate(chpx, dropped),
+        ),
+    };
     Some(RawStyle {
         istd: index,
         sti,
@@ -131,7 +173,7 @@ fn parse_std(index: usize, std: &[u8], cb_base: usize) -> Option<RawStyle> {
         next,
         name,
         papx,
-        chpx: chpx.unwrap_or(&[]).to_vec(),
+        chpx,
     })
 }
 

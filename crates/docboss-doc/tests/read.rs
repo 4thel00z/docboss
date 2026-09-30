@@ -454,3 +454,75 @@ fn font_table() {
         document.fonts.iter().map(|f| &f.name).collect::<Vec<_>>()
     );
 }
+
+/// Word 6 and 95 files: the Word 6 FIB, 1-byte sprms in the FKPs, the
+/// stylesheet and the section table, and the Plcfhdd stories sprmSGprfIhdt
+/// names, read into the same model as Word 97 ([MS-DOC] §2.5.15 and §2.9.215
+/// for the forms they map onto). Fixtures: Apache POI test data.
+#[test]
+fn word6_formatting_sections_and_headers() {
+    let document = fixture("word6-sections");
+    assert!(!document
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("text only")));
+    let bold = paragraphs(&document)
+        .into_iter()
+        .flat_map(runs)
+        .find(|run| {
+            run.content
+                .iter()
+                .any(|c| matches!(c, RunContent::Text(t) if t.contains("Corporate Insolvency")))
+        })
+        .expect("heading run");
+    assert_eq!(bold.properties.bold, Some(true));
+    assert_eq!(document.sections[0].properties.page_size.width, 11907);
+    let footers: Vec<_> = document
+        .headers_footers
+        .iter()
+        .filter(|h| h.kind == docboss_model::HeaderFooterKind::Footer)
+        .collect();
+    assert!(!footers.is_empty());
+    let footer_text: String = footers
+        .iter()
+        .flat_map(|f| f.blocks.iter())
+        .map(|b| match b {
+            Block::Paragraph(p) => p.text(),
+            Block::Table(_) => String::new(),
+        })
+        .collect();
+    assert!(footer_text.contains("sip10sco"), "{footer_text}");
+    let three = fixture("word6-three-sections");
+    assert_eq!(three.sections.len(), 3);
+}
+
+/// Word 95 tables: sprmTDefTable with 10-byte TCs, their merge bits and
+/// Shd80 percentage shading ([MS-DOC] §2.9.321, §2.9.317, §2.9.248,
+/// §2.9.121), and Cyrillic text in the code page the bytes name.
+#[test]
+fn word95_tables_merge_and_shade_their_cells() {
+    let document = fixture("word95-tables");
+    let table = first_table(&document);
+    let title = &table.rows[0].cells;
+    assert_eq!(title.len(), 1);
+    assert!(title[0].properties.grid_span > 1);
+    assert_eq!(
+        title[0].properties.shading.and_then(|s| s.fill),
+        Some(docboss_model::Color(191, 191, 191))
+    );
+    assert_eq!(table.rows[2].cells.len(), 5);
+    assert!(plain_text(&document).contains("Алиготе"));
+}
+
+/// Word 2 files are a bare FIB and text: read as text.
+#[test]
+fn word2_files_read_as_text() {
+    let bytes = std::fs::read(format!(
+        "{}/tests/fixtures/word2.doc",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(docboss_doc::is_doc(&bytes));
+    let document = docboss_doc::read(&bytes).unwrap();
+    assert!(!plain_text(&document).trim().is_empty());
+}

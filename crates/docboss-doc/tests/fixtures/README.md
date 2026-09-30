@@ -13,3 +13,6 @@
   `python3 crates/docboss-doc/tools/xor_obfuscate.py`, which follows
   [MS-DOC] §2.2.6.1 and [MS-OFFCRYPTO] §2.3.7; nothing on hand writes XOR
   obfuscation and no corpus file uses it.
+- `word6-sections.doc`, `word6-three-sections.doc`, `word95-tables.doc`
+  and `word2.doc`: Apache POI test data (`Word6_sections2.doc`,
+  `Word6_sections.doc`, `Bug49933.doc`, `word2.doc`), Apache License 2.0.

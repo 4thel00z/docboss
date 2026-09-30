@@ -93,7 +93,7 @@ impl Fib {
             fc_mac: u32_at(word, 28).unwrap_or(0),
         };
         if !fib.is_word97() {
-            fib.counts.text = u32_at(word, 0x34).unwrap_or(0);
+            crate::word6::fill_fib(word, &mut fib);
             return Ok(fib);
         }
         let csw = usize::from(u16_at(word, 32).unwrap_or(14));
