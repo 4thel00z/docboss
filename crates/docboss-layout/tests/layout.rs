@@ -1335,6 +1335,68 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
     );
 }
 
+/// ECMA-376 Part 1 §17.3.2.24: a run's position raises or lowers an inline
+/// picture with it: its line holds the part above the baseline and the
+/// part below.
+#[test]
+fn run_position_lowers_inline_pictures() {
+    let picture = |position: Option<i32>| {
+        Inline::Run(Run {
+            properties: RunProperties {
+                position,
+                ..RunProperties::default()
+            },
+            content: vec![RunContent::Drawing(Box::new(docboss_model::Drawing {
+                media: None,
+                width: 254_000,
+                height: 254_000,
+                placement: docboss_model::DrawingPlacement::Inline,
+                name: None,
+                description: None,
+                text_box: Vec::new(),
+                shape: Default::default(),
+                geometry: None,
+                members: Vec::new(),
+                data_text: Vec::new(),
+                chart: None,
+            }))],
+        })
+    };
+    let measure = |position: Option<i32>| {
+        let layout = laid(&doc(vec![
+            para_with(
+                ParagraphProperties::default(),
+                vec![run("Let"), picture(position)],
+            ),
+            para("next"),
+        ]));
+        let image = layout.pages[0]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Image { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .expect("picture");
+        let baseline = |text: &str| {
+            runs(&layout, 0)
+                .into_iter()
+                .find(|r| r.text == text)
+                .map(|r| r.baseline)
+                .expect("run")
+        };
+        (image.y + image.height - baseline("Let"), baseline("next"))
+    };
+    let (flat_drop, flat_next) = measure(None);
+    let (lowered_drop, lowered_next) = measure(Some(-12));
+    let (sunk_drop, sunk_next) = measure(Some(-40));
+    assert!(flat_drop.abs() < 0.01, "{flat_drop}");
+    assert!((lowered_drop - 6.0).abs() < 0.01, "{lowered_drop}");
+    assert!((sunk_drop - 20.0).abs() < 0.01, "{sunk_drop}");
+    assert!(lowered_next < flat_next, "{lowered_next} {flat_next}");
+    assert!(sunk_next > flat_next + 5.0, "{sunk_next} {flat_next}");
+}
+
 /// ECMA-376 Part 1 §20.4.2.22: an `a:spAutoFit` box taller than its one
 /// line of text shrinks to that line plus its insets.
 #[test]

@@ -439,7 +439,8 @@ impl Flattener<'_, '_> {
 
 /// ECMA-376 Part 1 §17.3.1: lays out one paragraph at `width` points. Under
 /// auto line spacing (§17.3.1.33) the multiple scales the text of a line;
-/// an inline picture keeps its own height on the text baseline.
+/// an inline picture keeps its own height on the text baseline, raised or
+/// lowered by its run's position (§17.3.2.24).
 pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: f32) -> Laid {
     let doc = ctx.doc;
     let table_style = ctx.table_style.clone();
@@ -525,25 +526,26 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
                 })
         };
         let (mut ascent, mut descent) = extent(false);
-        let (object_height, _) = extent(true);
+        let (object_height, object_descent) = extent(true);
         if ascent + descent <= 0.0 {
             ascent = mark_metrics.ascent;
             descent = mark_metrics.descent;
         }
-        let natural = ascent.max(object_height) + descent;
+        let lowest = descent.max(object_descent);
+        let natural = ascent.max(object_height) + lowest;
         let (height, baseline) = match rule {
             LineRule::Auto => {
                 let text = (ascent + descent) * line_value.max(1) as f32 / 240.0;
-                let h = text.max(object_height + descent);
-                (h, h - descent)
+                let h = (text + lowest - descent).max(object_height + lowest);
+                (h, h - lowest)
             }
             LineRule::Exact => {
                 let h = twips_to_pt(line_value).max(0.1);
-                (h, h - descent)
+                (h, h - lowest)
             }
             LineRule::AtLeast => {
                 let h = natural.max(twips_to_pt(line_value));
-                (h, h - descent)
+                (h, h - lowest)
             }
         };
         let mut items = Vec::new();
@@ -795,8 +797,10 @@ fn build_atoms(
             Elem::Object(drawing, style) => {
                 flush(ctx, &mut word, &mut atoms, true);
                 let mut object = Atom::new(Kind::Object, *style);
+                let rise = styles[*style].rise;
                 object.width = emu_to_pt(drawing.width).max(0.0);
-                object.ascent = emu_to_pt(drawing.height).max(0.0);
+                object.ascent = (emu_to_pt(drawing.height).max(0.0) + rise).max(0.0);
+                object.descent = (-rise).max(0.0);
                 object.content = Some(Box::new(Content::Drawing(drawing.clone())));
                 object.break_after = true;
                 object.level = level;
@@ -1211,18 +1215,19 @@ fn emit_line(
                     continue;
                 };
                 let h = emu_to_pt(drawing.height);
+                let top = baseline - style.rise - h;
                 let text_box = layout_drawing(ctx, drawing);
                 if drawing.media.is_none() && text_box.is_none() {
                     glyphs.push(Item::Image {
                         media: None,
-                        rect: Rect::new(x0, baseline - h, width, h),
+                        rect: Rect::new(x0, top, width, h),
                     });
                 }
                 let content = picture_items(drawing)
                     .into_iter()
                     .chain(text_box.map(|text_box| text_box.items).unwrap_or_default());
                 glyphs.extend(content.map(|mut item| {
-                    item.offset(x0, baseline - h);
+                    item.offset(x0, top);
                     item
                 }));
                 continue;
