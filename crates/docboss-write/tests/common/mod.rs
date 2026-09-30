@@ -145,9 +145,9 @@ pub fn kitchen_sink() -> Document {
             })
             .text(" bookmarked")
             .inline(Inline::BookmarkEnd { id: 0 })
-            .inline(Inline::CommentRangeStart(0))
+            .inline(Inline::CommentRangeStart { id: 0 })
             .text(" commented")
-            .inline(Inline::CommentRangeEnd(0))
+            .inline(Inline::CommentRangeEnd { id: 0 })
             .content(RunContent::CommentReference(0), RunProperties::default())
             .content(
                 RunContent::Symbol {

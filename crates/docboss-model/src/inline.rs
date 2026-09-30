@@ -650,8 +650,8 @@ pub enum Inline {
     Revision(Revision),
     BookmarkStart { id: i64, name: String },
     BookmarkEnd { id: i64 },
-    CommentRangeStart(i64),
-    CommentRangeEnd(i64),
+    CommentRangeStart { id: i64 },
+    CommentRangeEnd { id: i64 },
 }
 
 #[cfg(test)]

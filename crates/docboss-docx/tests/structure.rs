@@ -412,7 +412,7 @@ fn notes_and_comments() {
     let comment = doc.comment(0).unwrap();
     assert_eq!(comment.author.as_deref(), Some("Ann"));
     let p = paragraphs(&doc)[0];
-    assert!(matches!(p.inlines[0], Inline::CommentRangeStart(0)));
+    assert!(matches!(p.inlines[0], Inline::CommentRangeStart { id: 0 }));
 }
 
 /// ECMA-376 Part 2 §8.3: core properties, and extended properties.

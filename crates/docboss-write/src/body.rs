@@ -109,10 +109,10 @@ impl<'s, 'a> Story<'s, 'a> {
             Inline::BookmarkEnd { id } => self
                 .xml
                 .empty("w:bookmarkEnd", &[("w:id", &id.to_string())]),
-            Inline::CommentRangeStart(id) => self
+            Inline::CommentRangeStart { id } => self
                 .xml
                 .empty("w:commentRangeStart", &[("w:id", &id.to_string())]),
-            Inline::CommentRangeEnd(id) => self
+            Inline::CommentRangeEnd { id } => self
                 .xml
                 .empty("w:commentRangeEnd", &[("w:id", &id.to_string())]),
         }

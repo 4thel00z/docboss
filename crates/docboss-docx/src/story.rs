@@ -1285,12 +1285,12 @@ impl<'p> StoryParser<'p> {
             "bookmarkEnd" => pieces.push(Piece::Inline(Inline::BookmarkEnd {
                 id: int_attr(e, "id").unwrap_or(-1),
             })),
-            "commentRangeStart" => pieces.push(Piece::Inline(Inline::CommentRangeStart(
-                int_attr(e, "id").unwrap_or(-1),
-            ))),
-            "commentRangeEnd" => pieces.push(Piece::Inline(Inline::CommentRangeEnd(
-                int_attr(e, "id").unwrap_or(-1),
-            ))),
+            "commentRangeStart" => pieces.push(Piece::Inline(Inline::CommentRangeStart {
+                id: int_attr(e, "id").unwrap_or(-1),
+            })),
+            "commentRangeEnd" => pieces.push(Piece::Inline(Inline::CommentRangeEnd {
+                id: int_attr(e, "id").unwrap_or(-1),
+            })),
             _ => {}
         }
     }

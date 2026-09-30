@@ -19,3 +19,31 @@ pub fn blocks_json(doc: &Document, pretty: bool) -> serde_json::Result<String> {
     }
     serde_json::to_string(&blocks)
 }
+
+#[cfg(test)]
+mod tests {
+    use docboss_model::{Block, Inline, Paragraph, Section};
+
+    use super::*;
+
+    #[test]
+    fn comment_ranges_serialize_with_their_ids() {
+        let paragraph = Paragraph {
+            inlines: vec![
+                Inline::CommentRangeStart { id: 3 },
+                Inline::CommentRangeEnd { id: 3 },
+            ],
+            ..Paragraph::default()
+        };
+        let doc = Document {
+            sections: vec![Section {
+                properties: Default::default(),
+                blocks: vec![Block::Paragraph(paragraph)],
+            }],
+            ..Document::default()
+        };
+        let json = to_json(&doc, false).expect("serializes");
+        assert!(json.contains(r#"{"type":"comment_range_start","id":3}"#));
+        assert!(json.contains(r#"{"type":"comment_range_end","id":3}"#));
+    }
+}

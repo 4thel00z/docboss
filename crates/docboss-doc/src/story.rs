@@ -906,8 +906,8 @@ fn marker_inline(marker: &Marker) -> Inline {
             name: name.clone(),
         },
         Marker::BookmarkEnd(id) => Inline::BookmarkEnd { id: *id },
-        Marker::CommentStart(id) => Inline::CommentRangeStart(*id),
-        Marker::CommentEnd(id) => Inline::CommentRangeEnd(*id),
+        Marker::CommentStart(id) => Inline::CommentRangeStart { id: *id },
+        Marker::CommentEnd(id) => Inline::CommentRangeEnd { id: *id },
     }
 }
 

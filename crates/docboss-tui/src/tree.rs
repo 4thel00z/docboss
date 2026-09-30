@@ -363,8 +363,8 @@ fn inline_label(inline: &Inline) -> String {
         }
         Inline::BookmarkStart { id, name } => format!("bookmark {id} start {name}"),
         Inline::BookmarkEnd { id } => format!("bookmark {id} end"),
-        Inline::CommentRangeStart(id) => format!("comment {id} range start"),
-        Inline::CommentRangeEnd(id) => format!("comment {id} range end"),
+        Inline::CommentRangeStart { id } => format!("comment {id} range start"),
+        Inline::CommentRangeEnd { id } => format!("comment {id} range end"),
     }
 }
 
