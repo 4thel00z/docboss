@@ -44,6 +44,11 @@ pub struct Settings {
     pub default_tab_stop: i32,
     /// Whether even pages use the even header and footer.
     pub even_and_odd_headers: bool,
+    /// The Word version a DOCX asks to be laid out like (its
+    /// compatibilityMode setting: 15 for Word 2013 and later, 12 for Word
+    /// 2007, which the DOCX reader also assumes when a file states none).
+    /// `None`, for documents not read from a DOCX, lays out like 15.
+    pub compatibility_mode: Option<u32>,
 }
 
 impl Default for Settings {
@@ -51,6 +56,7 @@ impl Default for Settings {
         Self {
             default_tab_stop: 720,
             even_and_odd_headers: false,
+            compatibility_mode: None,
         }
     }
 }

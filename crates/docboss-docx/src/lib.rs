@@ -272,6 +272,7 @@ fn parse_misc(
     ) {
         shared.settings = parts::settings(&text);
     }
+    shared.settings.compatibility_mode = shared.settings.compatibility_mode.or(Some(12));
     let core_name = root_rels
         .first("core-properties")
         .map(|r| r.target.clone())

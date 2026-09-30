@@ -138,13 +138,18 @@ pub fn settings(document: &Document) -> Vec<u8> {
     if document.settings.even_and_odd_headers {
         xml.empty("w:evenAndOddHeaders", &[]);
     }
+    let mode = document
+        .settings
+        .compatibility_mode
+        .unwrap_or(15)
+        .to_string();
     xml.open("w:compat", &[]);
     xml.empty(
         "w:compatSetting",
         &[
             ("w:name", "compatibilityMode"),
             ("w:uri", "http://schemas.microsoft.com/office/word"),
-            ("w:val", "15"),
+            ("w:val", &mode),
         ],
     );
     xml.close("w:compat");

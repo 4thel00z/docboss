@@ -259,6 +259,7 @@ fn assemble(
     let settings = Settings {
         default_tab_stop: u16_at(dop, 10).map_or(720, |v| i32::from(v).max(1)),
         even_and_odd_headers: dop.first().is_some_and(|b| b & 1 != 0),
+        compatibility_mode: None,
     };
     let media = context.media.take();
     diagnostics.extend(context.diagnostics.take());
@@ -785,6 +786,7 @@ fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> 
     let settings = Settings {
         default_tab_stop: u16_at(dop, 10).map_or(720, |v| i32::from(v).max(1)),
         even_and_odd_headers: dop.first().is_some_and(|b| b & 1 != 0),
+        compatibility_mode: None,
     };
     if fib.range(slot::PLCFAND_REF).is_some() {
         diagnostics.push(Diagnostic::dropped(

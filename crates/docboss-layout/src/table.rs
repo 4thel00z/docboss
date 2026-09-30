@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Color, DashPattern, Justification, LineCap, Table,
+    Border, BorderStyle, Borders, Color, DashPattern, Justification, LineCap, SourceFormat, Table,
     TableProperties, TextDirection, VerticalAlign, VerticalMerge,
 };
 
@@ -58,6 +58,17 @@ pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> 
         style,
         cap,
     })
+}
+
+/// ECMA-376 Part 1 §17.4.66 (`w:tcBorders`): the height a horizontal
+/// border takes from its row, the width it is drawn with, or nothing for
+/// a border that is not drawn. The border above a row is counted in it, and
+/// the table's last row counts its bottom border too, as LibreOffice lays
+/// Word tables out.
+fn drawn_width(border: Option<&Border>) -> f32 {
+    border
+        .filter(|b| !matches!(b.style, BorderStyle::None | BorderStyle::Art))
+        .map_or(0.0, border_width)
 }
 
 /// The width a border line is drawn with, in points.
@@ -386,17 +397,29 @@ fn layout_table_rows(
         .collect();
     let indent = props.indent.map_or(0.0, twips_to_pt);
     let rtl = props.bidi_visual;
+    let default_margins =
+        props
+            .cell_margins
+            .unwrap_or([0, DEFAULT_CELL_MARGIN, 0, DEFAULT_CELL_MARGIN]);
+    let first_margin = table
+        .rows
+        .first()
+        .and_then(|row| row.cells.first())
+        .and_then(|cell| cell.properties.margins)
+        .unwrap_or(default_margins)[1];
+    let outdent = match ctx.doc.format {
+        SourceFormat::Docx if ctx.doc.settings.compatibility_mode.unwrap_or(15) < 15 => {
+            twips_to_pt(first_margin)
+        }
+        _ => 0.0,
+    };
     let table_x = match (props.justification, rtl) {
         (Some(Justification::Center), _) => ((width - total) / 2.0).max(0.0),
         (Some(Justification::Right), false) => (width - total).max(0.0),
         (Some(Justification::Right), true) => 0.0,
         (_, true) => (width - total).max(0.0) - indent,
-        (_, false) => indent,
+        (_, false) => indent - outdent,
     };
-    let default_margins =
-        props
-            .cell_margins
-            .unwrap_or([0, DEFAULT_CELL_MARGIN, 0, DEFAULT_CELL_MARGIN]);
     let borders = props.borders.unwrap_or_default();
     let row_count = table.rows.len();
 
@@ -494,6 +517,10 @@ fn layout_table_rows(
             };
             if rtl {
                 std::mem::swap(&mut sides.left, &mut sides.right);
+            }
+            m[0] += drawn_width(sides.top.as_ref());
+            if r + 1 == row_count {
+                m[2] += drawn_width(sides.bottom.as_ref());
             }
             cells.push(CellPlan {
                 x,

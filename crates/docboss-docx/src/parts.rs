@@ -218,19 +218,28 @@ pub fn resolve_style_links(numbering: &mut Numbering, links: &[(i64, String)], s
     }
 }
 
-/// `w:settings` (ECMA-376 Part 1 §17.15): the default tab stop and whether
-/// even pages use their own headers (ECMA-376 Part 1 §17.10.1).
+/// `w:settings` (ECMA-376 Part 1 §17.15): the default tab stop, whether
+/// even pages use their own headers (ECMA-376 Part 1 §17.10.1) and the
+/// compatibilityMode compatSetting (ECMA-376 Part 1 §17.15.3.4).
 pub fn settings(text: &str) -> Settings {
     let mut reader = Reader::new(text);
     let mut settings = Settings::default();
     if root(&mut reader).is_none() {
         return settings;
     }
-    children(&mut reader, |_, e| match e.local {
+    children(&mut reader, |reader, e| match e.local {
         "defaultTabStop" => {
             settings.default_tab_stop = twips_attr(&e, "val").filter(|&t| t > 0).unwrap_or(720)
         }
         "evenAndOddHeaders" => settings.even_and_odd_headers = on_off(&e),
+        "compat" if !e.empty => children(reader, |_, e| {
+            if e.local != "compatSetting"
+                || attr(&e, "name").as_deref() != Some("compatibilityMode")
+            {
+                return;
+            }
+            settings.compatibility_mode = attr(&e, "val").and_then(|v| v.trim().parse().ok());
+        }),
         _ => {}
     });
     settings
@@ -441,6 +450,27 @@ mod tests {
         assert!(deobfuscate(&mut data, key));
         assert!(data.iter().all(|&b| b == 0));
         assert!(!deobfuscate(&mut data, "short"));
+    }
+
+    /// ECMA-376 Part 1 §17.15.3.4: the compatibilityMode compatSetting.
+    #[test]
+    fn settings_read_the_compatibility_mode() {
+        let xml = r#"<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="708"/><w:compat><w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat><w:evenAndOddHeaders/></w:settings>"#;
+        let parsed = settings(xml);
+        assert_eq!(parsed.compatibility_mode, Some(15));
+        assert_eq!(parsed.default_tab_stop, 708);
+        assert!(parsed.even_and_odd_headers);
+        let old = r#"<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:compat/></w:settings>"#;
+        assert_eq!(settings(old).compatibility_mode, None);
+        let document = crate::read(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/libreoffice-rich.docx"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(document.settings.compatibility_mode.is_some());
     }
 
     #[test]

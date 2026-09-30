@@ -354,6 +354,63 @@ fn table_cells_sit_on_the_grid_with_borders() {
     }
 }
 
+/// ECMA-376 Part 1 §17.4.66 and §17.15.3.4: the border above a row, and
+/// the last row's bottom border, count in the row's height; a table in a
+/// document laid out like Word 2007 (no compatibilityMode 15) moves left by
+/// its first cell's left margin, so the cell text lines up with the margin.
+#[test]
+fn table_borders_take_row_height_and_old_tables_outdent() {
+    let cell = |text: &str| TableCell {
+        blocks: vec![para(text)],
+        ..TableCell::default()
+    };
+    let table = |thick: bool| {
+        let mut line = border();
+        if thick {
+            line.size = 32;
+        }
+        Block::Table(Table {
+            properties: TableProperties {
+                borders: Some(Borders {
+                    top: Some(line),
+                    bottom: Some(line),
+                    inside_horizontal: Some(line),
+                    ..Borders::default()
+                }),
+                ..TableProperties::default()
+            },
+            grid: vec![2880],
+            rows: vec![
+                TableRow {
+                    cells: vec![cell("a1")],
+                    ..TableRow::default()
+                },
+                TableRow {
+                    cells: vec![cell("a2")],
+                    ..TableRow::default()
+                },
+            ],
+        })
+    };
+    let pitch = |document: &Document| {
+        let layout = laid(document);
+        let runs = runs(&layout, 0);
+        let baseline = |text: &str| runs.iter().find(|r| r.text == text).unwrap().baseline;
+        (
+            baseline("a2") - baseline("a1"),
+            runs.iter().find(|r| r.text == "a1").unwrap().glyphs[0].x,
+        )
+    };
+    let (thin, x_new) = pitch(&doc(vec![table(false)]));
+    let (thick, _) = pitch(&doc(vec![table(true)]));
+    assert!((thick - thin - 3.5).abs() < 0.01, "{thin} {thick}");
+    assert!((x_new - (72.0 + 5.4)).abs() < 0.01);
+    let mut old = doc(vec![table(false)]);
+    old.settings.compatibility_mode = Some(12);
+    let (_, x_old) = pitch(&old);
+    assert!((x_old - 72.0).abs() < 0.01, "{x_old}");
+}
+
 /// ECMA-376 Part 1 §17.10 and §17.16: every page's header evaluates its
 /// `PAGE` and `NUMPAGES` fields.
 #[test]
