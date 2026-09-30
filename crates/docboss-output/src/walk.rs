@@ -201,6 +201,7 @@ pub(crate) enum Piece<'a> {
     Note(NoteKind, i64),
     Comment(i64),
     Image(&'a Drawing),
+    Math(&'a docboss_model::Math),
     LinkStart(Link<'a>),
     LinkEnd,
     Bookmark(&'a str),
@@ -394,6 +395,7 @@ fn flatten_content<'a>(info: RunInfo, content: &'a RunContent, out: &mut Vec<Pie
         RunContent::EndnoteReference(id) => Piece::Note(NoteKind::Endnote, *id),
         RunContent::CommentReference(id) => Piece::Comment(*id),
         RunContent::Drawing(drawing) => Piece::Image(drawing),
+        RunContent::Math(math) => Piece::Math(math),
         RunContent::SoftHyphen | RunContent::NoteNumber => return,
     };
     out.push(piece);
@@ -505,6 +507,7 @@ pub(crate) fn pieces_text(pieces: &[Piece<'_>], out: &mut String) {
             Piece::Text(text, _) => out.push_str(text),
             Piece::Tab => out.push('\t'),
             Piece::LineBreak => out.push('\n'),
+            Piece::Math(math) => out.push_str(&docboss_model::linear_text(&math.nodes)),
             _ => {}
         }
     }
@@ -518,7 +521,7 @@ pub(crate) fn all_monospace(pieces: &[Piece<'_>]) -> bool {
         let Piece::Text(text, fmt) = piece else {
             if matches!(
                 piece,
-                Piece::Image(_) | Piece::Note(..) | Piece::LinkStart(_)
+                Piece::Image(_) | Piece::Math(_) | Piece::Note(..) | Piece::LinkStart(_)
             ) {
                 return false;
             }

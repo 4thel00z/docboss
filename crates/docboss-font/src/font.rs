@@ -222,6 +222,7 @@ pub struct Font {
     pub(crate) kerning: Kerning,
     gsub_table: Option<(usize, usize)>,
     gpos_table: Option<(usize, usize)>,
+    math: Option<crate::MathConstants>,
     gsub: OnceLock<Option<LayoutTable>>,
     gpos: OnceLock<Option<LayoutTable>>,
     pub(crate) gdef: Gdef,
@@ -297,6 +298,7 @@ impl Font {
         let gsub_table = table(b"GSUB");
         let gpos_table = table(b"GPOS");
         let gdef = Gdef::parse(bytes, table(b"GDEF"));
+        let math = slice(b"MATH").and_then(|t| crate::MathConstants::parse(t, units_per_em));
         Ok(Font {
             data,
             names,
@@ -310,6 +312,7 @@ impl Font {
             kerning,
             gsub_table,
             gpos_table,
+            math,
             gsub: OnceLock::new(),
             gpos: OnceLock::new(),
             gdef,
@@ -331,6 +334,11 @@ impl Font {
         self.gpos
             .get_or_init(|| LayoutTable::parse(&self.data, self.gpos_table, 9))
             .as_ref()
+    }
+
+    /// The constants of the face's `MATH` table, if it has one.
+    pub fn math_constants(&self) -> Option<crate::MathConstants> {
+        self.math
     }
 
     /// Whether the face has glyph substitutions or positions to apply.

@@ -588,6 +588,8 @@ pub enum RunContent {
     /// The automatic number of the note whose body contains this run.
     NoteNumber,
     Drawing(Box<Drawing>),
+    /// An Office Math zone.
+    Math(Box<crate::Math>),
 }
 
 /// A run: content sharing one set of properties.

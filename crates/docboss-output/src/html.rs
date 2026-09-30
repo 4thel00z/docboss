@@ -306,6 +306,12 @@ impl<'a> HtmlWriter<'a, '_> {
                     flush(&mut group, group_fmt, out);
                     self.image(drawing, out);
                 }
+                Piece::Math(math) => {
+                    flush(&mut group, group_fmt, out);
+                    out.push_str("<span class=\"math\">");
+                    let _ = escape(&docboss_model::linear_text(&math.nodes), out);
+                    out.push_str("</span>");
+                }
                 Piece::LinkStart(link) => {
                     flush(&mut group, group_fmt, out);
                     depth += 1;

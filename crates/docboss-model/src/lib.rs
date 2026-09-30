@@ -17,6 +17,7 @@ mod document;
 mod fill;
 mod group;
 mod inline;
+mod math;
 mod media;
 mod numbering;
 mod props;
@@ -42,6 +43,7 @@ pub use inline::{
     LineJoin, PathCommand, PathFill, PositionAlign, PositionBase, Revision, RevisionKind, Run,
     RunContent, ShapeFormat,
 };
+pub use math::{linear_text, FractionKind, Math, MathJustification, MathNode, MathStyle};
 pub use media::{sniff_image, FontEntry, Media, MediaId};
 pub use numbering::{
     AbstractNumbering, Level, NumberFormat, Numbering, NumberingCounter, NumberingInstance,

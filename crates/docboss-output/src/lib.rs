@@ -8,6 +8,7 @@ mod blocks;
 mod html;
 #[cfg(feature = "serde")]
 mod json;
+mod latex;
 mod markdown;
 mod symbol;
 mod text;

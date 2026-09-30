@@ -272,6 +272,7 @@ impl<'s, 'a> Story<'s, 'a> {
                 _ => {}
             },
             RunContent::Drawing(drawing) => self.drawing(drawing),
+            RunContent::Math(math) => self.text(&docboss_model::linear_text(&math.nodes)),
         }
     }
 

@@ -170,6 +170,7 @@ impl<'a> TextWriter<'a, '_> {
         for piece in &pieces {
             match piece {
                 Piece::Text(text, _) => self.line.push_str(text),
+                Piece::Math(math) => self.line.push_str(&docboss_model::linear_text(&math.nodes)),
                 Piece::Tab => self.line.push('\t'),
                 Piece::LineBreak | Piece::PageBreak | Piece::ColumnBreak => self.line.push('\n'),
                 Piece::Note(kind, id) if self.options.notes => {

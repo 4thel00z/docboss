@@ -17,6 +17,7 @@ use crate::geometry;
 mod chart;
 mod diagram;
 mod group;
+mod math;
 mod text;
 use crate::package::{Package, Relationships};
 use crate::props::{
@@ -1218,11 +1219,20 @@ impl<'p> StoryParser<'p> {
             return;
         }
         if e.ns == Ns::M {
-            if matches!(e.local, "oMath" | "oMathPara") {
-                let text = math_text(reader);
+            if !matches!(e.local, "oMath" | "oMathPara") {
+                return;
+            }
+            let (zones, dropped) = math::zones(reader, e, self.ctx.theme);
+            if dropped {
+                self.diagnostics.push(Diagnostic::dropped(
+                    self.ctx.part,
+                    "math objects nested too deep or too many",
+                ));
+            }
+            for (zone, properties) in zones {
                 pieces.push(Piece::Inline(Inline::Run(Run {
-                    properties: RunProperties::default(),
-                    content: vec![RunContent::Text(text)],
+                    properties,
+                    content: vec![RunContent::Math(Box::new(zone))],
                 })));
             }
             return;
@@ -1828,22 +1838,6 @@ fn flush(properties: &RunProperties, content: &mut Vec<RunContent>, pieces: &mut
         content: std::mem::take(content),
     };
     pieces.push(Piece::Inline(Inline::Run(run)));
-}
-
-/// The text of an Office Math zone: its `m:t` runs in order.
-fn math_text(reader: &mut Reader<'_>) -> String {
-    let mut out = String::new();
-    fn walk(reader: &mut Reader<'_>, out: &mut String) {
-        children(reader, |reader, e| {
-            if e.ns == Ns::M && e.local == "t" {
-                out.push_str(&reader.read_text());
-                return;
-            }
-            walk(reader, out);
-        });
-    }
-    walk(reader, &mut out);
-    out
 }
 
 #[cfg(test)]

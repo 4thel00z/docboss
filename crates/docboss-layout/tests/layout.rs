@@ -1907,3 +1907,50 @@ fn charts_draw_bars_labels_and_slices() {
         ]
     );
 }
+
+/// A fraction draws its numerator above a rule and its denominator below
+/// it on the line's baseline; a display equation is centered.
+/// ECMA-376 Part 1 §22.1.2.36, §22.1.2.78.
+#[test]
+fn fractions_stack_over_a_rule_and_display_math_centers() {
+    use docboss_model::{FractionKind, Math, MathJustification, MathNode, MathStyle};
+    let m = |text: &str| {
+        vec![MathNode::Run {
+            text: text.into(),
+            style: MathStyle::Plain,
+        }]
+    };
+    let math = Math {
+        display: true,
+        justification: MathJustification::Center,
+        nodes: vec![MathNode::Fraction {
+            kind: FractionKind::Bar,
+            numerator: m("1"),
+            denominator: m("2"),
+        }],
+    };
+    let layout = laid(&doc(vec![para_with(
+        ParagraphProperties::default(),
+        vec![Inline::Run(Run {
+            properties: RunProperties::default(),
+            content: vec![RunContent::Math(Box::new(math))],
+        })],
+    )]));
+    let page = &layout.pages[0];
+    let rule = page
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Rect { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .expect("a fraction rule");
+    let glyphs: Vec<(f32, f32)> = runs(&layout, 0)
+        .iter()
+        .flat_map(|r| r.glyphs.iter().map(move |g| (g.x, r.baseline)))
+        .collect();
+    assert_eq!(glyphs.len(), 2, "{glyphs:?}");
+    assert!(glyphs[0].1 < rule.y && glyphs[1].1 > rule.bottom());
+    let center = rule.x + rule.width / 2.0;
+    assert!((center - page.width / 2.0).abs() < 2.0, "{center}");
+}

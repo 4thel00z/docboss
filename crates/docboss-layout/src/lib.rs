@@ -15,6 +15,7 @@ mod drawn;
 mod flow;
 mod geometry;
 mod label;
+mod math;
 mod paragraph;
 mod presets;
 mod shape;

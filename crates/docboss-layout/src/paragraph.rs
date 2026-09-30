@@ -23,6 +23,7 @@ enum Elem {
     Break(Break, usize),
     Object(Box<Drawing>, usize),
     Float(Box<Drawing>),
+    Math(Box<docboss_model::Math>, usize),
     Note(i64),
 }
 
@@ -33,6 +34,7 @@ enum Kind {
     Tab,
     Break(Break),
     Object,
+    Math,
 }
 
 /// One glyph of an atom: `x` is its pen position from the atom's start in
@@ -63,6 +65,15 @@ impl AtomGlyph {
     }
 }
 
+/// What an object or math atom draws.
+#[derive(Debug, Clone)]
+enum Content {
+    Drawing(Box<Drawing>),
+    /// A math zone's items on the atom's baseline, and how a display
+    /// equation sits on its line.
+    Math(Vec<Item>, Option<docboss_model::MathJustification>),
+}
+
 #[derive(Debug, Clone)]
 struct Atom {
     kind: Kind,
@@ -72,7 +83,8 @@ struct Atom {
     descent: f32,
     break_after: bool,
     style: usize,
-    object: Option<Box<Drawing>>,
+    /// The drawing of an object atom or the laid-out zone of a math atom.
+    content: Option<Box<Content>>,
     notes: Vec<i64>,
     /// The embedding level of the atom's characters (UAX #9).
     level: u8,
@@ -92,7 +104,7 @@ impl Atom {
             descent: 0.0,
             break_after: false,
             style,
-            object: None,
+            content: None,
             notes: Vec::new(),
             level: 0,
             shaped: false,
@@ -409,6 +421,7 @@ impl Flattener<'_, '_> {
                         self.elems.push(Elem::Float(drawing.clone()))
                     }
                 },
+                RunContent::Math(math) => self.elems.push(Elem::Math(math.clone(), index)),
                 RunContent::CommentReference(_) => {}
             }
         }
@@ -665,7 +678,7 @@ fn paragraph_levels(styles: &[RunStyle], elems: &[Elem], rtl: bool) -> Option<Ve
             }
             Elem::Tab(_) => ('\t', Bidi::S),
             Elem::Break(..) => ('\u{2028}', Bidi::WS),
-            Elem::Object(..) => ('\u{FFFC}', Bidi::ON),
+            Elem::Object(..) | Elem::Math(..) => ('\u{FFFC}', Bidi::ON),
             Elem::Float(_) | Elem::Note(_) => ('\u{200B}', Bidi::BN),
         };
         chars.push(c);
@@ -784,10 +797,25 @@ fn build_atoms(
                 let mut object = Atom::new(Kind::Object, *style);
                 object.width = emu_to_pt(drawing.width).max(0.0);
                 object.ascent = emu_to_pt(drawing.height).max(0.0);
-                object.object = Some(drawing.clone());
+                object.content = Some(Box::new(Content::Drawing(drawing.clone())));
                 object.break_after = true;
                 object.level = level;
                 atoms.push(object);
+                prev = None;
+            }
+            Elem::Math(math, style) => {
+                flush(ctx, &mut word, &mut atoms, true);
+                let laid = crate::math::layout_math(ctx, math, &styles[*style]);
+                let em = styles[*style].base_size;
+                let mut atom = Atom::new(Kind::Math, *style);
+                atom.width = laid.width;
+                atom.ascent = laid.ascent.max(em * 0.9);
+                atom.descent = laid.descent.max(em * 0.25);
+                atom.break_after = true;
+                atom.level = level;
+                let display = math.display.then_some(math.justification);
+                atom.content = Some(Box::new(Content::Math(laid.items, display)));
+                atoms.push(atom);
                 prev = None;
             }
             Elem::Float(drawing) => {
@@ -1123,6 +1151,18 @@ fn emit_line(
     let stretchable: Vec<usize> = (last_tab..placed.len())
         .filter(|&i| atoms[placed[i].atom].is_space())
         .collect();
+    let display = placed
+        .iter()
+        .find_map(|p| match atoms[p.atom].content.as_deref() {
+            Some(Content::Math(_, display)) => *display,
+            _ => None,
+        });
+    let justification = match display {
+        Some(docboss_model::MathJustification::Left) => Justification::Left,
+        Some(docboss_model::MathJustification::Center) => Justification::Center,
+        Some(docboss_model::MathJustification::Right) => Justification::Right,
+        None => justification,
+    };
     let justify = match justification {
         Justification::Both => line.end == LineEnd::Wrap && !is_last,
         Justification::Distribute => true,
@@ -1156,8 +1196,18 @@ fn emit_line(
         let width = spans[index].1;
         let style = &styles[atom.style];
         match atom.kind {
+            Kind::Math => {
+                let Some(Content::Math(items, _)) = atom.content.as_deref() else {
+                    continue;
+                };
+                glyphs.extend(items.iter().cloned().map(|mut item| {
+                    item.offset(x0, baseline);
+                    item
+                }));
+                continue;
+            }
             Kind::Object => {
-                let Some(drawing) = &atom.object else {
+                let Some(Content::Drawing(drawing)) = atom.content.as_deref() else {
                     continue;
                 };
                 let h = emu_to_pt(drawing.height);

@@ -329,6 +329,20 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
                     flush(&mut group, group_fmt, context, out);
                     self.image(drawing, out);
                 }
+                Piece::Math(math) => {
+                    flush(&mut group, group_fmt, context, out);
+                    let fence = if math.display && !context.table {
+                        "$$"
+                    } else {
+                        "$"
+                    };
+                    if out.ends_with('$') {
+                        out.push(' ');
+                    }
+                    out.push_str(fence);
+                    crate::latex::write(&math.nodes, out);
+                    out.push_str(fence);
+                }
                 Piece::LinkStart(link) => {
                     flush(&mut group, group_fmt, context, out);
                     depth += 1;

@@ -1369,3 +1369,83 @@ fn color_transforms_read_strict_percentages() {
         .collect();
     assert_eq!(fills, [Some(Color(128, 128, 128)); 2]);
 }
+
+const MATH_NS: &str = r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math""#;
+
+/// Office Math zones become math trees: fractions, scripts, n-ary
+/// operators with their limit placement, delimiters, radicals, functions
+/// and plain runs; an `m:oMathPara` makes display equations.
+/// ECMA-376 Part 1 §22.1.2.77, §22.1.2.78, §22.1.2.87, §22.1.2.36, §22.1.2.105, §22.1.2.70, §22.1.2.53, §22.1.2.24, §22.1.2.88, §22.1.2.39, §22.1.2.111.
+#[test]
+fn office_math_reads_into_trees() {
+    use docboss_model::{FractionKind, MathNode, MathStyle};
+    let body = format!(
+        r#"<w:p {MATH_NS}><m:oMathPara><m:oMathParaPr><m:jc m:val="left"/></m:oMathParaPr><m:oMath><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:den></m:f><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup/><m:e><m:d><m:e><m:r><m:t>i</m:t></m:r></m:e></m:d></m:e></m:nary><m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e><m:r><m:t>y</m:t></m:r></m:e></m:rad><m:func><m:fName><m:r><m:t>sin</m:t></m:r></m:fName><m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>z</m:t></m:r></m:e></m:func></m:oMath></m:oMathPara></w:p>"#
+    );
+    let doc = read(&Docx::new(&body).build()).unwrap();
+    let Inline::Run(run) = &paragraphs(&doc)[0].inlines[0] else {
+        panic!()
+    };
+    let RunContent::Math(math) = &run.content[0] else {
+        panic!("{:?}", run.content)
+    };
+    assert!(math.display);
+    assert_eq!(math.justification, docboss_model::MathJustification::Left);
+    let MathNode::Fraction {
+        kind, denominator, ..
+    } = &math.nodes[0]
+    else {
+        panic!()
+    };
+    assert_eq!(*kind, FractionKind::Bar);
+    assert!(matches!(
+        &denominator[0],
+        MathNode::Script {
+            sup: Some(_),
+            sub: None,
+            pre: false,
+            ..
+        }
+    ));
+    let MathNode::Nary {
+        operator,
+        limits_under,
+        sup,
+        body,
+        ..
+    } = &math.nodes[1]
+    else {
+        panic!()
+    };
+    assert_eq!((*operator, *limits_under, sup.is_none()), ('∑', true, true));
+    assert!(matches!(
+        &body[0],
+        MathNode::Delimiter {
+            open: Some('('),
+            close: Some(')'),
+            ..
+        }
+    ));
+    assert!(matches!(
+        &math.nodes[2],
+        MathNode::Radical { degree: None, .. }
+    ));
+    let MathNode::Function { name, body } = &math.nodes[3] else {
+        panic!()
+    };
+    assert!(matches!(
+        &name[0],
+        MathNode::Run {
+            style: MathStyle::Plain,
+            ..
+        }
+    ));
+    assert!(matches!(
+        &body[0],
+        MathNode::Run {
+            style: MathStyle::Plain,
+            ..
+        }
+    ));
+    assert_eq!(plain_text(&doc), "a/(x^2)∑_i▒(i)√ysin\u{2061}z\n");
+}

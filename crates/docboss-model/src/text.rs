@@ -87,6 +87,7 @@ fn content_text(content: &RunContent, out: &mut String) {
         RunContent::Break(_) | RunContent::CarriageReturn => out.push('\n'),
         RunContent::NoBreakHyphen => out.push('\u{2011}'),
         RunContent::Symbol { char, .. } => out.extend(char::from_u32(*char)),
+        RunContent::Math(math) => out.push_str(&crate::linear_text(&math.nodes)),
         _ => {}
     }
 }

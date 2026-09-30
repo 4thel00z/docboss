@@ -262,3 +262,66 @@ fn chart_tables_follow_their_anchor() {
         "{markdown}"
     );
 }
+
+fn math_run(display: bool, nodes: Vec<MathNode>) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Math(Box::new(Math {
+            display,
+            justification: MathJustification::Center,
+            nodes,
+        }))],
+    })
+}
+
+fn m(text: &str) -> Vec<MathNode> {
+    vec![MathNode::Run {
+        text: text.into(),
+        style: MathStyle::Math,
+    }]
+}
+
+/// Office Math is written in Unicode linear format in plain text and as
+/// LaTeX between dollar signs in Markdown, doubled for display equations.
+/// ECMA-376 Part 1 §22.1.2.77, §22.1.2.78.
+#[test]
+fn math_is_linear_text_and_latex() {
+    let fraction = MathNode::Fraction {
+        kind: FractionKind::Bar,
+        numerator: m("a+b"),
+        denominator: vec![MathNode::Script {
+            base: m("x"),
+            sub: None,
+            sup: Some(m("2")),
+            pre: false,
+        }],
+    };
+    let sum = MathNode::Nary {
+        operator: '∑',
+        sub: Some(m("i=1")),
+        sup: Some(m("n")),
+        limits_under: true,
+        body: vec![MathNode::Radical {
+            degree: None,
+            body: m("α"),
+        }],
+    };
+    let doc = document(vec![
+        para(vec![
+            run("Inline "),
+            math_run(false, vec![fraction]),
+            run(" end"),
+        ]),
+        para(vec![math_run(true, vec![sum])]),
+    ]);
+    assert_eq!(text(&doc), "Inline (a+b)/(x^2) end\n∑_(i=1)^n▒(√α)\n");
+    let markdown = docboss_output::to_markdown(&doc, &docboss_output::MarkdownOptions::default());
+    assert!(
+        markdown.contains("Inline $\\frac{a+b}{{x}^{2}}$ end"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("$$\\sum _{i=1}^{n}{\\sqrt{\\alpha }}$$"),
+        "{markdown}"
+    );
+}
