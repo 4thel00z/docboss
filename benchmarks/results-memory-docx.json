@@ -22,24 +22,24 @@
     "pandoc": "3.9",
     "libreoffice": "26.8.0.3"
   },
-  "date": "2026-09-28",
+  "date": "2026-09-30",
   "engines": {
     "docboss": {
       "sample": {
         "outcome": "ok",
         "handled": 99,
         "files": 100,
-        "baseline_mb": 23.298048,
-        "peak_mb": 31.70304,
-        "delta_mb": 8.404992
+        "baseline_mb": 23.478272,
+        "peak_mb": 33.1776,
+        "delta_mb": 9.699328
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 23.150592,
-        "peak_mb": 34.340864,
-        "delta_mb": 11.190272
+        "baseline_mb": 23.298048,
+        "peak_mb": 34.73408,
+        "delta_mb": 11.436032
       }
     },
     "python-docx": {
@@ -47,16 +47,16 @@
         "outcome": "ok",
         "handled": 96,
         "files": 100,
-        "baseline_mb": 34.881536,
-        "peak_mb": 58.834944,
-        "delta_mb": 23.953408
+        "baseline_mb": 34.684928,
+        "peak_mb": 58.802176,
+        "delta_mb": 24.117248
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 34.603008,
-        "peak_mb": 41.631744,
+        "baseline_mb": 34.619392,
+        "peak_mb": 41.648128,
         "delta_mb": 7.028736
       }
     },
@@ -65,17 +65,17 @@
         "outcome": "ok",
         "handled": 97,
         "files": 100,
-        "baseline_mb": 29.507584,
-        "peak_mb": 55.066624,
-        "delta_mb": 25.55904
+        "baseline_mb": 29.523968,
+        "peak_mb": 54.96832,
+        "delta_mb": 25.444352
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 29.589504,
-        "peak_mb": 30.294016,
-        "delta_mb": 0.704512
+        "baseline_mb": 29.638656,
+        "peak_mb": 30.3104,
+        "delta_mb": 0.671744
       }
     },
     "mammoth": {
@@ -83,17 +83,17 @@
         "outcome": "ok",
         "handled": 98,
         "files": 100,
-        "baseline_mb": 30.949376,
-        "peak_mb": 82.24768,
-        "delta_mb": 51.298304
+        "baseline_mb": 30.96576,
+        "peak_mb": 82.182144,
+        "delta_mb": 51.216384
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 30.932992,
-        "peak_mb": 32.620544,
-        "delta_mb": 1.687552
+        "baseline_mb": 30.96576,
+        "peak_mb": 32.669696,
+        "delta_mb": 1.703936
       }
     },
     "docx2txt": {
@@ -101,16 +101,16 @@
         "outcome": "ok",
         "handled": 98,
         "files": 100,
-        "baseline_mb": 24.461312,
-        "peak_mb": 30.06464,
+        "baseline_mb": 24.543232,
+        "peak_mb": 30.14656,
         "delta_mb": 5.603328
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 24.33024,
-        "peak_mb": 24.576,
+        "baseline_mb": 24.363008,
+        "peak_mb": 24.608768,
         "delta_mb": 0.24576
       }
     },
@@ -119,19 +119,19 @@
         "outcome": "ok",
         "handled": 98,
         "files": 100,
-        "baseline_mb": 29.196288,
-        "peak_mb": 29.671424,
-        "delta_mb": 0.475136,
-        "child_peak_mb": 134.88128
+        "baseline_mb": 29.016064,
+        "peak_mb": 29.507584,
+        "delta_mb": 0.49152,
+        "child_peak_mb": 134.848512
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 28.983296,
-        "peak_mb": 29.229056,
-        "delta_mb": 0.24576,
-        "child_peak_mb": 139.91936
+        "baseline_mb": 29.196288,
+        "peak_mb": 29.425664,
+        "delta_mb": 0.229376,
+        "child_peak_mb": 139.853824
       }
     }
   }

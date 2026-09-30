@@ -22,24 +22,24 @@
     "pandoc": "3.9",
     "libreoffice": "26.8.0.3"
   },
-  "date": "2026-09-28",
+  "date": "2026-09-30",
   "engines": {
     "docboss": {
       "sample": {
         "outcome": "ok",
-        "handled": 96,
+        "handled": 97,
         "files": 100,
-        "baseline_mb": 23.18336,
-        "peak_mb": 42.303488,
-        "delta_mb": 19.120128
+        "baseline_mb": 23.3472,
+        "peak_mb": 40.370176,
+        "delta_mb": 17.022976
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 23.298048,
-        "peak_mb": 61.554688,
-        "delta_mb": 38.25664
+        "baseline_mb": 23.42912,
+        "peak_mb": 63.520768,
+        "delta_mb": 40.091648
       }
     },
     "antiword": {
@@ -47,17 +47,17 @@
         "outcome": "ok",
         "handled": 75,
         "files": 100,
-        "baseline_mb": 22.495232,
-        "peak_mb": 23.625728,
+        "baseline_mb": 22.675456,
+        "peak_mb": 23.805952,
         "delta_mb": 1.130496,
-        "child_peak_mb": 2.53952
+        "child_peak_mb": 2.523136
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 22.642688,
-        "peak_mb": 23.805952,
+        "baseline_mb": 22.544384,
+        "peak_mb": 23.707648,
         "delta_mb": 1.163264,
         "child_peak_mb": 2.94912
       }
@@ -68,18 +68,18 @@
         "handled": 96,
         "files": 100,
         "baseline_mb": 22.560768,
-        "peak_mb": 23.232512,
-        "delta_mb": 0.671744,
+        "peak_mb": 23.26528,
+        "delta_mb": 0.704512,
         "child_peak_mb": 2.015232
       },
       "largest": {
         "outcome": "ok",
         "handled": 1,
         "files": 1,
-        "baseline_mb": 22.675456,
-        "peak_mb": 23.92064,
-        "delta_mb": 1.245184,
-        "child_peak_mb": 2.883584
+        "baseline_mb": 22.659072,
+        "peak_mb": 23.986176,
+        "delta_mb": 1.327104,
+        "child_peak_mb": 2.8672
       }
     }
   }

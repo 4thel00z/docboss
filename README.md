@@ -24,10 +24,10 @@ Reading a Word document should not require LibreOffice, a JVM or a C library. do
 
 ## Highlights
 
-- **Both formats, one model**: DOCX, DOCM, DOTX and DOTM through ECMA-376 WordprocessingML (transitional and strict namespaces), DOC and DOT through [MS-DOC], including Word 97-2003 formatting, lists, tables, sections, notes, comments, fields, bookmarks and pictures. The format is detected from the bytes, never from the file name.
-- **Fast**: DOCX text at 2,676 files a second over 80 real-world files, about 4× docx2txt and 24× mammoth; DOC text at 2,680 files a second, about 14× antiword and catdoc; 16,034 DOCX files a second through `docboss.extract_texts` on 12 cores ([benchmarks](#benchmarks)).
-- **Complete text**: word recall of 0.992 against LibreOffice's text export on DOCX, the highest of the six engines measured, and 0.976 on DOC: tables, headers, footers, footnotes, comments and text boxes included.
-- **Survives damaged files**: text from 140 of 150 damaged DOCX files, where the other engines return text for 1 to 8; no crash and no hang on 300 damaged DOCX and DOC files.
+- **Both formats, one model**: DOCX, DOCM, DOTX and DOTM through ECMA-376 WordprocessingML (transitional and strict namespaces), DOC and DOT through [MS-DOC], including Word 97-2003 formatting, lists, tables, sections, notes, comments, fields, bookmarks and pictures, and the formatting, sections and tables of Word 6 and 95 files. The format is detected from the bytes, never from the file name.
+- **Fast**: DOCX text at 3,304 files a second over 80 real-world files, about 4× docx2txt and 28× mammoth; DOC text at 3,130 files a second, about 19× antiword and catdoc; 13,839 DOCX files a second through `docboss.extract_texts` on 12 cores ([benchmarks](#benchmarks)).
+- **Complete text**: word recall of 0.992 against LibreOffice's text export on DOCX, the highest of the six engines measured, and 0.985 on DOC: tables, headers, footers, footnotes, comments and text boxes included.
+- **Survives damaged files**: text from 140 of 150 damaged DOCX files, where the other engines return text for 1 to 8, and from 142 of 150 damaged DOC files, where catdoc manages 100; no crash and no hang on 300 damaged DOCX and DOC files.
 - **Markdown and HTML**: headings from styles, nested lists with the document's own labels, GFM tables with merged cells, footnotes, links and images, in one pass.
 - **Layout and rendering**: Word-like line breaking, the Unicode bidirectional algorithm for right-to-left paragraphs, runs and tables, OpenType shaping (GSUB and GPOS, Arabic joining) for Arabic and Hebrew, tab stops, list labels, keep and widow rules, tables split across pages with repeated header rows, sections and columns, headers and footers with page numbers, footnotes, inline and floating images; an anti-aliased rasterizer over its own TrueType and CFF parsers, with metric-compatible font substitution (Carlito for Calibri, Liberation for Arial and Times New Roman). PNG, PPM, BMP and JPEG output, pages rendered on all cores.
 - **DOCX writing**: model to DOCX, a builder API, Markdown to DOCX, and DOC to DOCX conversion, with deterministic output: the same input gives identical bytes.
@@ -164,22 +164,22 @@ Over 80 real-world DOCX files from the LibreOffice, Apache POI and python-docx t
 
 | Engine | Text files/s | Word recall | Markdown files/s | HTML files/s |
 |---|--:|--:|--:|--:|
-| **docboss** | **2,676** | **0.992** | **3,166** | **3,531** |
-| docx2txt | 663 | 0.974 | | |
-| python-docx | 560 | 0.848 | | |
-| docx2python | 112 | 0.974 | | |
-| mammoth | 104 | 0.956 | 106 | 112 |
-| pandoc | 6.6 | 0.894 | 7.5 | 7.7 |
+| **docboss** | **3,304** | **0.992** | **3,324** | **3,355** |
+| docx2txt | 757 | 0.974 | | |
+| python-docx | 725 | 0.848 | | |
+| docx2python | 127 | 0.974 | | |
+| mammoth | 117 | 0.956 | 109 | 111 |
+| pandoc | 7.4 | 0.894 | 7.6 | 7.5 |
 
-Over 80 DOC files: docboss 2,680 files/s (recall 0.976), catdoc 186 (0.888), antiword 179 (0.948). LibreOffice converts either sample at 14 to 16 files/s in one batch, or about 0.7 to 0.8 s per file one process at a time.
+Over 80 DOC files: docboss 3,130 files/s (recall 0.985), catdoc 161 (0.888), antiword 158 (0.948). LibreOffice converts either sample at 15 to 16 files/s in one batch, or about 0.7 to 0.8 s per file one process at a time.
 
 <details>
 <summary><strong>Parallel, large documents, memory, damaged files, and where the others win</strong></summary>
 
-- **Parallel**: `docboss.extract_texts` reads 300 DOCX files at 16,034 files/s on 12 cores (5.5× its sequential speed); the fastest other route is docx2txt in a process pool at 1,204. On DOC, docboss reaches 5,148 files/s against catdoc's 437.
-- **One large document** (3,000 sections, 1,166 pages): docboss extracts the DOCX in 80 ms against docx2txt's 754 ms and python-docx's 1,524 ms. **catdoc wins the DOC version, 53 ms against docboss's 155 ms**: it streams the text out of the piece table, where docboss builds its whole model first.
-- **Memory**: on DOCX docboss peaks at 31.7 MB over 100 files, docx2txt slightly lower at 30.1 MB, the rest 55 to 82 MB. **On DOC antiword and catdoc win**, at about 24 MB with 2 to 3 MB of their own, against docboss's 42 MB (62 MB on a 6.2 MB file).
-- **Damaged files** (150 per format): docboss returns text for 140 DOCX files, the other engines for 1 to 8. On DOC **catdoc returns text for 100 files against docboss's 94**, but hung once; antiword crashed 3 times. docboss neither crashed nor hung.
+- **Parallel**: `docboss.extract_texts` reads 300 DOCX files at 13,839 files/s on 12 cores (5.1× its sequential speed); the fastest other route is docx2txt in a process pool at 1,262. On DOC, docboss reaches 5,685 files/s against catdoc's 490.
+- **One large document** (3,000 sections, 1,188 pages): docboss extracts the DOCX in 85 ms against docx2txt's 808 ms and python-docx's 1,490 ms. **catdoc wins the DOC version, 54 ms against docboss's 105 ms**: it streams the text out of the piece table, where docboss builds its whole model first.
+- **Memory**: on DOCX docboss peaks at 33.2 MB over 100 files, docx2txt slightly lower at 30.1 MB, the rest 55 to 82 MB. **On DOC antiword and catdoc win**, at about 24 MB with 2 to 3 MB of their own, against docboss's 40 MB (64 MB on a 6.2 MB file whose pictures take 12 MB of it).
+- **Damaged files** (150 per format): docboss returns text for 140 DOCX files, the other engines for 1 to 8, and for 142 DOC files against catdoc's 100 and antiword's 71; catdoc hung once and antiword crashed 3 times. docboss neither crashed nor hung.
 
 Measured on an Apple M3 Pro, one session, best of 3 after a warm-up. Method, versions and every table: [`benchmarks/README.md`](benchmarks/README.md).
 
@@ -191,10 +191,10 @@ Pages rendered by docboss against LibreOffice's rendering of the same documents 
 
 | Format | SSIM median | SSIM p10 | Page counts equal |
 |---|--:|--:|--:|
-| DOCX | 0.978 | 0.857 | 56 of 59 |
-| DOC | 0.948 | 0.634 | 25 of 29 |
+| DOCX | 0.984 | 0.879 | 56 of 59 |
+| DOC | 0.966 | 0.634 | 25 of 29 |
 
-The low tail is what layout does not draw yet (groups, gradient fills, SmartArt), tracked changes that LibreOffice shows with revision marks, and table row heights that differ from LibreOffice's. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
+The low tail is fonts LibreOffice substitutes differently, text LibreOffice wraps around floating frames and docboss does not, and tracked changes that LibreOffice shows with revision marks. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
 
 ## What's inside
 
@@ -208,8 +208,8 @@ The low tail is what layout does not draw yet (groups, gradient fills, SmartArt)
 | `docboss-xml` | Zero-copy pull XML tokenizer with namespace resolution; transitional and strict OOXML namespaces map to the same ids |
 | `docboss-docx` | OPC packages and WordprocessingML (ECMA-376 Parts 1 to 3), parts parsed on separate threads |
 | `docboss-cfb` | Compound files ([MS-CFB]) and property sets ([MS-OLEPS]) |
-| `docboss-doc` | Word binary documents ([MS-DOC], [MS-ODRAW] pictures), RC4 and RC4 CryptoAPI decryption |
-| `docboss-crypt` | Password-protected DOCX ([MS-OFFCRYPTO] Agile and Standard) |
+| `docboss-doc` | Word binary documents ([MS-DOC], [MS-ODRAW] pictures), Word 6 and 95 formatting, RC4 and RC4 CryptoAPI decryption |
+| `docboss-crypt` | Password-protected DOCX ([MS-OFFCRYPTO] Agile and Standard) and the XOR obfuscation of DOC |
 | `docboss-core` | Format detection and one `open`/`read` over both readers |
 | `docboss-output` | Text, Markdown, HTML, JSON and the per-block view |
 | `docboss-font` | TrueType, OpenType CFF and collections, GSUB and GPOS layout features; system font discovery and metric-compatible substitution |
@@ -228,9 +228,9 @@ The low tail is what layout does not draw yet (groups, gradient fills, SmartArt)
 
 The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` property in Python, the `diagnostics` field of `Document` in Rust) lists every item that was approximated or dropped. The largest gaps:
 
-- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left sections lay out left to right; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
-- **DOCX reading**: `w:altChunk` content is skipped and reported; DrawingML charts, SmartArt, math (OMML) and ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their paragraph numbering, comments and drawing objects, and Word 2 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
+- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left and vertical sections lay out left to right; no column balancing; text does not wrap around floating images; picture and pattern fills and shape effects are not drawn; 3-D, radar, stock and surface charts and SmartArt without a saved drawing show an empty frame; conditional formatting from table styles is not applied. CFF2 fonts are refused and TIFF images draw a placeholder.
+- **DOCX reading**: `w:altChunk` content is skipped and reported; ActiveX controls are not read as content; ruby text is ignored.
+- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their paragraph numbering, comments and drawing objects, and Word 2 files are read as text only; equations from the old Equation Editor keep their picture but not their text; freeforms and WordArt are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.

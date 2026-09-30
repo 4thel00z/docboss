@@ -294,8 +294,8 @@ fn damage_is_survivable() {
 }
 
 /// [MS-CFB] §2.2 and [MS-DOC] §2.5.1: a compound file whose header or
-/// directory is lost still gives its text, read on from the FIB found at a
-/// sector boundary; a Word 6 stream found that way is read in full.
+/// directory is lost still gives its text, read on from the FIB found at the
+/// start of a sector; a Word 6 stream found that way is read in full.
 #[test]
 fn text_survives_a_lost_header_or_directory() {
     let read = |name: &str| {

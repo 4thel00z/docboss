@@ -19,7 +19,7 @@
     "pandoc": "3.9",
     "libreoffice": "26.8.0.3"
   },
-  "date": "2026-09-28",
+  "date": "2026-09-30",
   "engines": {
     "docboss": {
       "ok": 140,

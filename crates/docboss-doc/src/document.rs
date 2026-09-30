@@ -850,7 +850,7 @@ pub fn damaged_signature(bytes: &[u8]) -> bool {
     same >= 6 || (head == [0; 8] && bytes.len().is_multiple_of(512))
 }
 
-/// The offset of the first plausible FIB at a 64-byte boundary past the
+/// The offset of the first plausible FIB at a multiple of 64 bytes past the
 /// header, where regular and mini stream sectors start: wIdent 0xA5EC (or
 /// Word 6's 0xA5DC) and a Word 6 to Word 2007 nFib.
 pub fn find_fib(bytes: &[u8]) -> Option<usize> {

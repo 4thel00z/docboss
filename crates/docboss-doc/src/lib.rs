@@ -60,7 +60,7 @@ pub fn is_doc(bytes: &[u8]) -> bool {
 }
 
 /// Whether a compound file too damaged to list its WordDocument stream
-/// still holds a FIB at a sector boundary, which [`read`] recovers text from.
+/// still holds a FIB at the start of a sector, which [`read`] recovers text from.
 pub fn holds_fib(bytes: &[u8]) -> bool {
     document::find_fib(bytes).is_some()
 }

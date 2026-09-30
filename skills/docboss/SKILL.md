@@ -59,7 +59,7 @@ docboss q doc.docx '.diagnostics[] | .message'
 
 ## Rendering notes
 
-Pages are laid out Word-style (line breaking, tab stops, list labels, keep and widow rules, tables with merged cells and repeated header rows, sections, columns, headers and footers with page numbers, footnotes). Fonts come from the system and from fonts the DOCX embeds; missing families fall back to metric-compatible faces (Calibri to Carlito, Cambria to Caladea, Arial to Liberation Sans or Arimo, Times New Roman to Liberation Serif or Tinos, Courier New to Liberation Mono or Cousine). `docboss fonts` shows what each family resolved to. WMF, EMF and TIFF images paint a placeholder and are reported as diagnostics. Right-to-left and complex-script shaping are not done yet.
+Pages are laid out Word-style (line breaking, tab stops, list labels, keep and widow rules, tables with merged cells and repeated header rows, sections, columns, headers and footers with page numbers, footnotes). Fonts come from the system and from fonts the DOCX embeds; missing families fall back to metric-compatible faces (Calibri to Carlito, Cambria to Caladea, Arial to Liberation Sans or Arimo, Times New Roman to Liberation Serif or Tinos, Courier New to Liberation Mono or Cousine). `docboss fonts` shows what each family resolved to. Shapes, groups, SmartArt, charts, Office Math, WMF and EMF pictures and page borders are drawn; TIFF images paint a placeholder and are reported as diagnostics. Right-to-left paragraphs are laid out with the Unicode bidirectional algorithm and Arabic and Hebrew are shaped; Indic and Thai scripts are not shaped yet. Text does not wrap around floating images.
 
 ## Python
 
