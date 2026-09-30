@@ -56,18 +56,23 @@ pub fn detect(bytes: &[u8]) -> Format {
         return Format::Doc;
     }
     if !docboss_cfb::is_compound_file(bytes) {
-        return Format::Unknown;
+        return match docboss_doc::is_doc(bytes) {
+            true => Format::Doc,
+            false => Format::Unknown,
+        };
     }
-    let Ok(file) = docboss_cfb::CompoundFile::parse(bytes) else {
-        return Format::Unknown;
-    };
-    if file.find("WordDocument").is_some() {
-        return Format::Doc;
+    let listed = docboss_cfb::CompoundFile::parse(bytes).map(|file| {
+        (
+            file.find("WordDocument").is_some(),
+            file.find("EncryptedPackage").is_some(),
+        )
+    });
+    match listed {
+        Ok((true, _)) => Format::Doc,
+        Ok((false, true)) => Format::EncryptedDocx,
+        _ if docboss_doc::holds_fib(bytes) => Format::Doc,
+        _ => Format::Unknown,
     }
-    if file.find("EncryptedPackage").is_some() {
-        return Format::EncryptedDocx;
-    }
-    Format::Unknown
 }
 
 /// Options for [`read_with`].

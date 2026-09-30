@@ -37,11 +37,32 @@ mod word6;
 pub use error::{Error, Result};
 
 /// Whether `bytes` looks like a Word binary document: a compound file whose
-/// root holds a `WordDocument` stream, or a Word 2 file.
+/// root holds a `WordDocument` stream, or one too damaged to list it that
+/// still holds a FIB, or a Word 2 file.
 pub fn is_doc(bytes: &[u8]) -> bool {
-    is_word2(bytes)
-        || docboss_cfb::CompoundFile::parse(bytes)
-            .is_ok_and(|file| file.find("WordDocument").is_some())
+    if is_word2(bytes) {
+        return true;
+    }
+    if !docboss_cfb::is_compound_file(bytes) {
+        return document::damaged_signature(bytes) && holds_fib(bytes);
+    }
+    let listed = docboss_cfb::CompoundFile::parse(bytes).map(|file| {
+        (
+            file.find("WordDocument").is_some(),
+            file.find("EncryptedPackage").is_some(),
+        )
+    });
+    match listed {
+        Ok((true, _)) => true,
+        Ok((false, true)) => false,
+        _ => holds_fib(bytes),
+    }
+}
+
+/// Whether a compound file too damaged to list its WordDocument stream
+/// still holds a FIB at a sector boundary, which [`read`] recovers text from.
+pub fn holds_fib(bytes: &[u8]) -> bool {
+    document::find_fib(bytes).is_some()
 }
 
 /// Whether `bytes` looks like a Word for Windows 1.x or 2.0 file, which is a

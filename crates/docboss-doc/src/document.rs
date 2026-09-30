@@ -64,13 +64,22 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
     if crate::is_word2(bytes) {
         return Ok(word2(bytes));
     }
-    let file = CompoundFile::parse(bytes)?;
+    let file = match CompoundFile::parse(bytes) {
+        Ok(file) => file,
+        Err(docboss_cfb::Error::NotCompoundFile) if !damaged_signature(bytes) => {
+            return Err(Error::Cfb(docboss_cfb::Error::NotCompoundFile))
+        }
+        Err(error) => return recover(bytes, &format!("compound file unreadable ({error})")),
+    };
     let mut diagnostics = Vec::new();
     // [MS-DOC] §2.1, §2.1.1, §2.1.3, §2.1.6, §2.1.7: the WordDocument, table and Data streams and the summary streams.
-    let word_stream = file
-        .open_stream("WordDocument")
-        .map_err(|_| Error::NotWord("no WordDocument stream"))?;
-    let fib = Fib::parse(&word_stream)?;
+    let Ok(word_stream) = file.open_stream("WordDocument") else {
+        return recover(bytes, "no WordDocument stream in the directory");
+    };
+    let fib = match Fib::parse(&word_stream) {
+        Ok(fib) => fib,
+        Err(error) => return recover(bytes, &format!("WordDocument stream unreadable ({error})")),
+    };
     let metadata = docboss_cfb::property::read_metadata(&file, &mut diagnostics);
     if !fib.is_word97() && fib.encrypted {
         return Err(Error::UnsupportedEncryption(
@@ -821,6 +830,105 @@ fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> 
         fonts: font_entries,
         ..Document::default()
     }
+}
+
+/// Whether the first sector of a file could be a damaged compound file
+/// header: six of the eight signature bytes, or a zeroed sector in a file
+/// of whole sectors ([MS-CFB] §2.2).
+pub fn damaged_signature(bytes: &[u8]) -> bool {
+    const SIGNATURE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    let Some(head) = bytes.get(..8) else {
+        return false;
+    };
+    let same = head
+        .iter()
+        .zip(SIGNATURE)
+        .filter(|(a, b)| **a == *b)
+        .count();
+    same >= 6 || (head == [0; 8] && bytes.len().is_multiple_of(512))
+}
+
+/// The offset of the first plausible FIB at a 64-byte boundary past the
+/// header, where regular and mini stream sectors start: wIdent 0xA5EC (or
+/// Word 6's 0xA5DC) and a Word 6 to Word 2007 nFib.
+pub fn find_fib(bytes: &[u8]) -> Option<usize> {
+    (512..bytes.len().saturating_sub(32))
+        .step_by(64)
+        .find(|&at| {
+            matches!(u16_at(bytes, at), Some(0xA5EC | 0xA5DC))
+                && u16_at(bytes, at + 2).is_some_and(|n| (0x0065..=0x0112).contains(&n))
+        })
+}
+
+/// A compound file whose directory, FAT or WordDocument entry is
+/// damaged: the WordDocument stream is taken to run on from the FIB found
+/// by [`find_fib`]. A Word 6 or 95 stream holds everything and is read in
+/// full; of a Word 97 stream, whose table stream is lost, the text from
+/// fcMin to fcMac is read, as 16-bit text when nearly every second byte is
+/// zero and 8-bit text otherwise.
+fn recover(bytes: &[u8], reason: &str) -> Result<Document> {
+    let at = find_fib(bytes).ok_or(Error::NotWord("no readable directory and no FIB found"))?;
+    let word = &bytes[at..];
+    let fib = Fib::parse(word)?;
+    if fib.encrypted {
+        return Err(Error::Encrypted);
+    }
+    let note = Diagnostic::approximated(
+        "WordDocument",
+        format!("{reason}; the WordDocument stream is read on from the FIB at offset {at:#x}"),
+    );
+    if !fib.is_word97() {
+        let mut diagnostics = vec![note];
+        let mut document = word6_document(word, &fib, &mut diagnostics);
+        document.diagnostics = diagnostics;
+        return Ok(document);
+    }
+    let end = (fib.fc_mac as usize).min(word.len());
+    let start = (fib.fc_min as usize).min(end);
+    let region = &word[start..end];
+    let zeros = region
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .filter(|&&b| b == 0)
+        .count();
+    let wide = region.len() >= 2 && zeros * 10 >= (region.len() / 2) * 9;
+    let text: String = match wide {
+        true => docboss_cfb::codepage::utf16le(region),
+        false => docboss_cfb::codepage::decode(code_page(fib.lid), region).0,
+    };
+    let blocks = text
+        .split(['\r', '\u{7}'])
+        .map(|line| {
+            let cleaned: String = line.chars().filter(|c| *c >= ' ' || *c == '\t').collect();
+            let inlines = match cleaned.is_empty() {
+                true => Vec::new(),
+                false => vec![Inline::Run(Run {
+                    content: vec![RunContent::Text(cleaned)],
+                    ..Run::default()
+                })],
+            };
+            Block::Paragraph(Paragraph {
+                inlines,
+                ..Paragraph::default()
+            })
+        })
+        .collect();
+    Ok(Document {
+        format: SourceFormat::Doc,
+        sections: vec![Section {
+            properties: default_section(),
+            blocks,
+        }],
+        diagnostics: vec![
+            note,
+            Diagnostic::dropped(
+                "WordDocument",
+                "without the table stream, text is read from fcMin to fcMac with no formatting, notes or headers",
+            ),
+        ],
+        ..Document::default()
+    })
 }
 
 /// Word for Windows 2.0 files, which are a bare FIB and text rather than a

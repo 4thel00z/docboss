@@ -293,6 +293,39 @@ fn damage_is_survivable() {
     }
 }
 
+/// [MS-CFB] §2.2 and [MS-DOC] §2.5.1: a compound file whose header or
+/// directory is lost still gives its text, read on from the FIB found at a
+/// sector boundary; a Word 6 stream found that way is read in full.
+#[test]
+fn text_survives_a_lost_header_or_directory() {
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/fixtures/{name}.doc",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let bytes = read("text");
+    let mut zeroed = bytes.clone();
+    zeroed[..512].fill(0);
+    let truncated = &bytes[..bytes.len() * 3 / 4];
+    for damaged in [&zeroed[..], truncated] {
+        assert!(docboss_doc::is_doc(damaged));
+        let document = docboss_doc::read(damaged).unwrap();
+        assert!(plain_text(&document).contains("Main Title"));
+        assert!(document
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("read on from the FIB")));
+    }
+    let mut word6 = read("word6-sections");
+    word6[..512].fill(0);
+    let document = docboss_doc::read(&word6).unwrap();
+    assert!(plain_text(&document).contains("Corporate Insolvency"));
+    assert!(!document.headers_footers.is_empty());
+    assert!(!docboss_doc::is_doc(&[0u8; 4096]));
+}
+
 /// [MS-DOC] §2.2.6.2 RC4 and §2.2.6.3 RC4 CryptoAPI: the right password
 /// decrypts, a wrong one and none are refused.
 #[test]
