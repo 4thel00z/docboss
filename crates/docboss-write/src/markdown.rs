@@ -330,6 +330,7 @@ impl<'o, 'a> Converter<'o, 'a> {
             geometry: None,
             members: Vec::new(),
             data_text: Vec::new(),
+            chart: None,
         };
         self.push_inline(Inline::Run(Run {
             properties: RunProperties::default(),

@@ -113,6 +113,8 @@ pub struct Drawing {
     /// such as a diagram's text from its data model; empty for most
     /// drawings.
     pub data_text: Vec<crate::Block>,
+    /// The chart the drawing shows, from its cached values.
+    pub chart: Option<Box<crate::Chart>>,
 }
 
 /// A shape's geometry (ECMA-376 Part 1 §20.1.9).

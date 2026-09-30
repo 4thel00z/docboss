@@ -964,6 +964,7 @@ fn text_box(
             geometry: None,
             members: Vec::new(),
             data_text: Vec::new(),
+            chart: None,
         }))],
     })
 }
@@ -1252,6 +1253,7 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             geometry: None,
             members: Vec::new(),
             data_text: Vec::new(),
+            chart: None,
         }))],
     });
     let mut properties = ParagraphProperties::default();
@@ -1314,6 +1316,7 @@ fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -
                 geometry: Some(Box::new(geometry)),
                 members: Vec::new(),
                 data_text: Vec::new(),
+                chart: None,
             }))],
         })],
     )
@@ -1798,5 +1801,109 @@ fn visually_right_to_left_tables_start_at_the_right() {
         (x_of("one") - (612.0 - 72.0 - 144.0 + 5.4)).abs() < 0.01,
         "{}",
         x_of("one")
+    );
+}
+
+fn chart_drawing(kind: docboss_model::ChartKind, values: Vec<Option<f64>>) -> Block {
+    use docboss_model::{Chart, ChartAxis, ChartPlot, ChartSeries, ChartText, Color};
+    let series = ChartSeries {
+        name: Some("Sales".into()),
+        categories: vec!["North".into(), "South".into(), "East".into()],
+        values,
+        fill: Some(Color(255, 0, 0)),
+        line: None,
+        point_fills: vec![Some(Color(0, 0, 255)), None, Some(Color(0, 255, 0))],
+        ..ChartSeries::default()
+    };
+    let axis = |side| ChartAxis {
+        side,
+        labels: true,
+        text: ChartText::default(),
+        gridlines: Some(Color(200, 200, 200)),
+        ..ChartAxis::default()
+    };
+    let chart = Chart {
+        title: Some(ChartText {
+            text: "Title".into(),
+            ..ChartText::default()
+        }),
+        plots: vec![ChartPlot {
+            kind,
+            series: vec![series],
+        }],
+        category_axis: Some(axis(docboss_model::ChartSide::Bottom)),
+        value_axis: Some(axis(docboss_model::ChartSide::Left)),
+        ..Chart::default()
+    };
+    let drawing = docboss_model::Drawing {
+        width: 3_810_000,
+        height: 2_540_000,
+        chart: Some(Box::new(chart)),
+        ..docboss_model::Drawing::default()
+    };
+    para_with(
+        ParagraphProperties::default(),
+        vec![Inline::Run(Run {
+            properties: RunProperties::default(),
+            content: vec![RunContent::Drawing(Box::new(drawing))],
+        })],
+    )
+}
+
+/// A column chart draws one bar per cached value, taller for larger
+/// values, with its title, category and tick labels; a pie draws one
+/// slice per value in the points' colors.
+/// ECMA-376 Part 1 §21.2.2.16, §21.2.2.141, §21.2.2.25, §21.2.2.226.
+#[test]
+fn charts_draw_bars_labels_and_slices() {
+    let column = docboss_model::ChartKind::Bar {
+        horizontal: false,
+        grouping: docboss_model::ChartGrouping::Standard,
+        gap: 150,
+        overlap: 0,
+    };
+    let layout = laid(&doc(vec![chart_drawing(
+        column,
+        vec![Some(1.0), Some(3.0), None],
+    )]));
+    let items = &layout.pages[0].items;
+    let bars: Vec<docboss_layout::Rect> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Rect { rect, color } if color.0 == 255 || color.2 == 255 => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(bars.len(), 2, "{bars:?}");
+    assert!(bars[1].height > bars[0].height * 2.5);
+    assert!((bars[0].bottom() - bars[1].bottom()).abs() < 0.01);
+    assert!(bars[0].x < bars[1].x);
+    let text: String = runs(&layout, 0).iter().map(|r| r.text.as_str()).collect();
+    for word in ["Title", "North", "South", "East", "0", "3"] {
+        assert!(text.contains(word), "{text}");
+    }
+    let pie = docboss_model::ChartKind::Pie {
+        hole: 0,
+        first_angle: 0,
+    };
+    let layout = laid(&doc(vec![chart_drawing(
+        pie,
+        vec![Some(1.0), Some(1.0), Some(2.0)],
+    )]));
+    let slices: Vec<Option<docboss_model::Color>> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Path { fill, .. } => Some(*fill),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        slices,
+        [
+            Some(docboss_model::Color(0, 0, 255)),
+            Some(docboss_model::Color(255, 0, 0)),
+            Some(docboss_model::Color(0, 255, 0))
+        ]
     );
 }

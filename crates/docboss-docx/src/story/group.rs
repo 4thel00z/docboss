@@ -86,9 +86,11 @@ impl StoryParser<'_> {
     /// Reads a `wpg:wgp` or `wpg:grpSp` group (ECMA-376 Part 1 §20.4.2.39,
     /// §20.4.2.32, whose `wpg:grpSpPr` is §20.4.2.33) or a `wpc:wpc`
     /// canvas (§20.4.2.41), whose children sit in its own EMU, into the
-    /// members of `info`'s drawing: shapes with their text, pictures, and
-    /// the members of nested groups, each placed through every group
-    /// around it. `frames` holds the groups outside this one. An empty
+    /// members of `info`'s drawing: shapes with their text, pictures,
+    /// graphic frames holding a chart or diagram (§20.4.2.31), and the
+    /// members of nested groups, each placed through every group around
+    /// it. ECMA-376 Part 1 §20.4.2.31: a graphic frame is placed by its
+    /// `wpg:xfrm`. `frames` holds the groups outside this one. An empty
     /// group or canvas keeps its extent as a shape with neither fill nor
     /// outline.
     pub(super) fn group(
@@ -144,7 +146,7 @@ impl StoryParser<'_> {
                     frame.extent = (info.drawing.width as f64, info.drawing.height as f64);
                 }
             }),
-            (Ns::WPS, "wsp") | (Ns::PIC, "pic") => {
+            (Ns::WPS, "wsp") | (Ns::PIC, "pic") | (Ns::WPG, "graphicFrame") => {
                 let mut member = DrawingInfo::new();
                 self.drawing_children(reader, &mut member);
                 let placed = member.placed.unwrap_or(ChildBox {

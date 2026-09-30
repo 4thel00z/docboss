@@ -9,10 +9,12 @@
 
 mod bidi;
 mod breaks;
+mod chart;
 mod complex;
 mod drawn;
 mod flow;
 mod geometry;
+mod label;
 mod paragraph;
 mod presets;
 mod shape;

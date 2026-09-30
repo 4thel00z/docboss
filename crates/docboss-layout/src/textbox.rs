@@ -3,6 +3,7 @@
 
 use docboss_model::{Drawing, PathFill, TextDirection, VerticalAlign};
 
+use crate::chart::chart_items;
 use crate::drawn::{compose, shape_items, transform};
 use crate::flow::{layout_blocks, stack_height, Ctx};
 use crate::geometry::outline;
@@ -19,10 +20,16 @@ pub(crate) struct TextBox {
     pub height: f32,
 }
 
-/// Lays out what a drawing paints besides its picture: a text box with its
-/// shape, or a shape without text (ECMA-376 Part 1 §20.1.9). `None` for a
-/// picture, and for a text box without text.
+/// Lays out what a drawing paints besides its picture: a chart, a text
+/// box with its shape, or a shape without text (ECMA-376 Part 1 §20.1.9).
+/// `None` for a picture, and for a text box without text.
 pub(crate) fn layout_drawing(ctx: &mut Ctx<'_>, drawing: &Drawing) -> Option<TextBox> {
+    if let Some(chart) = &drawing.chart {
+        let width = emu_to_pt(drawing.width).max(0.0);
+        let height = emu_to_pt(drawing.height).max(0.0);
+        let items = chart_items(ctx, chart, width, height);
+        return Some(TextBox { items, height });
+    }
     if !drawing.members.is_empty() {
         return Some(layout_group(ctx, drawing));
     }

@@ -14,6 +14,7 @@ use docboss_xml::{Element, Ns, Reader};
 
 use crate::geometry;
 
+mod chart;
 mod diagram;
 mod group;
 mod text;
@@ -222,9 +223,9 @@ pub struct StoryParser<'p> {
     ctx: Context<'p>,
     pub diagnostics: Vec<Diagnostic>,
     frames: Vec<Frame>,
-    /// The last diagram read had no saved drawing, so an
+    /// The last diagram or chart read cannot be drawn, so an
     /// `mc:AlternateContent` fallback is read in its place.
-    diagram_missing: bool,
+    graphic_unusable: bool,
 }
 
 const EMU_PER_POINT: f64 = 12_700.0;
@@ -334,7 +335,8 @@ fn from_hsl(h: f32, s: f32, l: f32) -> [f32; 3] {
 
 /// The first color element among the children: an sRGB value, a system
 /// color's last value, a preset, or a theme slot resolved through the
-/// theme, each with its transforms applied.
+/// theme, each with its transforms applied; a transform's value may be a
+/// strict percentage such as `15%`.
 /// ECMA-376 Part 1 §20.1.8.54, §20.1.2.3.32, §20.1.2.3.33, §20.1.2.3.22, §20.1.2.3.29.
 fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
     let mut color = None;
@@ -355,7 +357,7 @@ fn color_choice(reader: &mut Reader<'_>, theme: &Theme) -> Option<Color> {
             return;
         };
         children(reader, |_, modifier| {
-            let value = modifier.attr_raw(Ns::NONE, "val").and_then(int);
+            let value = modifier.attr_raw(Ns::NONE, "val").and_then(percentage);
             if let Some(value) = value {
                 base = transform(base, modifier.local, value as f32 / 100_000.0);
             }
@@ -945,6 +947,7 @@ impl DrawingInfo {
                 geometry: None,
                 members: Vec::new(),
                 data_text: Vec::new(),
+                chart: None,
             },
             fill_stated: false,
             line_stated: false,
@@ -1090,6 +1093,7 @@ fn understood(ns: Ns) -> bool {
         Ns::R,
         Ns::DGM,
         Ns::DSP,
+        Ns::C,
     ]
     .contains(&ns)
 }
@@ -1100,7 +1104,7 @@ impl<'p> StoryParser<'p> {
             ctx,
             diagnostics: Vec::new(),
             frames: Vec::new(),
-            diagram_missing: false,
+            graphic_unusable: false,
         }
     }
 
@@ -1318,11 +1322,11 @@ impl<'p> StoryParser<'p> {
             let mut read = false;
             alternate_branches(reader, |reader| {
                 let start = content.len();
-                self.diagram_missing = false;
+                self.graphic_unusable = false;
                 children(reader, |reader, e| {
                     self.run_content(reader, &e, properties, content, pieces)
                 });
-                read = !self.diagram_missing;
+                read = !self.graphic_unusable;
                 if !read {
                     let branch = content.split_off(start);
                     unusable.get_or_insert(branch);
@@ -1572,10 +1576,18 @@ impl<'p> StoryParser<'p> {
                 }
                 (Ns::A, "graphicData") => {
                     let uri = e.attr_raw(Ns::NONE, "uri").unwrap_or_default();
+                    if uri.ends_with("/chart") {
+                        children(reader, |_, chart| {
+                            if chart.ns == Ns::C && chart.local == "chart" {
+                                self.graphic_unusable = !self.chart(&chart, info);
+                            }
+                        });
+                        return;
+                    }
                     if uri.ends_with("/diagram") {
                         children(reader, |_, rel| {
                             if rel.ns == Ns::DGM && rel.local == "relIds" {
-                                self.diagram_missing = !self.diagram(&rel, info);
+                                self.graphic_unusable = !self.diagram(&rel, info);
                             }
                         });
                         return;
@@ -1583,6 +1595,10 @@ impl<'p> StoryParser<'p> {
                 }
                 (Ns::WPG, "wgp") | (Ns::WPC, "wpc") => {
                     self.group(reader, &e, info, &mut Vec::new());
+                    return;
+                }
+                (Ns::WPG, "xfrm") => {
+                    transform_2d(reader, &e, info);
                     return;
                 }
                 (Ns::PIC, "spPr") => {

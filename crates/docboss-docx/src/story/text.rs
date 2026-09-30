@@ -38,21 +38,21 @@ impl TextDefaults {
 
 /// A DrawingML run's properties before they become model run properties.
 #[derive(Debug, Clone, Default)]
-struct TextRun {
-    size: Option<u32>,
-    bold: Option<bool>,
+pub(crate) struct TextRun {
+    pub size: Option<u32>,
+    pub bold: Option<bool>,
     italic: Option<bool>,
     underline: Option<bool>,
     strike: Option<bool>,
     caps: Option<bool>,
     small_caps: Option<bool>,
     baseline: Option<i64>,
-    font: Option<String>,
-    color: Option<Color>,
+    pub font: Option<String>,
+    pub color: Option<Color>,
 }
 
 impl TextRun {
-    fn apply(&mut self, over: &TextRun) {
+    pub(crate) fn apply(&mut self, over: &TextRun) {
         macro_rules! take {
             ($($field:ident),*) => {$(if over.$field.is_some() { self.$field = over.$field.clone(); })*};
         }
@@ -182,7 +182,7 @@ pub(crate) struct TextParagraph {
     before: Option<Space>,
     after: Option<Space>,
     bullet: Option<char>,
-    defaults: TextRun,
+    pub defaults: TextRun,
 }
 
 impl TextParagraph {
@@ -293,6 +293,79 @@ pub(crate) fn text_body<'a>(
         _ => other(reader, &e),
     });
     blocks
+}
+
+/// The properties a container such as a chart's `c:txPr` (ECMA-376 Part 1
+/// §21.2.2.216) gives the text inside it: its list style's first level
+/// and its first paragraph's `a:pPr`.
+pub(crate) fn body_defaults(reader: &mut Reader<'_>, theme: &Theme) -> TextParagraph {
+    let mut found = TextParagraph::default();
+    let mut first = true;
+    children(reader, |reader, e| {
+        if e.ns != Ns::A {
+            return;
+        }
+        match e.local {
+            "lstStyle" => found.apply(&list_style(reader, theme)),
+            "p" if first => {
+                first = false;
+                children(reader, |reader, p| {
+                    if p.ns == Ns::A && p.local == "pPr" {
+                        found.apply(&paragraph_properties(reader, &p, theme));
+                    }
+                })
+            }
+            _ => {}
+        }
+    });
+    found
+}
+
+/// The text of a `c:rich` body (§21.2.2.156), its paragraphs joined by
+/// line breaks, and the properties of its first paragraph's first run
+/// over the paragraph's defaults.
+pub(crate) fn rich_text(reader: &mut Reader<'_>, theme: &Theme) -> (String, TextRun) {
+    let mut text = String::new();
+    let mut style: Option<TextRun> = None;
+    let mut paragraphs = 0usize;
+    children(reader, |reader, e| {
+        if e.ns != Ns::A || e.local != "p" || paragraphs >= MAX_PARAGRAPHS {
+            return;
+        }
+        paragraphs += 1;
+        if paragraphs > 1 {
+            text.push('\n');
+        }
+        let mut defaults = TextRun::default();
+        children(reader, |reader, part| {
+            if part.ns != Ns::A {
+                return;
+            }
+            match part.local {
+                "pPr" => defaults.apply(&paragraph_properties(reader, &part, theme).defaults),
+                "r" | "fld" => children(reader, |reader, r| {
+                    if r.ns != Ns::A {
+                        return;
+                    }
+                    match r.local {
+                        "rPr" if style.is_none() => {
+                            let mut run = defaults.clone();
+                            run.apply(&run_properties(reader, &r, theme));
+                            style = Some(run);
+                        }
+                        "t" => text.push_str(&reader.read_text()),
+                        _ => {}
+                    }
+                }),
+                "br" => text.push('\n'),
+                _ => {}
+            }
+        });
+        if style.is_none() {
+            style = Some(defaults);
+        }
+    });
+    (text, style.unwrap_or_default())
 }
 
 fn paragraph(

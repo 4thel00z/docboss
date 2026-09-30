@@ -107,6 +107,7 @@ pub fn kitchen_sink() -> Document {
             geometry: None,
             members: Vec::new(),
             data_text: Vec::new(),
+            chart: None,
         })),
         RunProperties::default(),
     ));

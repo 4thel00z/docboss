@@ -11,6 +11,7 @@
 //! sizes are in half-points; drawing extents are in EMU (1/914400 inch).
 
 mod block;
+mod chart;
 mod diagnostic;
 mod document;
 mod fill;
@@ -26,6 +27,10 @@ mod text;
 pub use block::{
     Block, Paragraph, Table, TableCell, TableCellProperties, TableProperties, TableRow,
     TableRowProperties, VerticalMerge,
+};
+pub use chart::{
+    Chart, ChartAxis, ChartFrame, ChartGrouping, ChartKind, ChartLegend, ChartPlot, ChartSeries,
+    ChartSide, ChartText,
 };
 pub use diagnostic::{Diagnostic, Severity};
 pub use document::{Comment, Document, Metadata, Note, NoteKind, Settings, SourceFormat};

@@ -1200,3 +1200,172 @@ fn diagrams_without_a_drawing_use_the_fallback() {
     assert_eq!(drawing.shape.fill, Some(Color(255, 0, 0)));
     assert_eq!(drawing.data_text.len(), 2);
 }
+
+const CHART_NS: &str = r#"xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
+
+fn chart_series(index: u32, name: &str, values: &str, fill: &str) -> String {
+    format!(
+        r#"<c:ser><c:idx val="{index}"/><c:order val="{index}"/><c:tx><c:strRef><c:f>S!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>{name}</c:v></c:pt></c:strCache></c:strRef></c:tx>{fill}<c:cat><c:strRef><c:f>S!$A$2:$A$3</c:f><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>North</c:v></c:pt><c:pt idx="1"><c:v>South</c:v></c:pt></c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>S!$B$2:$B$3</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2"/>{values}</c:numCache></c:numRef></c:val></c:ser>"#
+    )
+}
+
+fn chart_document(run: &str, plot: &str) -> docboss_model::Document {
+    let body = format!(r#"<w:p><w:r><w:t>Anchor</w:t></w:r>{run}</w:p>"#);
+    let chart = format!(
+        r#"<c:chartSpace {CHART_NS}><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:rPr sz="1400" b="0"/><a:t>Sales</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea>{plot}<c:catAx><c:axId val="1"/><c:axPos val="b"/><c:tickLblPos val="nextTo"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="10"/></c:scaling><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="0%" sourceLinked="0"/></c:valAx></c:plotArea><c:legend><c:legendPos val="b"/></c:legend></c:chart><c:txPr><a:bodyPr/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr></a:p></c:txPr></c:chartSpace>"#
+    );
+    let docx = Docx::new(&body).part(
+        "rId7",
+        "chart",
+        "charts/chart1.xml",
+        "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+        chart.as_bytes(),
+    );
+    read(&docx.build()).unwrap()
+}
+
+const CHART_W_DRAWING: &str = r#"<w:drawing><wp:inline><wp:extent cx="3000000" cy="2000000"/><wp:docPr id="1" name="Chart 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId7"/></a:graphicData></a:graphic></wp:inline></w:drawing>"#;
+
+/// A chart's cached categories and values, series names and colors,
+/// title, axes and legend are read; its title and a table of its values
+/// stand for it in text output.
+/// ECMA-376 Part 1 §21.2.2.26, §21.2.2.29, §21.2.2.16, §21.2.2.17, §21.2.2.75, §21.2.2.170, §21.2.2.215, §21.2.2.24, §21.2.2.224, §21.2.2.199, §21.2.2.120, §21.2.2.210, §21.2.2.93, §21.2.2.226, §21.2.2.107, §21.2.2.100, §21.2.2.121.
+#[test]
+fn charts_read_their_cached_values() {
+    let plot = format!(
+        r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>{}{}<c:gapWidth val="219"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+        chart_series(
+            0,
+            "Q1",
+            r#"<c:pt idx="0"><c:v>4.5</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt>"#,
+            r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>"#
+        ),
+        chart_series(1, "Q2", r#"<c:pt idx="1"><c:v>3</c:v></c:pt>"#, "")
+    );
+    let doc = chart_document(&format!("<w:r>{CHART_W_DRAWING}</w:r>"), &plot);
+    let drawing = first_drawing(&doc);
+    let chart = drawing.chart.as_deref().unwrap();
+    assert_eq!(
+        chart.title.as_ref().map(|t| (t.text.as_str(), t.size)),
+        Some(("Sales", 1400))
+    );
+    let plot = &chart.plots[0];
+    assert!(matches!(
+        plot.kind,
+        docboss_model::ChartKind::Bar {
+            horizontal: false,
+            gap: 219,
+            ..
+        }
+    ));
+    assert_eq!(plot.series.len(), 2);
+    assert_eq!(plot.series[0].name.as_deref(), Some("Q1"));
+    assert_eq!(plot.series[0].categories, ["North", "South"]);
+    assert_eq!(plot.series[0].values, [Some(4.5), Some(2.0)]);
+    assert_eq!(plot.series[0].fill, Some(Color(255, 0, 0)));
+    assert_eq!(plot.series[1].values, [None, Some(3.0)]);
+    assert!(plot.series[1].fill.is_some());
+    let values = chart.value_axis.as_ref().unwrap();
+    assert_eq!(values.max, Some(10.0));
+    assert_eq!(values.format.as_deref(), Some("0%"));
+    assert!(values.gridlines.is_some());
+    assert_eq!(values.text.size, 900);
+    assert_eq!(
+        chart.legend.as_ref().map(|l| l.side),
+        Some(docboss_model::ChartSide::Bottom)
+    );
+    let Block::Paragraph(title) = &drawing.data_text[0] else {
+        panic!()
+    };
+    assert_eq!(title.text(), "Sales");
+    let Block::Table(table) = &drawing.data_text[1] else {
+        panic!()
+    };
+    let cells: Vec<Vec<String>> = table
+        .rows
+        .iter()
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|c| match &c.blocks[0] {
+                    Block::Paragraph(p) => p.text(),
+                    _ => String::new(),
+                })
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        cells,
+        [["", "Q1", "Q2"], ["North", "4.5", ""], ["South", "2", "3"]]
+    );
+}
+
+/// A chart of a kind that is not drawn is reported and keeps an empty
+/// frame; inside `mc:AlternateContent` the fallback is drawn instead.
+/// ECMA-376 Part 1 §21.2.2.153, ECMA-376 Part 3 §9.3.
+#[test]
+fn unsupported_charts_fall_back() {
+    let radar = format!(
+        r#"<c:radarChart>{}</c:radarChart>"#,
+        chart_series(0, "R", r#"<c:pt idx="0"><c:v>1</c:v></c:pt>"#, "")
+    );
+    let doc = chart_document(&format!("<w:r>{CHART_W_DRAWING}</w:r>"), &radar);
+    assert!(doc
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("radar chart is not drawn")));
+    assert!(first_drawing(&doc).chart.unwrap().plots.is_empty());
+    let wrapped = format!(
+        r#"<w:r><mc:AlternateContent><mc:Choice xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" Requires="c">{CHART_W_DRAWING}</mc:Choice><mc:Fallback><w:pict><v:rect style="width:100pt;height:50pt" fillcolor="red"/></w:pict></mc:Fallback></mc:AlternateContent></w:r>"#
+    );
+    let doc = chart_document(&wrapped, &radar);
+    let drawing = first_drawing(&doc);
+    assert!(drawing.chart.is_none());
+    assert_eq!(drawing.shape.fill, Some(Color(255, 0, 0)));
+    assert!(!drawing.data_text.is_empty());
+}
+
+/// A graphic frame inside a group holds a chart, placed at its `wpg:xfrm`
+/// box like the group's shapes.
+/// ECMA-376 Part 1 §20.4.2.31, §20.4.2.39.
+#[test]
+fn group_graphic_frames_hold_charts() {
+    let plot = format!(
+        r#"<c:lineChart><c:grouping val="standard"/>{}<c:marker val="1"/></c:lineChart>"#,
+        chart_series(0, "L", r#"<c:pt idx="0"><c:v>1</c:v></c:pt>"#, "")
+    );
+    let group = format!(
+        r#"<w:r><w:drawing><wp:anchor><wp:extent cx="2000000" cy="1000000"/><a:graphic {GROUP_NS}><a:graphicData><wpg:wgp><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/><a:chOff x="0" y="0"/><a:chExt cx="2000000" cy="1000000"/></a:xfrm></wpg:grpSpPr><wpg:graphicFrame><wpg:cNvPr id="3" name="Chart 3"/><wpg:cNvFrPr/><wpg:xfrm><a:off x="100000" y="200000"/><a:ext cx="1500000" cy="700000"/></wpg:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId7"/></a:graphicData></a:graphic></wpg:graphicFrame></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>"#
+    );
+    let doc = chart_document(&group, &plot);
+    let drawing = first_drawing(&doc);
+    assert_eq!(drawing.members.len(), 1);
+    let member = &drawing.members[0];
+    assert_eq!((member.x, member.y), (100_000, 200_000));
+    assert_eq!(
+        (member.drawing.width, member.drawing.height),
+        (1_500_000, 700_000)
+    );
+    let chart = member.drawing.chart.as_deref().unwrap();
+    assert!(matches!(
+        chart.plots[0].kind,
+        docboss_model::ChartKind::Line { .. }
+    ));
+    assert!(chart.plots[0].series[0].markers);
+}
+
+/// Color transforms take strict percentages as well as thousandths of a
+/// percent: `lumMod val="50%"` halves the luminance.
+/// ECMA-376 Part 1 §20.1.2.3.20.
+#[test]
+fn color_transforms_read_strict_percentages() {
+    let drawing = group_drawing(
+        r#"<wpg:wgp><wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="10" cy="10"/></a:xfrm><a:solidFill><a:srgbClr val="FFFFFF"><a:lumMod val="50%"/></a:srgbClr></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp><wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="10" cy="10"/></a:xfrm><a:solidFill><a:srgbClr val="FFFFFF"><a:lumMod val="50000"/></a:srgbClr></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp></wpg:wgp>"#,
+    );
+    let fills: Vec<_> = drawing
+        .members
+        .iter()
+        .map(|m| m.drawing.shape.fill)
+        .collect();
+    assert_eq!(fills, [Some(Color(128, 128, 128)); 2]);
+}

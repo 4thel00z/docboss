@@ -228,3 +228,37 @@ fn data_text_stands_in_for_member_text_boxes() {
     let doc = document(vec![para(vec![run("Anchor"), Inline::Run(outer)])]);
     assert_eq!(text(&doc), "Anchor\nFirst\nSecond\n");
 }
+
+/// A chart's data text, its title and a table of its cached values, is
+/// written after its anchor: a Markdown table, tab-separated cells in
+/// plain text.
+#[test]
+fn chart_tables_follow_their_anchor() {
+    let Inline::Run(mut outer) = text_box(Vec::new()) else {
+        panic!()
+    };
+    let Some(RunContent::Drawing(mut chart)) = outer.content.pop() else {
+        panic!()
+    };
+    chart.data_text = vec![
+        para(vec![run("Sales")]),
+        table(vec![
+            row(vec![
+                cell(vec![para(vec![])]),
+                cell(vec![para(vec![run("Q1")])]),
+            ]),
+            row(vec![
+                cell(vec![para(vec![run("North")])]),
+                cell(vec![para(vec![run("4.5")])]),
+            ]),
+        ]),
+    ];
+    outer.content.push(RunContent::Drawing(chart));
+    let doc = document(vec![para(vec![run("Anchor"), Inline::Run(outer)])]);
+    assert_eq!(text(&doc), "Anchor\nSales\n\tQ1\nNorth\t4.5\n");
+    let markdown = docboss_output::to_markdown(&doc, &docboss_output::MarkdownOptions::default());
+    assert!(
+        markdown.contains("Anchor\n\nSales\n\n|  | Q1 |\n| --- | --- |\n| North | 4.5 |"),
+        "{markdown}"
+    );
+}
