@@ -8,7 +8,7 @@ use docboss_layout::{GlyphRun, Item, Layout, LineStyle, Rect, Stroke};
 use docboss_model::{Color, DashPattern, Diagnostic, Gradient, LineCap, LineJoin, MediaId};
 
 use crate::image::{decode, Decoded, ImageError};
-use crate::raster::{flatten, polylines, rasterize, Mask, Point, Polygons};
+use crate::raster::{flatten, polylines, rasterize, rasterize_even_odd, Mask, Point, Polygons};
 use crate::shade::{apply, compose, invert, Affine, Shader};
 use crate::{Error, Pixmap, Result};
 
@@ -126,9 +126,12 @@ impl Renderer {
                     *cap,
                     *join,
                 ),
-                Item::Path { segs, fill, stroke } => {
-                    canvas.path(segs, *fill, stroke.as_ref(), scale)
-                }
+                Item::Path {
+                    segs,
+                    fill,
+                    stroke,
+                    even_odd,
+                } => canvas.path(segs, *fill, stroke.as_ref(), *even_odd, scale),
                 Item::Shade {
                     segs,
                     gradient,
@@ -206,14 +209,19 @@ impl Renderer {
                     cap: *cap,
                     join: *join,
                 };
-                canvas.path(&mapped(&segs), None, Some(&stroke), scale);
+                canvas.path(&mapped(&segs), None, Some(&stroke), false, scale);
             }
-            Item::Path { segs, fill, stroke } => {
+            Item::Path {
+                segs,
+                fill,
+                stroke,
+                even_odd,
+            } => {
                 let stroke = stroke.map(|s| Stroke {
                     width: s.width * unit,
                     ..s
                 });
-                canvas.path(&mapped(segs), *fill, stroke.as_ref(), scale);
+                canvas.path(&mapped(segs), *fill, stroke.as_ref(), *even_odd, scale);
             }
             Item::Shade {
                 segs,
@@ -734,13 +742,26 @@ impl Canvas<'_> {
         }
     }
 
-    /// Fills `segs`, in points, with the nonzero rule, then strokes each of
-    /// its subpaths: dashed ones through the dash walker, solid ones as one
-    /// coverage mask of their pieces, joins and caps.
-    fn path(&mut self, segs: &[Seg], fill: Option<Color>, stroke: Option<&Stroke>, scale: f32) {
+    /// Fills `segs`, in points, with the nonzero or the even-odd rule, then
+    /// strokes each of its subpaths: dashed ones through the dash walker,
+    /// solid ones as one coverage mask of their pieces, joins and caps.
+    fn path(
+        &mut self,
+        segs: &[Seg],
+        fill: Option<Color>,
+        stroke: Option<&Stroke>,
+        even_odd: bool,
+        scale: f32,
+    ) {
         let m = [scale, 0.0, 0.0, scale, 0.0, 0.0];
         if let Some(color) = fill {
-            self.fill_polygons(&flatten(segs, m), color);
+            let polys = flatten(segs, m);
+            let clip = Some(self.clip.pixels());
+            let mask = match even_odd {
+                true => rasterize_even_odd(&polys, clip),
+                false => rasterize(&polys, clip),
+            };
+            self.blit(&mask, 0, 0, color);
         }
         let Some(stroke) = stroke else {
             return;

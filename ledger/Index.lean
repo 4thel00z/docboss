@@ -7,7 +7,8 @@ citations of the tracked specifications and writes them to
 
 A citation is a standard's name followed by a clause: `ECMA-376 Part 1
 §17.3.1.29`, `ECMA-376 Part 2 §9.1`, `[MS-DOC] §2.5.1`, `[MS-CFB] §2.6.1`,
-`[MS-OLEPS] §2.3`, `[MS-OSHARED] §2.3.1`, `[MS-ODRAW] §2.2.1` or
+`[MS-OLEPS] §2.3`, `[MS-OSHARED] §2.3.1`, `[MS-ODRAW] §2.2.1`, `[MS-WMF] §2.3.1`,
+`[MS-EMF] §2.3.5.8` or
 `APPNOTE §4.3.7`. The section sign may be replaced by `clause` or `section`,
 an annex clause is written `Annex A.1`, and further clauses of the same
 standard may follow after a comma, a semicolon or `and`. When the name ends
@@ -128,7 +129,9 @@ def bracketed : List (String × Standard) := [
   ("[MS-CFB]", .msCfb),
   ("[MS-OLEPS]", .msOleps),
   ("[MS-OSHARED]", .msOshared),
-  ("[MS-ODRAW]", .msOdraw)
+  ("[MS-ODRAW]", .msOdraw),
+  ("[MS-WMF]", .msWmf),
+  ("[MS-EMF]", .msEmf)
 ]
 
 /-- The ECMA-376 part named at the start of `s` (` Part 1 …`), and the text

@@ -148,6 +148,16 @@ impl Mask {
 /// Rasterizes polygons into a coverage mask sized to their bounds and
 /// clipped to the pixel rectangle `(left, top, right, bottom)` when given.
 pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) -> Mask {
+    coverage::<false>(polys, clip)
+}
+
+/// [`rasterize`] under the even-odd rule: a winding sum folds back to zero
+/// at every second crossing.
+pub(crate) fn rasterize_even_odd(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) -> Mask {
+    coverage::<true>(polys, clip)
+}
+
+fn coverage<const EVEN_ODD: bool>(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) -> Mask {
     let mut edges: Vec<Edge> = Vec::new();
     let (mut xmin, mut xmax, mut ymin, mut ymax) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     for poly in polys {
@@ -226,7 +236,12 @@ pub(crate) fn rasterize(polys: &Polygons, clip: Option<(i32, i32, i32, i32)>) ->
         for (slot, value) in out.iter_mut().zip(acc.iter_mut()) {
             sum += *value;
             *value = 0.0;
-            *slot = (sum.abs().min(1.0) * 255.0 + 0.5) as u8;
+            let winding = sum.abs();
+            let covered = match EVEN_ODD {
+                true => 1.0 - (winding % 2.0 - 1.0).abs(),
+                false => winding.min(1.0),
+            };
+            *slot = (covered * 255.0 + 0.5) as u8;
         }
         acc[width..].fill(0.0);
     }
@@ -322,6 +337,16 @@ mod tests {
         let mask = rasterize(&tri, None);
         let area: f32 = mask.coverage.iter().map(|&c| c as f32 / 255.0).sum();
         assert!((area - 50.0).abs() < 0.5, "{area}");
+    }
+
+    #[test]
+    fn even_odd_leaves_a_hole_where_same_windings_overlap() {
+        let mut polys = square(0.0, 0.0, 10.0, 10.0);
+        polys.extend(square(3.0, 3.0, 7.0, 7.0));
+        let mask = rasterize_even_odd(&polys, None);
+        assert_eq!(mask.coverage[5 * mask.width + 5], 0);
+        assert_eq!(mask.coverage[mask.width + 1], 255);
+        assert_eq!(rasterize(&polys, None).coverage[5 * mask.width + 5], 255);
     }
 
     #[test]

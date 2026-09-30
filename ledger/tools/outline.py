@@ -15,8 +15,10 @@ Usage, from the repository root:
     curl -sSLo MS-ODRAW.pdf 'https://officeprotocoldoc.z19.web.core.windows.net/files/MS-ODRAW/%5bMS-ODRAW%5d.pdf'
     curl -sSLo MS-CFB.pdf 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net/MS-CFB/%5bMS-CFB%5d.pdf'
     curl -sSLo MS-OLEPS.pdf 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net/MS-OLEPS/%5bMS-OLEPS%5d.pdf'
+    curl -sSLo MS-WMF.pdf 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net/MS-WMF/%5bMS-WMF%5d.pdf'
+    curl -sSLo MS-EMF.pdf 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net/MS-EMF/%5bMS-EMF%5d.pdf'
     curl -sSLo APPNOTE.TXT https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-    for f in ecma376-1 ecma376-2 ecma376-3 MS-DOC MS-OSHARED MS-ODRAW MS-CFB MS-OLEPS; do pdfboss text $f.pdf > $f.txt; done
+    for f in ecma376-1 ecma376-2 ecma376-3 MS-DOC MS-OSHARED MS-ODRAW MS-CFB MS-OLEPS MS-WMF MS-EMF; do pdfboss text $f.pdf > $f.txt; done
     cd ../.. && python3 ledger/tools/outline.py ledger/specs ledger/Ledger/Outline
 
 The PDF texts are read through their tables of contents: every line with a
@@ -91,6 +93,8 @@ STANDARDS = [
              "[MS-OLEPS]: Object Linking and Embedding (OLE) Property Set Data Structures"),
     Standard("MsOshared", "msOshared", "MS-OSHARED.txt", "[MS-OSHARED]: Office Common Data Types and Objects Structures"),
     Standard("MsOdraw", "msOdraw", "MS-ODRAW.txt", "[MS-ODRAW]: Office Drawing Binary File Format"),
+    Standard("MsWmf", "msWmf", "MS-WMF.txt", "[MS-WMF]: Windows Metafile Format"),
+    Standard("MsEmf", "msEmf", "MS-EMF.txt", "[MS-EMF]: Enhanced Metafile Format"),
     Standard("Appnote", "appnote", "APPNOTE.TXT", "PKWARE APPNOTE.TXT: .ZIP File Format Specification",
              appnote=True),
 ]

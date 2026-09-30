@@ -137,6 +137,7 @@ pub(crate) fn shape_items(
         }
         if let Some(color) = fill.and_then(|c| shaded(c, path.fill)) {
             under.push(Item::Path {
+                even_odd: false,
                 segs: path.segs.clone(),
                 fill: Some(color),
                 stroke: None,
@@ -150,6 +151,7 @@ pub(crate) fn shape_items(
         };
         let (segs, heads) = line_ends(path, stroke, std::mem::take(&mut ends));
         over.push(Item::Path {
+            even_odd: false,
             segs,
             fill: None,
             stroke: Some(stroke),
@@ -334,6 +336,7 @@ fn decoration(
         segs
     };
     let filled = |segs: Vec<Seg>| Item::Path {
+        even_odd: false,
         segs,
         fill: Some(stroke.color),
         stroke: None,
@@ -382,6 +385,7 @@ fn decoration(
         LineEndKind::Arrow => {
             let (a, b) = (at(-l, w), at(-l, -w));
             items.push(Item::Path {
+                even_odd: false,
                 segs: vec![
                     Seg::Move(a.0, a.1),
                     Seg::Line(tip.0, tip.1),

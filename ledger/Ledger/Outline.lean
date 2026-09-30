@@ -7,6 +7,8 @@ import Ledger.Outline.MsCfb
 import Ledger.Outline.MsOleps
 import Ledger.Outline.MsOshared
 import Ledger.Outline.MsOdraw
+import Ledger.Outline.MsWmf
+import Ledger.Outline.MsEmf
 import Ledger.Outline.Appnote
 
 /-!
@@ -25,6 +27,8 @@ def headings : Standard → List Heading
   | .msOleps => MsOleps.headings
   | .msOshared => MsOshared.headings
   | .msOdraw => MsOdraw.headings
+  | .msWmf => MsWmf.headings
+  | .msEmf => MsEmf.headings
   | .appnote => Appnote.headings
 
 def chapters : Standard → List (Nat × String)
@@ -36,6 +40,8 @@ def chapters : Standard → List (Nat × String)
   | .msOleps => MsOleps.chapters
   | .msOshared => MsOshared.chapters
   | .msOdraw => MsOdraw.chapters
+  | .msWmf => MsWmf.chapters
+  | .msEmf => MsEmf.chapters
   | .appnote => Appnote.chapters
 
 def annexes : Standard → List (Char × String)
@@ -47,6 +53,8 @@ def annexes : Standard → List (Char × String)
   | .msOleps => MsOleps.annexes
   | .msOshared => MsOshared.annexes
   | .msOdraw => MsOdraw.annexes
+  | .msWmf => MsWmf.annexes
+  | .msEmf => MsEmf.annexes
   | .appnote => Appnote.annexes
 
 /-- The chapter keys of a standard: its chapter numbers, and `100` when it

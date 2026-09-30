@@ -6,6 +6,8 @@ import Ledger.Catalogue.MsCfb
 import Ledger.Catalogue.MsOleps
 import Ledger.Catalogue.MsOshared
 import Ledger.Catalogue.MsOdraw
+import Ledger.Catalogue.MsWmf
+import Ledger.Catalogue.MsEmf
 import Ledger.Catalogue.Appnote
 
 /-!
@@ -26,6 +28,8 @@ def rows : Standard → List Feature
   | .msOleps => MsOleps.rows
   | .msOshared => MsOshared.rows
   | .msOdraw => MsOdraw.rows
+  | .msWmf => MsWmf.rows
+  | .msEmf => MsEmf.rows
   | .appnote => Appnote.rows
 
 def features : List Feature := Standard.all.flatMap rows

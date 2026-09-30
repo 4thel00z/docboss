@@ -110,7 +110,7 @@ asyncio.run(main())
 <details>
 <summary><strong>Rust</strong></summary>
 
-The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`).
+The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`, `docboss-metafile`).
 
 ```rust,no_run
 use docboss_output::{to_markdown, to_text, MarkdownOptions, TextOptions};
@@ -214,6 +214,7 @@ The low tail is what layout does not draw yet (groups, gradient fills, SmartArt)
 | `docboss-output` | Text, Markdown, HTML, JSON and the per-block view |
 | `docboss-font` | TrueType, OpenType CFF and collections, GSUB and GPOS layout features; system font discovery and metric-compatible substitution |
 | `docboss-layout` | Pages from the model: line breaking, tabs, lists, tables, sections, headers and footers, footnotes, images |
+| `docboss-metafile` | WMF ([MS-WMF]) and EMF ([MS-EMF]) pictures played into paths, text and bitmaps; DIB decoding |
 | `docboss-render` | Anti-aliased rasterizer and the PNG, PPM, BMP and JPEG encoders |
 | `docboss-write` | DOCX from the model, a builder API, Markdown to DOCX |
 | `docboss-aio` | Async reads over files or HTTP, fetching only the byte ranges needed |

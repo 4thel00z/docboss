@@ -14,6 +14,7 @@ keywords.workspace = true
 docboss-model = { workspace = true }
 docboss-font = { workspace = true }
 docboss-layout = { workspace = true }
+docboss-metafile = { workspace = true }
 png = "0.18"
 jpeg-decoder = "0.3"
 

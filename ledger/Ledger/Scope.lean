@@ -17,6 +17,8 @@ required when it sits in one of the areas below and is not an introductory
 - [MS-OLEPS]: section 2, Structures, to depth 3.
 - [MS-OSHARED] and [MS-ODRAW]: section 2, Structures, to depth 2; both are
   large catalogues of which the Word reader uses a small part.
+- [MS-WMF] and [MS-EMF]: section 2 to depth 2, and its records, 2.3, to
+  depth 3.
 - APPNOTE: section 4, the ZIP format, to depth 3, and section 5, the
   compression methods, to depth 2.
 -/
@@ -37,6 +39,8 @@ def area : Standard → List Nat → Bool
   | .msOleps, p => under [2] 3 p
   | .msOshared, p => under [2] 2 p
   | .msOdraw, p => under [2] 2 p
+  | .msWmf, p => under [2] 2 p || under [2, 3] 3 p
+  | .msEmf, p => under [2] 2 p || under [2, 3] 3 p
   | .appnote, p => under [4] 3 p || under [5] 2 p
 
 def required (s : Standard) (h : Heading) : Bool :=

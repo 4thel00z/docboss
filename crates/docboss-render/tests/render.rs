@@ -205,6 +205,70 @@ fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
     assert!(pixmap.diagnostics[0].message.contains("WMF"));
 }
 
+/// [MS-EMF] §2.3.5.8 and [MS-WMF] §2.3.6.25: a metafile picture draws its
+/// shapes, text and bitmap inside the drawing's rectangle instead of a
+/// placeholder, with no diagnostic.
+#[test]
+fn metafile_pictures_draw_their_shapes() {
+    let fixtures = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../docboss-metafile/tests/fixtures/"
+    );
+    for (name, content_type) in [("shapes.emf", "image/x-emf"), ("shapes.wmf", "image/x-wmf")] {
+        let data = std::fs::read(format!("{fixtures}{name}")).unwrap();
+        let drawing = Drawing {
+            media: Some(MediaId(0)),
+            width: 12700 * 210,
+            height: 12700 * 154,
+            placement: DrawingPlacement::Inline,
+            name: None,
+            description: None,
+            text_box: Vec::new(),
+            shape: Default::default(),
+            geometry: None,
+            members: Vec::new(),
+            data_text: Vec::new(),
+            chart: None,
+        };
+        let mut doc = document(vec![para(vec![Inline::Run(Run {
+            properties: RunProperties::default(),
+            content: vec![RunContent::Drawing(Box::new(drawing))],
+        })])]);
+        doc.media = vec![Media {
+            name: name.into(),
+            content_type: content_type.into(),
+            data: data.into(),
+        }];
+        let laid = layout(&doc, &fonts());
+        let pixmap = render_page(&laid, 0, 1.0).unwrap();
+        assert!(pixmap.diagnostics.is_empty(), "{:?}", pixmap.diagnostics);
+        let found = |rgb: [u8; 3]| {
+            let mut b = (u32::MAX, u32::MAX, 0, 0);
+            for y in 0..pixmap.height {
+                for x in 0..pixmap.width {
+                    if pixmap.pixel(x, y).unwrap()[..3] == rgb {
+                        b = (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y));
+                    }
+                }
+            }
+            b
+        };
+        let red = found([255, 0, 0]);
+        let blue = found([0, 0, 255]);
+        let green = found([0, 160, 0]);
+        assert!(
+            red.2 > red.0 + 80 && red.3 > red.1 + 50,
+            "{name} red {red:?}"
+        );
+        assert!(blue.0 > red.2, "{name} red {red:?} blue {blue:?}");
+        assert!(
+            green.1 > red.3 && green.2 < blue.0,
+            "{name} green {green:?}"
+        );
+        assert!(laid.pages[0].text().contains("Hi"), "{name}");
+    }
+}
+
 /// ECMA-376 Part 1 §20.4.2.22: text that overflows a text box without
 /// `a:spAutoFit` is cut off at the shape less its insets, while the fill
 /// and outline still paint.

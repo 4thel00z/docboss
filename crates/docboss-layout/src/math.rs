@@ -884,6 +884,7 @@ fn radical(
     ];
     let mut out = MathBox::default();
     out.items.push(Item::Path {
+        even_odd: false,
         segs,
         fill: None,
         stroke: Some(Stroke {

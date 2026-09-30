@@ -1,5 +1,6 @@
 //! Decoding embedded images to RGBA: PNG and JPEG through the `png` and
-//! `jpeg-decoder` crates, GIF (first frame) and uncompressed BMP in-tree.
+//! `jpeg-decoder` crates, GIF (first frame) in-tree and BMP through the
+//! metafile crate's DIB decoder. WMF and EMF are played at layout time.
 
 const MAX_PIXELS: u64 = 64 << 20;
 
@@ -14,7 +15,8 @@ pub struct Decoded {
 /// Why an image could not be decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImageError {
-    /// A format docboss does not paint, such as WMF, EMF or TIFF.
+    /// A format this decoder does not read: TIFF, or a WMF or EMF picture
+    /// that the layout could not play.
     Unsupported(&'static str),
     Malformed(String),
 }
@@ -133,56 +135,18 @@ fn le16(d: &[u8], o: usize) -> Option<u16> {
     d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]))
 }
 
-fn le32(d: &[u8], o: usize) -> Option<u32> {
-    d.get(o..o + 4)
-        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-}
-
-/// Uncompressed BMP with 8, 24 or 32 bits per pixel.
+/// BMP through the metafile crate's DIB decoder: 1 to 32 bits per pixel,
+/// bit fields and RLE.
 fn decode_bmp(d: &[u8]) -> Result<Decoded, ImageError> {
-    let bad = || ImageError::Malformed("BMP header".into());
-    let offset = le32(d, 10).ok_or_else(bad)? as usize;
-    let header = le32(d, 14).ok_or_else(bad)? as usize;
-    let width = le32(d, 18).ok_or_else(bad)? as i32;
-    let raw_height = le32(d, 22).ok_or_else(bad)? as i32;
-    let bits = le16(d, 28).ok_or_else(bad)?;
-    let compression = le32(d, 30).unwrap_or(0);
-    if compression != 0 && compression != 3 {
-        return Err(ImageError::Unsupported("compressed BMP"));
-    }
-    let (w, h) = (width.unsigned_abs(), raw_height.unsigned_abs());
-    checked(w, h)?;
-    let stride = (w as usize * bits as usize).div_ceil(32) * 4;
-    let palette_at = 14 + header;
-    let mut rgba = vec![0u8; w as usize * h as usize * 4];
-    for y in 0..h as usize {
-        let src_row = if raw_height > 0 {
-            h as usize - 1 - y
-        } else {
-            y
-        };
-        let start = offset + src_row * stride;
-        let row = d
-            .get(start..start + stride)
-            .ok_or_else(|| ImageError::Malformed("BMP pixels".into()))?;
-        for x in 0..w as usize {
-            let px = match bits {
-                24 => [row[x * 3 + 2], row[x * 3 + 1], row[x * 3], 255],
-                32 => [row[x * 4 + 2], row[x * 4 + 1], row[x * 4], 255],
-                8 => {
-                    let at = palette_at + row[x] as usize * 4;
-                    let entry = d.get(at..at + 4).ok_or_else(bad)?;
-                    [entry[2], entry[1], entry[0], 255]
-                }
-                _ => return Err(ImageError::Unsupported("BMP bit depth")),
-            };
-            rgba[(y * w as usize + x) * 4..][..4].copy_from_slice(&px);
-        }
-    }
+    let image = docboss_metafile::bitmap::decode_bmp(d).map_err(|e| match e {
+        docboss_metafile::bitmap::BitmapError::Unsupported(what) => ImageError::Unsupported(what),
+        docboss_metafile::bitmap::BitmapError::Malformed(why) => ImageError::Malformed(why.into()),
+    })?;
+    checked(image.width, image.height)?;
     Ok(Decoded {
-        width: w,
-        height: h,
-        rgba,
+        width: image.width,
+        height: image.height,
+        rgba: image.pixels,
     })
 }
 

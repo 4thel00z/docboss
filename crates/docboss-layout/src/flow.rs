@@ -860,7 +860,7 @@ pub(crate) fn run(
     document: &Document,
     fonts: &Arc<FontDatabase>,
     options: &LayoutOptions,
-) -> (Vec<Page>, Vec<Diagnostic>) {
+) -> (Vec<Page>, Vec<Diagnostic>, Vec<docboss_model::Media>) {
     let mut refs = Vec::new();
     document
         .sections
@@ -952,11 +952,12 @@ pub(crate) fn run(
     drop(paginator);
     let total = states.len() as u32;
     ctx.total_pages = Some(total);
-    let pages = states
+    let mut pages: Vec<Page> = states
         .into_iter()
         .map(|state| finish_page(&mut ctx, state, &notes))
         .collect();
-    (pages, ctx.diagnostics)
+    let media = crate::metafile::expand(&mut ctx, &mut pages);
+    (pages, ctx.diagnostics, media)
 }
 
 fn shows_on(display: PageBorderDisplay, first: bool) -> bool {

@@ -22,6 +22,10 @@ inductive Standard where
   | msOshared
   /-- [MS-ODRAW]: Office Drawing Binary File Format. -/
   | msOdraw
+  /-- [MS-WMF]: Windows Metafile Format. -/
+  | msWmf
+  /-- [MS-EMF]: Enhanced Metafile Format. -/
+  | msEmf
   /-- PKWARE APPNOTE.TXT: .ZIP File Format Specification. -/
   | appnote
   deriving DecidableEq, Repr, Inhabited
@@ -30,7 +34,7 @@ namespace Standard
 
 def all : List Standard :=
   [.ecma376Part1, .ecma376Part2, .ecma376Part3, .msDoc, .msCfb, .msOleps, .msOshared, .msOdraw,
-    .appnote]
+    .msWmf, .msEmf, .appnote]
 
 /-- The name a citation uses, such as `ECMA-376 Part 1` or `[MS-DOC]`. -/
 def label : Standard → String
@@ -42,6 +46,8 @@ def label : Standard → String
   | .msOleps => "[MS-OLEPS]"
   | .msOshared => "[MS-OSHARED]"
   | .msOdraw => "[MS-ODRAW]"
+  | .msWmf => "[MS-WMF]"
+  | .msEmf => "[MS-EMF]"
   | .appnote => "APPNOTE"
 
 /-- The full title, for the report. -/
@@ -54,6 +60,8 @@ def title : Standard → String
   | .msOleps => "[MS-OLEPS]: Object Linking and Embedding (OLE) Property Set Data Structures"
   | .msOshared => "[MS-OSHARED]: Office Common Data Types and Objects Structures"
   | .msOdraw => "[MS-ODRAW]: Office Drawing Binary File Format"
+  | .msWmf => "[MS-WMF]: Windows Metafile Format"
+  | .msEmf => "[MS-EMF]: Enhanced Metafile Format"
   | .appnote => "APPNOTE.TXT: .ZIP File Format Specification (PKWARE)"
 
 /-- The Lean constructor, as `Index` writes it into `Generated.lean`. -/
@@ -66,6 +74,8 @@ def constructor : Standard → String
   | .msOleps => ".msOleps"
   | .msOshared => ".msOshared"
   | .msOdraw => ".msOdraw"
+  | .msWmf => ".msWmf"
+  | .msEmf => ".msEmf"
   | .appnote => ".appnote"
 
 /-- Position in `all`, the order the report lists standards in. -/

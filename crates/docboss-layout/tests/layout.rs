@@ -1342,7 +1342,10 @@ fn shapes_without_text_paint_their_geometry() {
     let layout = laid(&doc(vec![shape(triangle, framed())]));
     let items = paths(&layout);
     assert_eq!(items.len(), 2, "{:?}", layout.pages[0].items);
-    let Item::Path { segs, fill, stroke } = items[0] else {
+    let Item::Path {
+        segs, fill, stroke, ..
+    } = items[0]
+    else {
         unreachable!()
     };
     assert_eq!(*fill, Some(docboss_model::Color(255, 255, 0)));

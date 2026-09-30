@@ -20,6 +20,8 @@ the Python bindings. Sister project of pdfboss; mirror its conventions.
 - `crates/docboss-output`: text, Markdown and JSON from the model.
 - `crates/docboss-font`, `docboss-layout`, `docboss-render`: font parsing,
   page layout, rasterization and image encoders.
+- `crates/docboss-metafile`: WMF ([MS-WMF]) and EMF ([MS-EMF]) pictures
+  played into paths, text and bitmaps, and the DIB decoder.
 - `crates/docboss-write`: DOCX writer from the model.
 - `crates/docboss-cli`, `docboss-py`, `docboss-tui`: the `docboss` binary,
   the Python extension and the terminal explorer.
@@ -35,7 +37,7 @@ or a test implements, in a doc comment or comment, in exactly these forms:
   numbering), `ECMA-376 Part 2 §9.1` (Open Packaging Conventions),
   `ECMA-376 Part 3 §7` (Markup Compatibility).
 - `[MS-DOC] §2.5.1`, `[MS-CFB] §2.6.1`, `[MS-OSHARED] §2.3.1`,
-  `[MS-ODRAW] §2.2.1`.
+  `[MS-ODRAW] §2.2.1`, `[MS-WMF] §2.3.3.5`, `[MS-EMF] §2.3.5.8`.
 - `APPNOTE §4.3.7` for the PKWARE ZIP application note.
 
 A citation in a file under `tests/` or inside a `#[cfg(test)] mod` counts as

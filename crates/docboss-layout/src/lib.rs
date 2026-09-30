@@ -16,6 +16,7 @@ mod flow;
 mod geometry;
 mod label;
 mod math;
+mod metafile;
 mod paragraph;
 mod presets;
 mod shape;
@@ -157,12 +158,14 @@ pub enum Item {
         join: LineJoin,
     },
     /// An outline of lines and curves in page points, filled with the
-    /// nonzero rule and then stroked. Each subpath starts with a move; one
-    /// that ends in a close is stroked closed.
+    /// nonzero rule, or the even-odd rule when `even_odd`, and then
+    /// stroked. Each subpath starts with a move; one that ends in a close is
+    /// stroked closed.
     Path {
         segs: Vec<Seg>,
         fill: Option<Color>,
         stroke: Option<Stroke>,
+        even_odd: bool,
     },
     /// An outline like [`Item::Path`]'s filled with a gradient laid over the
     /// box of `size` points that `frame` maps into the page.
@@ -301,11 +304,13 @@ pub fn layout_with_options(
     fonts: &Arc<FontDatabase>,
     options: &LayoutOptions,
 ) -> Layout {
-    let (pages, diagnostics) = flow::run(document, fonts, options);
+    let (pages, diagnostics, extra) = flow::run(document, fonts, options);
+    let mut media = document.media.clone();
+    media.extend(extra);
     Layout {
         pages,
         fonts: fonts.clone(),
-        media: document.media.clone(),
+        media,
         diagnostics,
     }
 }

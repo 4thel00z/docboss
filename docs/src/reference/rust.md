@@ -19,6 +19,7 @@ open a document and one of the consumers after it.
 | `docboss-cfb` | `CompoundFile` and property sets |
 | `docboss-crypt` | `decrypt(bytes, password)` for encrypted DOCX |
 | `docboss-font` | `Font`, `FontDatabase` with system discovery and substitution |
+| `docboss-metafile` | `play(bytes) -> Picture` for WMF and EMF, `text(&Picture)`, `bitmap::{decode, decode_bmp, encode_bmp}` |
 
 Errors are `thiserror` enums per crate; `docboss_core::Error` wraps the
 readers' errors and adds `Encrypted` and `Unsupported`. No library function

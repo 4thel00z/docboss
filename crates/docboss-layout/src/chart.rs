@@ -1015,6 +1015,7 @@ fn bars(
             if let Some(color) = series.line {
                 let width = series.line_width.map_or(0.75, emu_to_pt);
                 items.push(Item::Path {
+                    even_odd: false,
                     segs: rectangle(rect),
                     fill: None,
                     stroke: Some(stroke(color, width)),
@@ -1060,6 +1061,7 @@ fn series_points(
 
 fn marker(items: &mut Vec<Item>, at: (f32, f32), fill: Color, outline: Option<Color>) {
     items.push(Item::Path {
+        even_odd: false,
         segs: circle(at, 2.5),
         fill: Some(fill),
         stroke: outline.map(|c| stroke(c, 0.75)),
@@ -1098,6 +1100,7 @@ fn polyline(series: &ChartSeries, points: &[Option<(f32, f32)>], items: &mut Vec
         }
         let width = series.line_width.map_or(2.25, emu_to_pt);
         items.push(Item::Path {
+            even_odd: false,
             segs,
             fill: None,
             stroke: Some(stroke(color, width)),
@@ -1155,6 +1158,7 @@ fn areas(
         }
         segs.push(Seg::Close);
         items.push(Item::Path {
+            even_odd: false,
             segs,
             fill: Some(color),
             stroke: series
@@ -1248,6 +1252,7 @@ fn pie(plot: &ChartPlot, hole: u8, first_angle: u16, area: Rect, items: &mut Vec
             .line
             .map(|c| stroke(c, series.line_width.map_or(0.75, emu_to_pt)));
         items.push(Item::Path {
+            even_odd: false,
             segs,
             fill,
             stroke: outline,

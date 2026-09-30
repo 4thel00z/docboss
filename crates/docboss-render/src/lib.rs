@@ -83,7 +83,7 @@ pub struct Pixmap {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
-    /// Content that could not be painted, such as metafile images.
+    /// Content that could not be painted, such as TIFF images.
     pub diagnostics: Vec<Diagnostic>,
 }
 
