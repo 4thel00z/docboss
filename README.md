@@ -191,10 +191,10 @@ Pages rendered by docboss against LibreOffice's rendering of the same documents 
 
 | Format | SSIM median | SSIM p10 | Page counts equal |
 |---|--:|--:|--:|
-| DOCX | 0.984 | 0.879 | 56 of 59 |
-| DOC | 0.966 | 0.634 | 25 of 29 |
+| DOCX | 0.985 | 0.880 | 56 of 59 |
+| DOC | 0.966 | 0.681 | 25 of 29 |
 
-The low tail is fonts LibreOffice substitutes differently, text LibreOffice wraps around floating frames and docboss does not, and tracked changes that LibreOffice shows with revision marks. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
+The low tail is fonts LibreOffice substitutes differently, tables and shapes LibreOffice places differently, and tracked changes that LibreOffice shows with revision marks. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
 
 ## What's inside
 
@@ -215,6 +215,7 @@ The low tail is fonts LibreOffice substitutes differently, text LibreOffice wrap
 | `docboss-font` | TrueType, OpenType CFF and collections, GSUB and GPOS layout features; system font discovery and metric-compatible substitution |
 | `docboss-layout` | Pages from the model: line breaking, tabs, lists, tables, sections, headers and footers, footnotes, images |
 | `docboss-metafile` | WMF ([MS-WMF]) and EMF ([MS-EMF]) pictures played into paths, text and bitmaps; DIB decoding |
+| `docboss-mtef` | Equation Editor 3 equations: the MTEF of an OLE object's `Equation Native` stream read into the math model |
 | `docboss-render` | Anti-aliased rasterizer and the PNG, PPM, BMP and JPEG encoders |
 | `docboss-write` | DOCX from the model, a builder API, Markdown to DOCX |
 | `docboss-aio` | Async reads over files or HTTP, fetching only the byte ranges needed |
@@ -228,9 +229,9 @@ The low tail is fonts LibreOffice substitutes differently, text LibreOffice wrap
 
 The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` property in Python, the `diagnostics` field of `Document` in Rust) lists every item that was approximated or dropped. The largest gaps:
 
-- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left and vertical sections lay out left to right; no column balancing; text does not wrap around floating images; picture and pattern fills and shape effects are not drawn; 3-D, radar, stock and surface charts and SmartArt without a saved drawing show an empty frame; conditional formatting from table styles is not applied. CFF2 fonts are refused and TIFF images draw a placeholder.
+- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left and vertical sections lay out left to right; no column balancing; header and footer floats do not push body text aside; picture and pattern fills and shape effects are not drawn; 3-D, radar, stock and surface charts and SmartArt without a saved drawing show an empty frame; conditional formatting from table styles is not applied. CFF2 fonts are refused and TIFF images draw a placeholder.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their paragraph numbering, comments and drawing objects, and Word 2 files are read as text only; equations from the old Equation Editor keep their picture but not their text; freeforms and WordArt are reported as dropped.
+- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their comments and drawing objects, and Word 2 files are read as text only; MathType (MTEF 5) equations keep their picture but not their text; freeforms and WordArt are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.

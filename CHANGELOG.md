@@ -8,7 +8,9 @@
 * **render:** SmartArt drawn from its saved drawing, charts from their cached values (and listed as tables in text and Markdown), WMF and EMF pictures played through the new `docboss-metafile` crate.
 * **layout:** Office Math read, laid out and extracted (Unicode linear format in text, LaTeX in Markdown).
 * **crypt, doc:** XOR-obfuscated DOC files open with their password.
-* **doc:** Word 6 and Word 95 files are read with their character, paragraph and style formatting, sections, headers and footers, tables and pictures; Word 2 files are detected.
+* **doc:** Word 6 and Word 95 files are read with their character, paragraph and style formatting, sections, headers and footers, tables, pictures and numbered paragraphs (ANLD); Word 2 files are detected.
+* **layout:** text wraps around floating pictures, text frames (`w:framePr`, DOC frame sprms) and floating tables (`w:tblpPr`, DOC table position sprms): square, tight and through with the wrap polygon, top and bottom, on both sides, one side or the larger one, at the object's distances; a float placed above text already on its page lays the page out again; floats in table cells are drawn; hidden drawings are left out.
+* **mtef, docx, doc:** Equation Editor 3 objects give their equation (plain text in Unicode linear format, LaTeX in Markdown) from the MTEF of their `Equation Native` stream, through the new `docboss-mtef` crate; the preview picture still draws them.
 
 ### Bug Fixes
 

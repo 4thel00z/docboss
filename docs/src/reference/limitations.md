@@ -11,11 +11,12 @@ missing. The largest gaps:
   custom XML data binding are not read as content. Ruby text is ignored.
   Only the compatibilityMode compatibility setting is read.
 - DOC: password-protected Word 6 and 95 files are refused. Word 6 and 95
-  files are read with their formatting, sections, headers, footers, tables
-  and pictures, but their numbered paragraphs (ANLD), comments and drawing
-  objects are left out; Word 2 files are read as text only. Equation Editor
-  objects keep their preview picture; their equations (MTEF) are not read
-  as text. A compound file whose directory is lost gives its text only.
+  files are read with their formatting, sections, headers, footers, tables,
+  pictures and numbered paragraphs (ANLD), but their comments and drawing
+  objects, whose Word 6 records differ from Word 97's, are left out; Word 2
+  files are read as text only. Equation Editor 3 objects keep their preview
+  picture and give their equation as text and LaTeX; MathType's MTEF 5 is
+  not read. A compound file whose directory is lost gives its text only.
   Freeforms and WordArt shapes are reported as dropped.
 - RTF and Flat OPC XML are detected and refused.
 
@@ -26,8 +27,10 @@ missing. The largest gaps:
   (GPOS type 3) is not applied, and Latin text gets no discretionary
   ligatures. Right-to-left sections (`w:bidi` in `w:sectPr`: column order,
   gutter side) and vertical sections (`tbRl`) lay out left to right.
-- No column balancing; text does not wrap around floating images and
-  frames, whatever their wrapping (square, tight, top and bottom).
+- No column balancing. Text wraps around floating images, text frames and
+  floating tables in the body; floats in headers and footers do not push
+  body text aside, tables beside a float are not narrowed, and the wrap
+  polygon of a rotated shape is not turned with it.
 - Shapes draw solid and gradient fills; picture and pattern fills and
   effects (shadows, glow, 3-D) are not drawn. SmartArt without its saved
   drawing shows an empty frame; 3-D, radar, stock, surface, bubble and

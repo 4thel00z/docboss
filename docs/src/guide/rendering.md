@@ -82,8 +82,9 @@ without rasterizing.
 
 Text boxes, shapes with their preset and custom geometry, groups, canvases,
 gradient fills, SmartArt (from its saved drawing), charts (from their cached
-values), Office Math, WMF and EMF pictures and page borders are drawn. Text
-does not wrap around floating images and frames, picture and pattern fills
+values), Office Math, WMF and EMF pictures and page borders are drawn, and
+body text wraps around floating images, text frames and floating tables
+(square, tight, through and top and bottom). Picture and pattern fills
 and shape effects are not drawn, 3-D, radar, stock and surface charts show an
 empty frame, and TIFF pictures draw a placeholder rectangle;
 `docboss diagnostics report.docx --layout` reports them and everything else

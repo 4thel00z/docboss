@@ -2,7 +2,7 @@
   "summary": {
     "files": 90,
     "scored": 88,
-    "mean_ssim": 0.9327080973993211,
+    "mean_ssim": 0.9338679995823191,
     "page_count_matches": 83
   },
   "results": [
@@ -152,7 +152,7 @@
     },
     {
       "file": "008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx",
-      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpb2v_aank', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx']' returned non-zero exit status 1."
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpahcehpsv', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx']' returned non-zero exit status 1."
     },
     {
       "file": "009-default-sect-break-cols.docx",
@@ -201,12 +201,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.8859867402273467,
-      "mad": 5.696368184385614,
+      "ssim": 0.890209111350305,
+      "mad": 5.541071572661987,
       "per_page": [
         {
-          "ssim": 0.8859867402273467,
-          "mad": 5.696368184385614
+          "ssim": 0.890209111350305,
+          "mad": 5.541071572661987
         }
       ]
     },
@@ -327,12 +327,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.8113884512262671,
-      "mad": 10.611833659763944,
+      "ssim": 0.8090941967491937,
+      "mad": 10.382914108404304,
       "per_page": [
         {
-          "ssim": 0.8113884512262671,
-          "mad": 10.611833659763944
+          "ssim": 0.8090941967491937,
+          "mad": 10.382914108404304
         }
       ]
     },
@@ -411,12 +411,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.927652810039368,
-      "mad": 2.4536503379218693,
+      "ssim": 0.9509479228168132,
+      "mad": 2.1297747898204147,
       "per_page": [
         {
-          "ssim": 0.927652810039368,
-          "mad": 2.4536503379218693
+          "ssim": 0.9509479228168132,
+          "mad": 2.1297747898204147
         }
       ]
     },
@@ -439,12 +439,12 @@
       "reference_pages": 2,
       "docboss_pages": 2,
       "pages_scored": 2,
-      "ssim": 0.33447074058064763,
-      "mad": 32.44450761479039,
+      "ssim": 0.32784517400729984,
+      "mad": 33.60378038987158,
       "per_page": [
         {
-          "ssim": 0.30295599226312186,
-          "mad": 36.94255683554469
+          "ssim": 0.2897048591164263,
+          "mad": 39.261102385707076
         },
         {
           "ssim": 0.36598548889817334,
@@ -555,12 +555,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.9777158563875353,
-      "mad": 0.6738218927888682,
+      "ssim": 0.9865874944708736,
+      "mad": 0.5148173942706076,
       "per_page": [
         {
-          "ssim": 0.9777158563875353,
-          "mad": 0.6738218927888682
+          "ssim": 0.9865874944708736,
+          "mad": 0.5148173942706076
         }
       ]
     },
@@ -799,12 +799,12 @@
       "reference_pages": 3,
       "docboss_pages": 3,
       "pages_scored": 3,
-      "ssim": 0.9975656106886784,
-      "mad": 0.11303267407181046,
+      "ssim": 0.99554679423187,
+      "mad": 0.1785904642783538,
       "per_page": [
         {
-          "ssim": 0.9942400364127677,
-          "mad": 0.2609531457647836
+          "ssim": 0.9881835870423421,
+          "mad": 0.45762651638441365
         },
         {
           "ssim": 0.9984567956532677,
@@ -835,16 +835,16 @@
       "reference_pages": 2,
       "docboss_pages": 2,
       "pages_scored": 2,
-      "ssim": 0.9976611434219596,
-      "mad": 0.16042227797005254,
+      "ssim": 0.9994207265696085,
+      "mad": 0.016970713437990805,
       "per_page": [
         {
           "ssim": 0.9988665910981994,
           "mad": 0.027730202610988325
         },
         {
-          "ssim": 0.9964556957457196,
-          "mad": 0.29311435332911673
+          "ssim": 0.9999748620410175,
+          "mad": 0.006211224264993284
         }
       ]
     },
@@ -941,12 +941,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.6855994597482812,
-      "mad": 14.327993859842374,
+      "ssim": 0.6928297732211269,
+      "mad": 15.25475258149567,
       "per_page": [
         {
-          "ssim": 0.6855994597482812,
-          "mad": 14.327993859842374
+          "ssim": 0.6928297732211269,
+          "mad": 15.25475258149567
         }
       ]
     },
@@ -1169,16 +1169,16 @@
       "reference_pages": 2,
       "docboss_pages": 2,
       "pages_scored": 2,
-      "ssim": 0.9361726556787013,
-      "mad": 2.286633583474542,
+      "ssim": 0.9394819114833479,
+      "mad": 2.2409406336421585,
       "per_page": [
         {
           "ssim": 0.9391545118738991,
           "mad": 2.362264621523881
         },
         {
-          "ssim": 0.9331907994835036,
-          "mad": 2.2110025454252034
+          "ssim": 0.9398093110927966,
+          "mad": 2.1196166457604364
         }
       ]
     },
@@ -1289,34 +1289,34 @@
       "reference_pages": 6,
       "docboss_pages": 5,
       "pages_scored": 5,
-      "ssim": 0.6419644611393367,
-      "mad": 16.300091675964552,
+      "ssim": 0.7062862163415061,
+      "mad": 13.62768116662995,
       "per_page": [
         {
           "ssim": 0.8552288011485696,
           "mad": 7.397571652938961
         },
         {
-          "ssim": 0.8500902249055952,
-          "mad": 4.508819369923177
+          "ssim": 0.8914733008108351,
+          "mad": 3.357973321583649
         },
         {
-          "ssim": 0.3300401277870575,
-          "mad": 31.397244746398698
+          "ssim": 0.4739604255747664,
+          "mad": 25.197657643572377
         },
         {
-          "ssim": 0.38749763235860946,
-          "mad": 28.243108312664784
+          "ssim": 0.4805604587143004,
+          "mad": 24.11488277557866
         },
         {
-          "ssim": 0.7869655194968516,
-          "mad": 9.953714297897138
+          "ssim": 0.8302080954590593,
+          "mad": 8.070320439476097
         }
       ]
     },
     {
       "file": "083-password_password_cryptoapi.doc",
-      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpb2v_aank', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/083-password_password_cryptoapi.doc']' returned non-zero exit status 1."
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpahcehpsv', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/083-password_password_cryptoapi.doc']' returned non-zero exit status 1."
     },
     {
       "file": "084-sections.doc",

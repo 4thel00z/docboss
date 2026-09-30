@@ -228,18 +228,19 @@ could not convert a fuzzer file and a password-protected one):
 
 | Format | Files | SSIM mean | SSIM median | SSIM p10 | MAD median | Page counts equal |
 |---|--:|--:|--:|--:|--:|--:|
-| DOCX | 59 | 0.951 | 0.984 | 0.879 | 0.62 | 56 |
-| DOC | 29 | 0.895 | 0.966 | 0.634 | 1.83 | 25 |
+| DOCX | 59 | 0.952 | 0.985 | 0.880 | 0.55 | 56 |
+| DOC | 29 | 0.898 | 0.966 | 0.681 | 1.83 | 25 |
 
 SSIM scores the whole page, and mostly white pages score high whatever their
 content, so read the p10 column as the honest one: a tenth of the DOC files
-score under 0.64. Since the last refresh (0.940 and 0.876 means), shapes,
-groups, gradients, SmartArt, charts, Office Math, WMF and EMF pictures, page
-borders and right-to-left text are drawn, and table rows count their borders.
-The low scores now come from fonts LibreOffice substitutes differently (a
-bold sans header drawn in a serif), text that LibreOffice wraps around floating
-frames and docboss does not, underlined empty tab runs, and tracked changes
-that LibreOffice shows with revision marks and docboss as final text.
+score under 0.69. Since the refresh before last (0.940 and 0.876 means),
+shapes, groups, gradients, SmartArt, charts, Office Math, WMF and EMF
+pictures, page borders and right-to-left text are drawn, table rows count
+their borders, and text wraps around floating pictures, frames and floating
+tables. The low scores now come from fonts LibreOffice substitutes
+differently (a bold sans header drawn in a serif), underlined empty tab runs,
+and tracked changes that LibreOffice shows with revision marks and docboss as
+final text.
 `failure-modes/` records the fixes made so far, with before and after renders.
 
 ## Reproducing
