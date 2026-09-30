@@ -324,6 +324,7 @@ impl<'o, 'a> Converter<'o, 'a> {
             width: cx,
             height: cy,
             placement: DrawingPlacement::Inline,
+            wrap: Default::default(),
             name: None,
             description: (!alt.is_empty()).then_some(alt),
             text_box: Vec::new(),

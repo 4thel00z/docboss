@@ -7,20 +7,23 @@ use std::sync::Arc;
 
 use docboss_font::FontDatabase;
 use docboss_model::{
-    Block, Break, Color, Diagnostic, Document, DrawingPosition, HeaderFooterRefs, Inline, LineCap,
-    MediaId, NoteKind, NumberFormat, NumberingCounter, PageBorderDisplay, PageBorderOffset,
-    PageBorders, PositionAlign, PositionBase, RunContent, SectionBreak, SectionProperties,
+    Block, Break, Color, Diagnostic, Document, DrawingPosition, DropCap, FrameProperties,
+    HeaderFooterRefs, Inline, LineCap, MediaId, NoteKind, NumberFormat, NumberingCounter,
+    PageBorderDisplay, PageBorderOffset, PageBorders, PositionAlign, PositionBase, RunContent,
+    SectionBreak, SectionProperties, TableFloat, TextWrap, WrapKind, WrapSide,
 };
 
-use crate::paragraph::layout_paragraph;
+use crate::paragraph::{layout_paragraph, Band, Resume};
 use crate::shape::Shaper;
 use crate::table::{border_line, border_width, layout_table, RowPlan};
 use crate::units::{emu_to_pt, twips_to_pt};
+use crate::wrap::{band, Exclusion};
 use crate::{Item, LayoutOptions, LineStyle, Page, Rect};
 
 const MAX_PAGES: usize = 100_000;
 const SEPARATOR_HEIGHT: f32 = 12.0;
 const MAX_NESTING: usize = 24;
+const MAX_RESTARTS: u32 = 16;
 
 /// A drawing positioned independently of the text.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +38,45 @@ pub(crate) struct Floating {
     pub behind: bool,
     /// A text box's shape and text, relative to its top-left corner.
     pub content: Vec<Item>,
+    /// How text flows around the drawing.
+    pub wrap: docboss_model::TextWrap,
+    /// For a drawing inside a table cell, the cell's column and the line
+    /// holding the drawing, relative to the row's slab.
+    pub local: Option<Local>,
+    /// Tells the float apart from the document's other floats.
+    pub id: u32,
+}
+
+/// The column and line a float inside a table cell is placed against,
+/// relative to the top-left corner of its row.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Local {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl Floating {
+    /// The float moved `dx`, `dy` further into an enclosing row, its column
+    /// `width` wide when it has none yet.
+    pub(crate) fn nested(mut self, dx: f32, dy: f32, width: f32, height: f32) -> Floating {
+        self.local = Some(match self.local {
+            Some(local) => Local {
+                x: local.x + dx,
+                y: local.y + dy,
+                ..local
+            },
+            None => Local {
+                x: dx,
+                y: dy,
+                width,
+                height,
+            },
+        });
+        self.wrap = docboss_model::TextWrap::default();
+        self
+    }
 }
 
 /// The page geometry a floating drawing is placed against, in page
@@ -123,7 +165,11 @@ impl Floating {
     /// The items the float paints on `frame`: its picture, then its text
     /// box or shape.
     fn items(&self, frame: &Frame) -> Vec<Item> {
-        let rect = self.rect(frame);
+        self.items_at(self.rect(frame))
+    }
+
+    /// The items the float paints with its top-left corner at `rect`'s.
+    fn items_at(&self, rect: Rect) -> Vec<Item> {
         let picture = self.picture.then_some(Item::Image {
             media: self.media,
             rect,
@@ -155,6 +201,9 @@ pub(crate) struct Slab {
     pub notes: Vec<i64>,
     pub row: Option<Box<RowPlan>>,
     pub repeat: Option<Arc<[Slab]>>,
+    /// For a line of a body paragraph in a document with floats that text
+    /// wraps around, where to break the paragraph again from.
+    pub resume: Option<Box<Resume>>,
 }
 
 impl Slab {
@@ -171,6 +220,7 @@ impl Slab {
             notes: Vec::new(),
             row: None,
             repeat: None,
+            resume: None,
         }
     }
 }
@@ -196,12 +246,33 @@ pub(crate) struct Ctx<'a> {
     /// Whether the paragraph being laid out shares its borders with the
     /// paragraph before it and the one after it.
     pub border_group: (bool, bool),
+    /// A float text wraps around has been laid out.
+    pub wraps: bool,
+    /// The blocks being laid out are a section's body.
+    pub flowing: bool,
+    /// The height of the current section's text area.
+    pub body_height: f32,
+    /// The number of floats laid out so far.
+    pub floats: u32,
+    /// The paragraphs being laid out are a text frame's own.
+    pub in_frame: bool,
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl Ctx<'_> {
+    /// Whether paragraphs laid out now keep what breaking their lines
+    /// again needs: body paragraphs, once text wraps around a float.
+    pub(crate) fn retain_lines(&self) -> bool {
+        self.wraps && self.flowing && self.depth == 1
+    }
+
+    pub(crate) fn next_float(&mut self) -> u32 {
+        self.floats += 1;
+        self.floats
+    }
+
     pub(crate) fn note_label(&self, kind: NoteKind, id: i64) -> String {
         self.note_labels
             .get(&(kind == NoteKind::Footnote, id))
@@ -266,20 +337,48 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
     let mut prev_after = 0.0;
     let mut prev_style: Option<Option<String>> = None;
     let mut prev_contextual = false;
-    let borders: Vec<Option<docboss_model::Borders>> = blocks
+    let (borders, frames): (
+        Vec<Option<docboss_model::Borders>>,
+        Vec<Option<FrameProperties>>,
+    ) = blocks
         .iter()
         .map(|block| match block {
-            Block::Paragraph(p) => ctx
-                .doc
-                .styles
-                .resolve_paragraph_in(p, &ctx.doc.numbering, ctx.table_style.as_deref())
-                .borders
-                .filter(|b| *b != docboss_model::Borders::default()),
-            Block::Table(_) => None,
+            Block::Paragraph(p) => {
+                let props = ctx.doc.styles.resolve_paragraph_in(
+                    p,
+                    &ctx.doc.numbering,
+                    ctx.table_style.as_deref(),
+                );
+                let borders = props
+                    .borders
+                    .filter(|b| *b != docboss_model::Borders::default());
+                (borders, props.frame.filter(|_| !ctx.in_frame))
+            }
+            Block::Table(_) => (None, None),
         })
-        .collect();
-    let joins = |a: usize, b: usize| borders[a].is_some() && borders[a] == borders[b];
-    for (index, block) in blocks.iter().enumerate() {
+        .unzip();
+    if ctx.flowing && ctx.depth == 1 && !ctx.wraps {
+        ctx.wraps = frames
+            .iter()
+            .any(|f| f.is_some_and(|f| f.wrap != WrapKind::None))
+            || blocks.iter().any(block_wraps);
+    }
+    let joins = |a: usize, b: usize| {
+        borders[a].is_some() && borders[a] == borders[b] && frames[a] == frames[b]
+    };
+    let mut pending: Vec<Floating> = Vec::new();
+    let mut index = 0;
+    while index < blocks.len() {
+        let block = &blocks[index];
+        if let Some(frame) = frames[index] {
+            let end = (index..blocks.len())
+                .find(|&i| frames[i] != Some(frame))
+                .unwrap_or(blocks.len());
+            let float = frame_float(ctx, &blocks[index..end], &frame, width);
+            pending.push(float);
+            index = end;
+            continue;
+        }
         match block {
             Block::Paragraph(p) => {
                 ctx.border_group = (
@@ -301,6 +400,7 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
                 };
                 if let Some(first) = laid.slabs.first_mut() {
                     first.gap_before = before + after_prev;
+                    first.floats.splice(0..0, pending.drain(..));
                 }
                 prev_after = laid.after;
                 prev_contextual = laid.contextual;
@@ -308,7 +408,17 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
                 out.extend(laid.slabs);
             }
             Block::Table(t) => {
-                let mut slabs = layout_table(ctx, t, width);
+                if let Some(float) = t
+                    .properties
+                    .floating
+                    .and_then(|position| table_float(ctx, t, &position, width))
+                {
+                    pending.push(float);
+                    index += 1;
+                    continue;
+                }
+                anchor_pending(&mut out, &mut pending);
+                let (mut slabs, ..) = layout_table(ctx, t, width);
                 if let Some(first) = slabs.first_mut() {
                     first.gap_before = prev_after;
                 }
@@ -318,8 +428,202 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
                 out.extend(slabs);
             }
         }
+        index += 1;
     }
+    anchor_pending(&mut out, &mut pending);
     (out, prev_after)
+}
+
+/// Places floats that no paragraph follows on an empty slab of their own.
+fn anchor_pending(out: &mut Vec<Slab>, pending: &mut Vec<Floating>) {
+    if pending.is_empty() {
+        return;
+    }
+    let mut slab = Slab::new(0.0, Vec::new());
+    slab.floats = std::mem::take(pending);
+    slab.keep_with_next = true;
+    out.push(slab);
+}
+
+/// Whether a block holds a floating drawing or table text wraps around.
+fn block_wraps(block: &Block) -> bool {
+    fn inlines(list: &[Inline]) -> bool {
+        list.iter().any(|inline| match inline {
+            Inline::Run(run) => run.content.iter().any(|c| match c {
+                RunContent::Drawing(d) => {
+                    d.wrap.wraps()
+                        && !matches!(d.placement, docboss_model::DrawingPlacement::Inline)
+                }
+                _ => false,
+            }),
+            Inline::Hyperlink(link) => inlines(&link.inlines),
+            Inline::Field(field) => inlines(&field.result),
+            Inline::Revision(revision) => inlines(&revision.inlines),
+            _ => false,
+        })
+    }
+    match block {
+        Block::Paragraph(p) => inlines(&p.inlines),
+        Block::Table(t) => t.properties.floating.is_some(),
+    }
+}
+
+/// The paragraphs of one text frame laid out as a float at the frame's
+/// width, or at their widest line when it has none, and height. A drop cap
+/// stands at the start of the next paragraph, a margin one too as
+/// LibreOffice places it; text wraps around the frame as `wrap` says,
+/// `hSpace` and `vSpace` away.
+/// ECMA-376 Part 1 §17.3.1.11, §17.18.20, §17.18.104.
+fn frame_float(
+    ctx: &mut Ctx<'_>,
+    blocks: &[Block],
+    frame: &FrameProperties,
+    width: f32,
+) -> Floating {
+    let outer = std::mem::replace(&mut ctx.in_frame, true);
+    let (mut slabs, _) =
+        layout_blocks(ctx, blocks, frame.width.map_or(width, twips_to_pt).max(1.0));
+    let mut inner = frame.width.map(twips_to_pt);
+    if inner.is_none() {
+        let widest = slabs
+            .iter()
+            .map(|s| s.extent)
+            .fold(0.0, f32::max)
+            .ceil()
+            .clamp(1.0, width);
+        if widest < width - 0.5 {
+            slabs = layout_blocks(ctx, blocks, widest).0;
+        }
+        inner = Some(widest);
+    }
+    ctx.in_frame = outer;
+    let inner = inner.unwrap_or(width).max(1.0);
+    let content_height = stack_height(&slabs);
+    let stated = twips_to_pt(frame.height);
+    let height = match frame.height_rule {
+        docboss_model::LineRule::Exact if stated > 0.0 => stated,
+        docboss_model::LineRule::AtLeast => content_height.max(stated),
+        _ => content_height,
+    };
+    let mut content = Vec::new();
+    let mut y = 0.0;
+    for slab in slabs {
+        y += slab.gap_before;
+        content.extend(slab.items.into_iter().map(|mut item| {
+            item.offset(0.0, y);
+            item
+        }));
+        y += slab.height;
+    }
+    if height > content_height + 0.5 {
+        stretch_borders(&mut content, content_height, height);
+    }
+    let h_space = i64::from(frame.h_space) * 635;
+    let v_space = i64::from(frame.v_space) * 635;
+    let (horizontal, vertical) = match frame.drop_cap {
+        DropCap::None => (frame.horizontal, frame.vertical),
+        DropCap::Drop | DropCap::Margin => (
+            DrawingPosition::offset(PositionBase::Column, 0),
+            DrawingPosition::offset(PositionBase::Paragraph, 0),
+        ),
+    };
+    let kind = match frame.drop_cap {
+        DropCap::None => frame.wrap,
+        _ => WrapKind::Square,
+    };
+    ctx.wraps |= kind != WrapKind::None && ctx.flowing;
+    Floating {
+        media: None,
+        picture: false,
+        width: inner,
+        height,
+        horizontal,
+        vertical,
+        behind: false,
+        content,
+        wrap: TextWrap {
+            kind,
+            side: WrapSide::Both,
+            distance: [v_space, v_space, h_space, h_space],
+            polygon: Vec::new(),
+        },
+        local: None,
+        id: ctx.next_float(),
+    }
+}
+
+/// Carries the borders of a frame's last paragraph down to the frame's
+/// bottom, as the borders of a frame taller than its text enclose it.
+fn stretch_borders(items: &mut [Item], bottom: f32, height: f32) {
+    let near = |y: f32| (y - bottom).abs() < 1.5;
+    for item in items.iter_mut() {
+        let Item::Line { from, to, .. } = item else {
+            continue;
+        };
+        let vertical = (from.0 - to.0).abs() < 0.01;
+        match vertical {
+            true if near(to.1) => to.1 += height - bottom,
+            false if near(from.1) && near(to.1) => {
+                from.1 += height - bottom;
+                to.1 += height - bottom;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// ECMA-376 Part 1 §17.4.57: a floating table laid out as a float at its
+/// position, text wrapping around it at its distances. `None` when it is
+/// taller than the text area; it then flows with the text.
+fn table_float(
+    ctx: &mut Ctx<'_>,
+    table: &docboss_model::Table,
+    position: &TableFloat,
+    width: f32,
+) -> Option<Floating> {
+    let (slabs, left, table_width) = layout_table(ctx, table, width);
+    let height = stack_height(&slabs);
+    if height > ctx.body_height {
+        ctx.diagnostics.push(Diagnostic::approximated(
+            "layout",
+            "a floating table taller than the page flows with the text",
+        ));
+        return None;
+    }
+    let mut content = Vec::new();
+    let mut y = 0.0;
+    for slab in slabs {
+        y += slab.gap_before;
+        content.extend(slab.items.into_iter().map(|mut item| {
+            item.offset(-left, y);
+            item
+        }));
+        y += slab.height;
+    }
+    let distance = position.distance.map(|d| i64::from(d) * 635);
+    ctx.wraps |= ctx.flowing;
+    let mut horizontal = position.horizontal;
+    if horizontal.align.is_none() {
+        horizontal.offset += crate::units::pt_to_emu(left);
+    }
+    Some(Floating {
+        media: None,
+        picture: false,
+        width: table_width,
+        height,
+        horizontal,
+        vertical: position.vertical,
+        behind: false,
+        content,
+        wrap: TextWrap {
+            kind: WrapKind::Square,
+            side: WrapSide::Both,
+            distance,
+            polygon: Vec::new(),
+        },
+        local: None,
+        id: ctx.next_float(),
+    })
 }
 
 /// A header, footer or note body laid out from `y = 0`.
@@ -448,6 +752,24 @@ struct Paginator<'c, 'd> {
     section_first_page: bool,
     next_number: u32,
     notes: HashMap<i64, (Vec<Item>, f32)>,
+    /// The areas floats keep text out of on the current page.
+    exclusions: Vec<Exclusion>,
+    /// Counts changes to `exclusions` and to the column lines are placed
+    /// in, so that a line knows whether it was broken for the current ones.
+    generation: u32,
+    /// The first exclusion of the slab being placed, until it is committed.
+    pending: Option<usize>,
+    /// The slabs committed to the current page since it or its section
+    /// started, kept while text wraps so the page can be laid out again.
+    page_slabs: Vec<Slab>,
+    /// Floats that reach above text already on the page, with their areas
+    /// and rectangles: they stay where they are when the page is laid out
+    /// again.
+    sticky: Vec<(u32, Exclusion, Rect)>,
+    /// How the page looked where laying it out again starts: the number of
+    /// items behind and in front, the column and its top.
+    restart: (usize, usize, usize, f32),
+    restarts: u32,
 }
 
 fn frames_of(props: &SectionProperties, text_left: f32, text_width: f32) -> Vec<(f32, f32)> {
@@ -595,6 +917,54 @@ impl Paginator<'_, '_> {
             y: top,
             empty: true,
         };
+        self.exclusions.clear();
+        self.pending = None;
+        self.generation += 1;
+        self.page_slabs.clear();
+        self.sticky.clear();
+        self.restarts = 0;
+        self.mark_restart();
+    }
+
+    /// Where laying the page out again starts from: here.
+    fn mark_restart(&mut self) {
+        let (column, top) = (self.cursor.column, self.cursor.y);
+        let Some(page) = self.pages.last() else {
+            return;
+        };
+        self.restart = (page.back.len(), page.front.len(), column, top);
+        self.page_slabs.clear();
+    }
+
+    /// Lays the page out again from its restart point with `exclusion`
+    /// kept on it: the committed slabs go back in front of `slab`.
+    fn restart_page(
+        &mut self,
+        (id, exclusion, rect): (u32, Exclusion, Rect),
+        slab: Slab,
+        queue: &mut VecDeque<Slab>,
+    ) {
+        self.restarts += 1;
+        self.sticky.push((id, exclusion, rect));
+        let (back, front, column, top) = self.restart;
+        let Some(page) = self.pages.last_mut() else {
+            return;
+        };
+        page.body.clear();
+        page.back.truncate(back);
+        page.front.truncate(front);
+        page.notes.clear();
+        page.note_height = 0.0;
+        self.cursor.column = column;
+        self.cursor.y = top;
+        self.cursor.empty = true;
+        self.exclusions = self.sticky.iter().map(|(_, e, _)| e.clone()).collect();
+        self.pending = None;
+        self.generation += 1;
+        queue.push_front(slab);
+        for committed in std::mem::take(&mut self.page_slabs).into_iter().rev() {
+            queue.push_front(committed);
+        }
     }
 
     fn page(&mut self) -> &mut PageState {
@@ -609,9 +979,136 @@ impl Paginator<'_, '_> {
             self.cursor.column += 1;
             self.cursor.y = self.cursor.top;
             self.cursor.empty = true;
+            self.generation += 1;
             return;
         }
         self.new_page();
+    }
+
+    /// The page geometry a slab placed at `y`, `height` tall, puts its
+    /// floats against.
+    fn float_frame(&mut self, y: f32, height: f32) -> Frame {
+        let column = self
+            .cursor
+            .frames
+            .get(self.cursor.column)
+            .copied()
+            .unwrap_or((0.0, 0.0));
+        Frame {
+            column,
+            line: (y, height),
+            ..self.page().frame()
+        }
+    }
+
+    /// Drops the exclusions of a slab that was not placed where they were
+    /// measured.
+    fn drop_pending(&mut self) {
+        let Some(from) = self.pending.take() else {
+            return;
+        };
+        self.exclusions.truncate(from);
+        self.generation += 1;
+    }
+
+    /// Adds the areas the slab's floats keep text out of, as they would
+    /// lie with the slab placed next. A float that reaches above text
+    /// already on the page lays the page out again around it; the slab
+    /// then goes back to the queue and `None` is returned.
+    fn register_floats(&mut self, slab: Slab, queue: &mut VecDeque<Slab>) -> Option<Slab> {
+        let wrapping = |f: &Floating| f.wrap.wraps() && f.local.is_none();
+        if !slab.floats.iter().any(wrapping) {
+            return Some(slab);
+        }
+        let y = self.cursor.y + slab.gap_before;
+        let frame = self.float_frame(y, slab.height);
+        let from = self.exclusions.len();
+        let span = match (self.cursor.frames.first(), self.cursor.frames.last()) {
+            (Some(first), Some(last)) => (first.0, last.0 + last.1),
+            _ => (0.0, 0.0),
+        };
+        let top = self.restart.3;
+        for float in slab.floats.iter().filter(|f| wrapping(f)) {
+            if self.sticky.iter().any(|(id, ..)| *id == float.id) {
+                continue;
+            }
+            let rect = float.rect(&frame);
+            let exclusion = Exclusion::new(rect, &float.wrap);
+            let above = exclusion.top() < self.cursor.y - 0.5
+                && exclusion.bottom() > top
+                && band(
+                    std::slice::from_ref(&exclusion),
+                    top,
+                    self.cursor.y,
+                    span.0,
+                    span.1,
+                )
+                .is_some();
+            if above && !self.page_slabs.is_empty() && self.restarts < MAX_RESTARTS {
+                self.exclusions.truncate(from);
+                let id = float.id;
+                self.restart_page((id, exclusion, rect), slab, queue);
+                return None;
+            }
+            self.exclusions.push(exclusion);
+        }
+        self.pending = Some(from);
+        self.generation += 1;
+        Some(slab)
+    }
+
+    /// Breaks the rest of a paragraph again when the lines from `slab` on
+    /// were broken for other exclusions than the current ones and either
+    /// were shortened or now meet one.
+    fn rewrap(&mut self, slab: Slab, queue: &mut VecDeque<Slab>) -> Slab {
+        let Some(resume) = slab.resume.as_deref() else {
+            return slab;
+        };
+        if resume.generation == self.generation {
+            return slab;
+        }
+        let rest = resume.rest.min(queue.len());
+        let top = self.cursor.y + slab.gap_before;
+        let reach = slab.height
+            + queue
+                .iter()
+                .take(rest)
+                .map(|s| s.gap_before + s.height)
+                .sum::<f32>();
+        let (x, width) = self
+            .cursor
+            .frames
+            .get(self.cursor.column)
+            .copied()
+            .unwrap_or((0.0, 0.0));
+        let meets = band(&self.exclusions, top, top + reach, x, x + width).is_some();
+        if !resume.narrow && !meets {
+            let mut slab = slab;
+            if let Some(resume) = slab.resume.as_mut() {
+                resume.generation = self.generation;
+            }
+            return slab;
+        }
+        let exclusions = &self.exclusions;
+        let room = |y: f32, height: f32| -> Option<Band> {
+            let found = band(exclusions, top + y, top + y + height, x, x + width)?;
+            Some(Band {
+                spans: found.spans.iter().map(|&(a, b)| (a - x, b - x)).collect(),
+                below: found.below - top,
+            })
+        };
+        let mut fresh: VecDeque<Slab> = resume.rewrap(self.ctx, &room, self.generation).into();
+        queue.drain(..rest);
+        let Some(mut first) = fresh.pop_front() else {
+            return slab;
+        };
+        first.gap_before = slab.gap_before;
+        first.floats = slab.floats;
+        first.break_before = slab.break_before;
+        while let Some(line) = fresh.pop_back() {
+            queue.push_front(line);
+        }
+        first
     }
 
     fn frame_bottom(&mut self) -> f32 {
@@ -686,7 +1183,8 @@ impl Paginator<'_, '_> {
     fn run(&mut self, slabs: Vec<Slab>) {
         let mut queue: VecDeque<Slab> = slabs.into();
         let mut in_group = false;
-        while let Some(slab) = queue.pop_front() {
+        while let Some(mut slab) = queue.pop_front() {
+            self.drop_pending();
             if self.pages.len() >= MAX_PAGES {
                 self.ctx.diagnostics.push(Diagnostic::dropped(
                     "layout",
@@ -708,6 +1206,11 @@ impl Paginator<'_, '_> {
                     self.next_frame();
                 }
             }
+            let Some(registered) = self.register_floats(slab, &mut queue) else {
+                in_group = false;
+                continue;
+            };
+            slab = self.rewrap(registered, &mut queue);
             in_group = slab.keep_with_next;
             self.place(slab, &mut queue);
         }
@@ -727,8 +1230,10 @@ impl Paginator<'_, '_> {
                 let mut first = Slab::new(height, head.paint(height));
                 first.gap_before = slab.gap_before;
                 first.notes = slab.notes.clone();
+                first.floats = head.floats();
                 let tail_height = tail_height(&tail);
                 let mut rest = Slab::new(tail_height, tail.paint(tail_height));
+                rest.floats = tail.floats();
                 rest.row = Some(Box::new(tail));
                 rest.repeat = slab.repeat.clone();
                 self.commit(first);
@@ -752,6 +1257,9 @@ impl Paginator<'_, '_> {
     }
 
     fn commit(&mut self, slab: Slab) {
+        if self.ctx.wraps {
+            self.page_slabs.push(slab.clone());
+        }
         let Slab {
             height,
             gap_before,
@@ -760,12 +1268,11 @@ impl Paginator<'_, '_> {
             notes,
             ..
         } = slab;
-        let (x, column_width) = self
+        let x = self
             .cursor
             .frames
             .get(self.cursor.column)
-            .copied()
-            .unwrap_or((0.0, 0.0));
+            .map_or(0.0, |frame| frame.0);
         let y = self.cursor.y + gap_before;
         let fresh: Vec<i64> = {
             let page = self.page();
@@ -784,18 +1291,26 @@ impl Paginator<'_, '_> {
             page.notes.push(id);
             page.note_height += h;
         }
+        self.pending = None;
+        let frame = self.float_frame(y, height);
         let page = self.pages.last_mut().expect("commit runs with a page");
         page.body.extend(items.into_iter().map(|mut item| {
             item.offset(x, y);
             item
         }));
-        let frame = Frame {
-            column: (x, column_width),
-            line: (y, height),
-            ..page.frame()
-        };
         for float in floats {
-            let items = float.items(&frame);
+            let frame = match float.local {
+                Some(local) => Frame {
+                    column: (x + local.x, local.width),
+                    line: (y + local.y, local.height),
+                    ..frame
+                },
+                None => Frame { ..frame },
+            };
+            let items = match self.sticky.iter().find(|(id, ..)| *id == float.id) {
+                Some((.., rect)) => float.items_at(*rect),
+                None => float.items(&frame),
+            };
             if float.behind {
                 page.back.extend(items);
                 continue;
@@ -841,6 +1356,8 @@ impl Paginator<'_, '_> {
                     empty: true,
                 };
                 self.section_first_page = false;
+                self.generation += 1;
+                self.mark_restart();
             }
             SectionBreak::NextColumn => self.next_frame(),
             SectionBreak::NextPage => self.new_page(),
@@ -914,6 +1431,11 @@ pub(crate) fn run(
         table_style: None,
         background: None,
         border_group: (false, false),
+        wraps: false,
+        flowing: false,
+        body_height: f32::MAX,
+        floats: 0,
+        in_frame: false,
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {
@@ -930,6 +1452,13 @@ pub(crate) fn run(
         section_first_page: true,
         next_number: 1,
         notes: HashMap::new(),
+        exclusions: Vec::new(),
+        generation: 0,
+        pending: None,
+        page_slabs: Vec::new(),
+        sticky: Vec::new(),
+        restart: (0, 0, 0, 0.0),
+        restarts: 0,
     };
     let default_section = docboss_model::Section::default();
     let sections: Vec<&docboss_model::Section> = if document.sections.is_empty() {
@@ -940,7 +1469,13 @@ pub(crate) fn run(
     for (index, section) in sections.iter().enumerate() {
         paginator.start_section(&section.properties, index == 0);
         let width = paginator.cursor.frames.first().map_or(1.0, |f| f.1);
+        paginator.ctx.body_height = paginator
+            .pages
+            .last()
+            .map_or(f32::MAX, |page| page.margin_bottom - page.margin_top);
+        paginator.ctx.flowing = true;
         let (slabs, _) = layout_blocks(paginator.ctx, &section.blocks, width);
+        paginator.ctx.flowing = false;
         paginator.run(slabs);
     }
     let endnote_refs: Vec<i64> = refs

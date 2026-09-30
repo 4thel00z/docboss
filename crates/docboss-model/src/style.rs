@@ -267,6 +267,7 @@ impl ParagraphProperties {
         overlay(&mut self.borders, &over.borders);
         overlay(&mut self.shading, &over.shading);
         overlay(&mut self.bidi, &over.bidi);
+        overlay(&mut self.frame, &over.frame);
         for stop in &over.tabs {
             self.tabs
                 .retain(|existing| existing.position != stop.position);

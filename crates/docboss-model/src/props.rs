@@ -186,6 +186,45 @@ pub struct ParagraphProperties {
     pub borders: Option<Borders>,
     pub shading: Option<Shading>,
     pub bidi: Option<bool>,
+    /// The text frame the paragraph belongs to.
+    pub frame: Option<FrameProperties>,
+}
+
+/// Where a drop cap frame sits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum DropCap {
+    #[default]
+    None,
+    /// Inside the text, at the start of the next paragraph.
+    Drop,
+    /// In the margin before the next paragraph.
+    Margin,
+}
+
+/// A text frame: paragraphs positioned apart from the text flow, which the
+/// following paragraphs flow around. Adjacent paragraphs with equal frame
+/// properties share one frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct FrameProperties {
+    /// The width in twips; `None` sizes the frame to its widest line.
+    pub width: Option<i32>,
+    /// The height in twips, read as `height_rule` says.
+    pub height: i32,
+    pub height_rule: LineRule,
+    /// The position on each axis, offsets in EMU.
+    pub horizontal: crate::DrawingPosition,
+    pub vertical: crate::DrawingPosition,
+    pub wrap: crate::WrapKind,
+    /// The distances kept from the text left and right, and above and
+    /// below, in twips.
+    pub h_space: i32,
+    pub v_space: i32,
+    pub drop_cap: DropCap,
+    /// The number of lines a drop cap spans.
+    pub lines: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

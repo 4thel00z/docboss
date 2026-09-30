@@ -1070,6 +1070,7 @@ fn text_box(
             media: None,
             width: 2_540_000,
             height: 1_270_000,
+            wrap: Default::default(),
             placement,
             name: None,
             description: None,
@@ -1359,6 +1360,7 @@ fn auto_line_spacing_leaves_inline_pictures_unscaled() {
             media: None,
             width: 1_270_000,
             height: 1_270_000,
+            wrap: Default::default(),
             placement: docboss_model::DrawingPlacement::Inline,
             name: None,
             description: None,
@@ -1407,6 +1409,7 @@ fn run_position_lowers_inline_pictures() {
                 media: None,
                 width: 254_000,
                 height: 254_000,
+                wrap: Default::default(),
                 placement: docboss_model::DrawingPlacement::Inline,
                 name: None,
                 description: None,
@@ -1484,6 +1487,7 @@ fn shape(geometry: docboss_model::Geometry, shape: docboss_model::ShapeFormat) -
                 media: None,
                 width: 1_270_000,
                 height: 635_000,
+                wrap: Default::default(),
                 placement: anchored(914_400, 914_400),
                 name: None,
                 description: None,
@@ -2132,4 +2136,351 @@ fn fractions_stack_over_a_rule_and_display_math_centers() {
     assert!(glyphs[0].1 < rule.y && glyphs[1].1 > rule.bottom());
     let center = rule.x + rule.width / 2.0;
     assert!((center - page.width / 2.0).abs() < 2.0, "{center}");
+}
+
+fn wrapped(
+    kind: docboss_model::WrapKind,
+    side: docboss_model::WrapSide,
+) -> docboss_model::TextWrap {
+    docboss_model::TextWrap {
+        kind,
+        side,
+        distance: [0, 0, 127_000, 127_000],
+        polygon: Vec::new(),
+    }
+}
+
+/// A 100 by 100 point placeholder picture wrapped as `wrap` says.
+fn floating_picture(
+    placement: docboss_model::DrawingPlacement,
+    wrap: docboss_model::TextWrap,
+) -> Inline {
+    Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![RunContent::Drawing(Box::new(docboss_model::Drawing {
+            width: 1_270_000,
+            height: 1_270_000,
+            placement,
+            wrap,
+            ..docboss_model::Drawing::default()
+        }))],
+    })
+}
+
+fn placeholders(layout: &Layout, page: usize) -> Vec<Rect> {
+    layout.pages[page]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Image { media: None, rect } => Some(*rect),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The left and right edges of each glyph run with its baseline.
+fn run_spans(layout: &Layout, page: usize) -> Vec<(f32, f32, f32)> {
+    runs(layout, page)
+        .iter()
+        .filter(|run| !run.glyphs.is_empty())
+        .map(|run| {
+            let left = run.glyphs[0].x;
+            let right = run.glyphs[run.glyphs.len() - 1].x + ADVANCE;
+            (run.baseline, left, right)
+        })
+        .collect()
+}
+
+fn words(count: usize) -> String {
+    "lorem ipsum dolor sit amet ".repeat(count)
+}
+
+/// Square wrapping on both sides flows text left and right of the picture
+/// on the same lines, its 10 point distances away, and none into it.
+/// ECMA-376 Part 1 §20.4.2.17, §20.4.3.7, §20.4.3.6.
+#[test]
+fn square_wrapping_flows_text_on_both_sides() {
+    use docboss_model::{WrapKind, WrapSide};
+    let picture = floating_picture(
+        anchored(2_540_000, 0),
+        wrapped(WrapKind::Square, WrapSide::Both),
+    );
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![picture, run(&words(30))],
+        ..Paragraph::default()
+    })]));
+    let rect = placeholders(&layout, 0)[0];
+    assert_eq!((rect.x, rect.y), (272.0, 72.0));
+    let spans = run_spans(&layout, 0);
+    let beside: Vec<&(f32, f32, f32)> = spans.iter().filter(|s| s.0 < rect.bottom()).collect();
+    assert!(!beside.is_empty());
+    for (_, left, right) in &beside {
+        assert!(
+            *right <= rect.x - 10.0 + 0.01 || *left >= rect.right() + 10.0 - 0.01,
+            "{left} {right}"
+        );
+    }
+    let first = beside[0].0;
+    assert!(beside.iter().any(|s| s.0 == first && s.1 < rect.x));
+    assert!(beside.iter().any(|s| s.0 == first && s.1 > rect.right()));
+    assert!(spans
+        .iter()
+        .any(|s| s.0 > rect.bottom() && s.1 < rect.x && s.2 > rect.right()));
+}
+
+/// A picture that lets text flow on its left only leaves the right of it
+/// empty, top and bottom wrapping moves the lines it meets below it, and
+/// text runs under a picture that does not wrap.
+/// ECMA-376 Part 1 §20.4.3.7, §20.4.2.20, §20.4.2.15.
+#[test]
+fn one_sided_and_top_and_bottom_wrapping() {
+    use docboss_model::{WrapKind, WrapSide};
+    let none = floating_picture(anchored(0, 0), wrapped(WrapKind::None, WrapSide::Both));
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![none, run(&words(30))],
+        ..Paragraph::default()
+    })]));
+    assert_eq!(run_spans(&layout, 0)[0].1, 72.0);
+    let left = floating_picture(
+        anchored(2_540_000, 0),
+        wrapped(WrapKind::Square, WrapSide::Left),
+    );
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![left, run(&words(30))],
+        ..Paragraph::default()
+    })]));
+    let rect = placeholders(&layout, 0)[0];
+    let spans = run_spans(&layout, 0);
+    assert!(spans
+        .iter()
+        .filter(|s| s.0 < rect.bottom())
+        .all(|s| s.2 <= rect.x));
+    let blocking = floating_picture(
+        anchored(0, 0),
+        wrapped(WrapKind::TopAndBottom, WrapSide::Both),
+    );
+    let layout = laid(&doc(vec![Block::Paragraph(Paragraph {
+        inlines: vec![blocking, run(&words(30))],
+        ..Paragraph::default()
+    })]));
+    let rect = placeholders(&layout, 0)[0];
+    let spans = run_spans(&layout, 0);
+    assert!(spans.iter().all(|s| s.0 > rect.bottom()), "{spans:?}");
+}
+
+/// ECMA-376 Part 1 §20.4.2.17: an object keeps text out only on its own
+/// page: a paragraph whose picture moves to the next page takes the
+/// wrapping with it, and the lines left on the first page stay full.
+#[test]
+fn wrapping_moves_with_its_page() {
+    use docboss_model::{WrapKind, WrapSide};
+    let mut blocks: Vec<Block> = (0..55).map(|i| para(&format!("line {i}"))).collect();
+    let picture = floating_picture(anchored(0, 0), wrapped(WrapKind::Square, WrapSide::Both));
+    blocks.push(Block::Paragraph(Paragraph {
+        inlines: vec![picture, run(&words(20))],
+        properties: ParagraphProperties {
+            keep_lines: Some(true),
+            ..ParagraphProperties::default()
+        },
+        ..Paragraph::default()
+    }));
+    let layout = laid(&doc(blocks));
+    assert!(placeholders(&layout, 0).is_empty());
+    let rect = placeholders(&layout, 1)[0];
+    assert_eq!(rect.y, 72.0);
+    let spans = run_spans(&layout, 1);
+    assert!(spans
+        .iter()
+        .filter(|s| s.0 < rect.bottom())
+        .all(|s| s.1 >= rect.right()));
+}
+
+/// ECMA-376 Part 1 §20.4.2.17, §20.4.3.5: a picture placed on the page
+/// above text already laid out there lays the page out again, so the
+/// paragraphs before its own flow around it too.
+#[test]
+fn a_page_placed_picture_wraps_the_text_above_its_anchor() {
+    use docboss_model::{WrapKind, WrapSide};
+    let placement = docboss_model::DrawingPlacement::Anchored {
+        horizontal: DrawingPosition::offset(PositionBase::Margin, 0),
+        vertical: DrawingPosition::offset(PositionBase::Page, 914_400),
+        behind_text: false,
+    };
+    let picture = floating_picture(placement, wrapped(WrapKind::Square, WrapSide::Both));
+    let layout = laid(&doc(vec![
+        para(&words(10)),
+        para(&words(10)),
+        Block::Paragraph(Paragraph {
+            inlines: vec![picture, run("anchor")],
+            ..Paragraph::default()
+        }),
+    ]));
+    let rect = placeholders(&layout, 0)[0];
+    assert_eq!((rect.x, rect.y), (72.0, 72.0));
+    let spans = run_spans(&layout, 0);
+    let first = spans[0];
+    assert!(
+        first.0 < rect.bottom() && first.1 >= rect.right(),
+        "{first:?}"
+    );
+}
+
+/// ECMA-376 Part 1 §17.3.1.11, §17.18.104, §17.18.35, §17.18.100: a text frame is laid out apart
+/// at its width and position, and the next paragraph flows around it,
+/// `hSpace` away.
+#[test]
+fn text_frames_sit_apart_and_text_flows_around_them() {
+    use docboss_model::{DropCap, FrameProperties, LineRule, WrapKind};
+    let frame = FrameProperties {
+        width: Some(1440),
+        height: 1440,
+        height_rule: LineRule::Exact,
+        horizontal: DrawingPosition::offset(PositionBase::Margin, 0),
+        vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
+        wrap: WrapKind::Square,
+        h_space: 200,
+        v_space: 0,
+        drop_cap: DropCap::None,
+        lines: 1,
+    };
+    let framed = para_with(
+        ParagraphProperties {
+            frame: Some(frame),
+            ..ParagraphProperties::default()
+        },
+        vec![run("framed")],
+    );
+    let layout = laid(&doc(vec![framed, para(&words(20))]));
+    let spans = run_spans(&layout, 0);
+    let framed = runs(&layout, 0)
+        .into_iter()
+        .find(|r| r.text == "framed")
+        .expect("the frame's text is painted");
+    assert_eq!(framed.glyphs[0].x, 72.0);
+    let beside: Vec<_> = spans
+        .iter()
+        .filter(|s| s.0 < 72.0 + 72.0 && s.1 > 72.0)
+        .collect();
+    assert!(!beside.is_empty());
+    assert!(
+        beside.iter().all(|s| s.1 >= 72.0 + 72.0 + 10.0 - 0.01),
+        "{beside:?}"
+    );
+}
+
+/// ECMA-376 Part 1 §17.4.57: a floating table sits at its position, out of
+/// the text flow, and the paragraph after it flows beside it.
+#[test]
+fn floating_tables_sit_at_their_position() {
+    let cell = |text: &str| TableCell {
+        properties: docboss_model::TableCellProperties {
+            grid_span: 1,
+            ..Default::default()
+        },
+        blocks: vec![para(text)],
+    };
+    let table = Block::Table(Table {
+        properties: TableProperties {
+            floating: Some(docboss_model::TableFloat {
+                horizontal: DrawingPosition::offset(PositionBase::Page, 3_810_000),
+                vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
+                distance: [0, 0, 180, 180],
+            }),
+            ..TableProperties::default()
+        },
+        grid: vec![1440],
+        rows: vec![TableRow {
+            properties: Default::default(),
+            cells: vec![cell("cell")],
+        }],
+    });
+    let layout = laid(&doc(vec![table, para(&words(20))]));
+    let cell_run = runs(&layout, 0)
+        .into_iter()
+        .find(|r| r.text == "cell")
+        .expect("the cell text is painted");
+    assert!(cell_run.glyphs[0].x > 300.0, "{}", cell_run.glyphs[0].x);
+    let first = run_spans(&layout, 0)[0];
+    assert!(
+        first.0 < cell_run.baseline + 1.0 && first.1 < 300.0,
+        "{first:?}"
+    );
+    assert!(run_spans(&layout, 0)
+        .iter()
+        .filter(|s| s.0 <= cell_run.baseline && s.1 < 300.0)
+        .all(|s| s.2 <= 300.0 - 9.0 + 0.01));
+}
+
+/// ECMA-376 Part 1 §20.4.2.3: a floating picture inside a table cell is
+/// painted, placed against its cell.
+#[test]
+fn floats_inside_table_cells_are_painted() {
+    use docboss_model::{WrapKind, WrapSide};
+    let picture = floating_picture(anchored(0, 0), wrapped(WrapKind::Square, WrapSide::Both));
+    let cell = TableCell {
+        properties: docboss_model::TableCellProperties {
+            grid_span: 1,
+            ..Default::default()
+        },
+        blocks: vec![Block::Paragraph(Paragraph {
+            inlines: vec![picture, run("cell")],
+            ..Paragraph::default()
+        })],
+    };
+    let table = Block::Table(Table {
+        grid: vec![2880, 2880],
+        rows: vec![TableRow {
+            properties: Default::default(),
+            cells: vec![
+                TableCell {
+                    blocks: vec![para("first")],
+                    ..cell.clone()
+                },
+                cell,
+            ],
+        }],
+        ..Table::default()
+    });
+    let layout = laid(&doc(vec![table]));
+    let rects = placeholders(&layout, 0);
+    assert_eq!(rects.len(), 1);
+    assert!(rects[0].x > 72.0 + 144.0, "{:?}", rects[0]);
+}
+
+/// A drop cap frame stands at the start of the next paragraph, whose lines
+/// flow beside it.
+/// ECMA-376 Part 1 §17.3.1.11, §17.18.20.
+#[test]
+fn drop_caps_start_their_paragraph() {
+    use docboss_model::{DropCap, FrameProperties, LineRule, WrapKind};
+    let frame = FrameProperties {
+        width: None,
+        height: 0,
+        height_rule: LineRule::Auto,
+        horizontal: DrawingPosition::offset(PositionBase::Page, 0),
+        vertical: DrawingPosition::offset(PositionBase::Page, 0),
+        wrap: WrapKind::Square,
+        h_space: 0,
+        v_space: 0,
+        drop_cap: DropCap::Drop,
+        lines: 2,
+    };
+    let cap = para_with(
+        ParagraphProperties {
+            frame: Some(frame),
+            ..ParagraphProperties::default()
+        },
+        vec![run("W")],
+    );
+    let layout = laid(&doc(vec![para("before"), cap, para(&words(20))]));
+    let letter = runs(&layout, 0)
+        .into_iter()
+        .find(|r| r.text == "W")
+        .expect("the drop cap is painted");
+    assert_eq!(letter.glyphs[0].x, 72.0);
+    let after = run_spans(&layout, 0)
+        .into_iter()
+        .filter(|s| s.0 > letter.baseline - 1.0 && s.0 < letter.baseline + 1.0 && s.1 > 72.0)
+        .count();
+    assert!(after > 0);
 }

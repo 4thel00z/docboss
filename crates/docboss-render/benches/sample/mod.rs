@@ -210,6 +210,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         .collect(),
     };
     let image = RunContent::Drawing(Box::new(Drawing {
+        wrap: Default::default(),
         media: Some(MediaId(0)),
         width: 12700 * 180,
         height: 12700 * 90,

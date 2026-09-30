@@ -8,7 +8,7 @@ use docboss_model::{
     TableProperties, TextDirection, VerticalAlign, VerticalMerge,
 };
 
-use crate::flow::{layout_blocks, stack_height, Ctx, Slab};
+use crate::flow::{layout_blocks, stack_height, Ctx, Floating, Slab};
 use crate::units::twips_to_pt;
 use crate::{Item, LineStyle, Rect};
 
@@ -217,6 +217,33 @@ impl RowPlan {
         items
     }
 
+    /// The floats of the row's cells, each placed against its cell.
+    pub(crate) fn floats(&self) -> Vec<Floating> {
+        let mut out = Vec::new();
+        for cell in self
+            .cells
+            .iter()
+            .filter(|c| !c.continues && c.turn(0.0).is_none())
+        {
+            let (x, width) = (
+                cell.x + cell.margins[1],
+                cell.width - cell.margins[1] - cell.margins[3],
+            );
+            let mut y = cell.margins[0];
+            for slab in &cell.content {
+                y += slab.gap_before;
+                out.extend(
+                    slab.floats
+                        .iter()
+                        .cloned()
+                        .map(|float| float.nested(x, y, width.max(1.0), slab.height)),
+                );
+                y += slab.height;
+            }
+        }
+        out
+    }
+
     pub(crate) fn natural(&self) -> f32 {
         self.natural_height()
     }
@@ -306,6 +333,7 @@ fn effective_properties(ctx: &Ctx<'_>, table: &Table) -> TableProperties {
     props.fixed_layout = direct.fixed_layout;
     props.bidi_visual |= direct.bidi_visual;
     props.style_id = direct.style_id.clone();
+    props.floating = direct.floating;
     props
 }
 
@@ -371,12 +399,13 @@ fn cell_starting_at(
 /// its cells from the right, with each cell's left and right borders and
 /// margins swapped, its indent from the right margin and its alignment
 /// reversed.
-pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> Vec<Slab> {
+/// Returns the slabs with the table's left edge and width.
+pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> (Vec<Slab>, f32, f32) {
     let props = effective_properties(ctx, table);
     let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
-    let slabs = layout_table_rows(ctx, table, &props, width);
+    let laid = layout_table_rows(ctx, table, &props, width);
     ctx.table_style = outer_style;
-    slabs
+    laid
 }
 
 fn layout_table_rows(
@@ -384,7 +413,7 @@ fn layout_table_rows(
     table: &Table,
     props: &TableProperties,
     width: f32,
-) -> Vec<Slab> {
+) -> (Vec<Slab>, f32, f32) {
     let grid = grid_columns(table, props, width);
     let total: f32 = grid.iter().sum();
     let offsets: Vec<f32> = grid
@@ -606,6 +635,7 @@ fn layout_table_rows(
     let mut slabs: Vec<Slab> = Vec::with_capacity(plans.len());
     for (index, (plan, height, exact, cant_split, _)) in plans.into_iter().enumerate() {
         let mut slab = Slab::new(height, plan.paint(height));
+        slab.floats = plan.floats();
         let splittable = !exact && !cant_split;
         slab.notes = plan
             .cells
@@ -634,5 +664,5 @@ fn layout_table_rows(
             last_header.keep_with_next = true;
         }
     }
-    slabs
+    (slabs, table_x, total)
 }

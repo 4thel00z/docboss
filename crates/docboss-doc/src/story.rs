@@ -107,6 +107,9 @@ pub struct Anchor {
     /// The origins of `left` and `top` from the Spa's bx and by.
     pub horizontal: docboss_model::PositionBase,
     pub vertical: docboss_model::PositionBase,
+    /// The Spa's wr and wrk: how text wraps around the shape.
+    pub wrap: docboss_model::WrapKind,
+    pub wrap_side: docboss_model::WrapSide,
     pub behind_text: bool,
 }
 
@@ -153,6 +156,8 @@ pub struct Context<'a> {
     pub shape_blips: HashMap<u32, usize>,
     /// Fill, line and text frame of each floating shape by shape id.
     pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
+    /// Each shape's distances from the text, in EMU.
+    pub shape_wrap_distances: HashMap<u32, [i64; 4]>,
     /// The preset geometry of each floating shape by shape id.
     pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
@@ -388,6 +393,7 @@ impl<'a> Context<'a> {
             authors: Vec::new(),
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
+            shape_wrap_distances: HashMap::new(),
             shape_groups: HashMap::new(),
             shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
@@ -610,6 +616,7 @@ impl<'a> Context<'a> {
             width: i64::from(picture.width) * 635,
             height: i64::from(picture.height) * 635,
             placement: DrawingPlacement::Inline,
+            wrap: Default::default(),
             name: None,
             description: None,
             text_box: Vec::new(),
@@ -686,6 +693,16 @@ impl<'a> Context<'a> {
             horizontal,
             vertical,
             behind_text: anchor.behind_text,
+        };
+        drawing.wrap = docboss_model::TextWrap {
+            kind: anchor.wrap,
+            side: anchor.wrap_side,
+            distance: self
+                .shape_wrap_distances
+                .get(&anchor.shape_id)
+                .copied()
+                .unwrap_or([0, 0, 114_300, 114_300]),
+            polygon: Vec::new(),
         };
         Some(RunContent::Drawing(Box::new(drawing)))
     }

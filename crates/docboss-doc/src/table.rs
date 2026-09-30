@@ -3,12 +3,12 @@
 //! [MS-DOC] §2.6.3, §2.9.321, §2.9.313, §2.9.317.
 
 use docboss_model::{
-    Borders, Justification, Shading, TableCellProperties, TableProperties, TableRowProperties,
-    TextDirection, VerticalAlign, VerticalMerge,
+    Borders, DrawingPosition, Justification, PositionBase, Shading, TableCellProperties,
+    TableFloat, TableProperties, TableRowProperties, TextDirection, VerticalAlign, VerticalMerge,
 };
 
 use crate::bytes::{i16_at, u16_at, u8_at};
-use crate::props::{brc, brc80, shd, shd80};
+use crate::props::{brc, brc80, plus_one_position, position_code, shd, shd80};
 use crate::sprm::prls;
 
 /// One TC80 ([MS-DOC] §2.9.313) with its TCGRF bits unpacked.
@@ -71,6 +71,41 @@ fn cells_in(row: &mut RowInfo, operand: &[u8], apply: impl Fn(&mut CellFormat)) 
     }
 }
 
+/// A floating table as sprmTPc's default places it: at the top margin
+/// and the left of the column ([MS-DOC] §2.6.3).
+fn default_float() -> TableFloat {
+    TableFloat {
+        horizontal: DrawingPosition::offset(PositionBase::Column, 0),
+        vertical: DrawingPosition::offset(PositionBase::Margin, 0),
+        distance: [0; 4],
+    }
+}
+
+/// [MS-DOC] §2.6.3: sprmTPc (§2.9.208), sprmTDxaAbs, sprmTDyaAbs and the
+/// distances from the text: sprmTDyaFromText, sprmTDyaFromTextBottom,
+/// sprmTDxaFromText and sprmTDxaFromTextRight.
+fn table_float(prl: &crate::sprm::Prl<'_>, float: &mut TableFloat) {
+    let distance = || i32::from(prl.u16()).min(31_680);
+    match prl.sprm {
+        0x360D => {
+            let (vertical, horizontal) = position_code(prl.u8());
+            if let Some(base) = vertical {
+                float.vertical.base = base;
+            }
+            if let Some(base) = horizontal {
+                float.horizontal.base = base;
+            }
+        }
+        0x940E => plus_one_position(prl.i16(), true, &mut float.horizontal),
+        0x940F => plus_one_position(prl.i16(), false, &mut float.vertical),
+        0x9411 => float.distance[0] = distance(),
+        0x941F => float.distance[1] = distance(),
+        0x9410 => float.distance[2] = distance(),
+        0x941E => float.distance[3] = distance(),
+        _ => {}
+    }
+}
+
 impl RowInfo {
     /// Reads the table sprms of a TTP paragraph. `sprmTDxaGapHalf` is each
     /// cell's left and right margin unless `sprmTCellPadding` states one
@@ -122,6 +157,9 @@ impl RowInfo {
                         3 => row.table.width = Some(width),
                         _ => {}
                     }
+                }
+                0x360D | 0x940E | 0x940F | 0x9410 | 0x9411 | 0x941E | 0x941F => {
+                    table_float(&prl, row.table.floating.get_or_insert_with(default_float))
                 }
                 0x3615 => row.table.fixed_layout = prl.u8() == 0,
                 0x560B | 0x5664 => row.table.bidi_visual |= prl.u16() != 0,

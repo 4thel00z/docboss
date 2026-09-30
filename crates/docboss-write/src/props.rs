@@ -3,10 +3,11 @@
 //! §17.4 table properties, §17.6 section properties).
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Color, Justification, LineRule, NumberFormat,
-    ParagraphProperties, RunProperties, SectionBreak, SectionProperties, Shading, TabAlignment,
-    TabLeader, TableCellProperties, TableProperties, TableRowProperties, Underline, VerticalAlign,
-    VerticalMerge,
+    Border, BorderStyle, Borders, Color, DrawingPosition, DropCap, FrameProperties, Justification,
+    LineRule, NumberFormat, ParagraphProperties, PositionAlign, PositionBase, RunProperties,
+    SectionBreak, SectionProperties, Shading, TabAlignment, TabLeader, TableCellProperties,
+    TableFloat, TableProperties, TableRowProperties, Underline, VerticalAlign, VerticalMerge,
+    WrapKind,
 };
 
 use crate::xml::Xml;
@@ -269,6 +270,9 @@ fn paragraph_properties_inner(xml: &mut Xml, style_id: Option<&str>, props: &Par
     toggle(xml, "w:keepNext", props.keep_next);
     toggle(xml, "w:keepLines", props.keep_lines);
     toggle(xml, "w:pageBreakBefore", props.page_break_before);
+    if let Some(frame) = &props.frame {
+        frame_properties(xml, frame);
+    }
     toggle(xml, "w:widowControl", props.widow_control);
     if let Some(list) = props.numbering {
         xml.open("w:numPr", &[]);
@@ -369,10 +373,120 @@ fn margins(xml: &mut Xml, name: &str, values: [i32; 4]) {
     xml.close(name);
 }
 
+/// A frame or floating table position's anchor (`ST_HAnchor`,
+/// `ST_VAnchor`), then its alignment or its offset in twips.
+/// ECMA-376 Part 1 §17.18.35, §17.18.100.
+fn anchored(
+    position: &DrawingPosition,
+    horizontal: bool,
+) -> (&'static str, Option<&'static str>, String) {
+    let anchor = match position.base {
+        PositionBase::Page => "page",
+        PositionBase::Margin => "margin",
+        _ => "text",
+    };
+    let align = position.align.map(|align| match (align, horizontal) {
+        (PositionAlign::Start, true) => "left",
+        (PositionAlign::Start, false) => "top",
+        (PositionAlign::Center, _) => "center",
+        (PositionAlign::End, true) => "right",
+        (PositionAlign::End, false) => "bottom",
+        (PositionAlign::Inside, _) => "inside",
+        (PositionAlign::Outside, _) => "outside",
+    });
+    (anchor, align, (position.offset / 635).to_string())
+}
+
+/// ECMA-376 Part 1 §17.3.1.11: `w:framePr`.
+fn frame_properties(xml: &mut Xml, frame: &FrameProperties) {
+    let width = frame.width.map(|w| w.to_string());
+    let height = frame.height.to_string();
+    let (h_anchor, x_align, x) = anchored(&frame.horizontal, true);
+    let (v_anchor, y_align, y) = anchored(&frame.vertical, false);
+    let (h_space, v_space, lines) = (
+        frame.h_space.to_string(),
+        frame.v_space.to_string(),
+        frame.lines.to_string(),
+    );
+    let mut attributes: Vec<(&str, &str)> = Vec::new();
+    match frame.drop_cap {
+        DropCap::None => {}
+        DropCap::Drop => attributes.extend([("w:dropCap", "drop"), ("w:lines", lines.as_str())]),
+        DropCap::Margin => {
+            attributes.extend([("w:dropCap", "margin"), ("w:lines", lines.as_str())])
+        }
+    }
+    if let Some(width) = width.as_deref() {
+        attributes.push(("w:w", width));
+    }
+    if frame.height > 0 {
+        attributes.push(("w:h", &height));
+    }
+    attributes.push((
+        "w:hRule",
+        match frame.height_rule {
+            LineRule::Exact => "exact",
+            LineRule::AtLeast => "atLeast",
+            LineRule::Auto => "auto",
+        },
+    ));
+    attributes.extend([
+        ("w:hSpace", h_space.as_str()),
+        ("w:vSpace", v_space.as_str()),
+    ]);
+    attributes.push((
+        "w:wrap",
+        match frame.wrap {
+            WrapKind::None => "none",
+            WrapKind::TopAndBottom => "notBeside",
+            WrapKind::Tight => "tight",
+            WrapKind::Through => "through",
+            WrapKind::Square => "around",
+        },
+    ));
+    attributes.extend([("w:vAnchor", v_anchor), ("w:hAnchor", h_anchor)]);
+    match x_align {
+        Some(align) => attributes.push(("w:xAlign", align)),
+        None => attributes.push(("w:x", &x)),
+    }
+    match y_align {
+        Some(align) => attributes.push(("w:yAlign", align)),
+        None => attributes.push(("w:y", &y)),
+    }
+    xml.empty("w:framePr", &attributes);
+}
+
+/// ECMA-376 Part 1 §17.4.57: `w:tblpPr`.
+fn table_float(xml: &mut Xml, float: &TableFloat) {
+    let [top, bottom, left, right] = float.distance.map(|d| d.to_string());
+    let (h_anchor, x_align, x) = anchored(&float.horizontal, true);
+    let (v_anchor, y_align, y) = anchored(&float.vertical, false);
+    let mut attributes: Vec<(&str, &str)> = vec![
+        ("w:leftFromText", &left),
+        ("w:rightFromText", &right),
+        ("w:topFromText", &top),
+        ("w:bottomFromText", &bottom),
+        ("w:vertAnchor", v_anchor),
+        ("w:horzAnchor", h_anchor),
+    ];
+    match x_align {
+        Some(align) => attributes.push(("w:tblpXSpec", align)),
+        None => attributes.push(("w:tblpX", &x)),
+    }
+    match y_align {
+        Some(align) => attributes.push(("w:tblpYSpec", align)),
+        None => attributes.push(("w:tblpY", &y)),
+    }
+    xml.empty("w:tblpPr", &attributes);
+}
+
 pub fn table_properties(xml: &mut Xml, props: &TableProperties) {
     xml.open("w:tblPr", &[]);
     if let Some(style) = &props.style_id {
         xml.val("w:tblStyle", style);
+    }
+    if let Some(float) = &props.floating {
+        table_float(xml, float);
     }
     if props.bidi_visual {
         xml.empty("w:bidiVisual", &[]);

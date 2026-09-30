@@ -163,6 +163,7 @@ fn table_borders_land_on_the_grid() {
 fn images_draw_scaled_and_metafiles_fall_back_to_placeholders() {
     let drawing = |media: u32| {
         RunContent::Drawing(Box::new(Drawing {
+            wrap: Default::default(),
             media: Some(MediaId(media)),
             width: 12700 * 100,
             height: 12700 * 50,
@@ -218,6 +219,7 @@ fn metafile_pictures_draw_their_shapes() {
     for (name, content_type) in [("shapes.emf", "image/x-emf"), ("shapes.wmf", "image/x-wmf")] {
         let data = std::fs::read(format!("{fixtures}{name}")).unwrap();
         let drawing = Drawing {
+            wrap: Default::default(),
             media: Some(MediaId(0)),
             width: 12700 * 210,
             height: 12700 * 154,
@@ -280,6 +282,7 @@ fn overflowing_text_box_content_is_clipped_to_its_insets() {
         .map(|_| para(vec![run("Clipped text", RunProperties::default())]))
         .collect();
     let drawing = Drawing {
+        wrap: Default::default(),
         media: None,
         width: 2_540_000,
         height: 1_270_000,
@@ -326,6 +329,7 @@ fn outlined_box(x_pt: i64, shape: ShapeFormat) -> Inline {
     Inline::Run(Run {
         properties: RunProperties::default(),
         content: vec![RunContent::Drawing(Box::new(Drawing {
+            wrap: Default::default(),
             media: None,
             width: 2_540_000,
             height: 1_270_000,
@@ -465,6 +469,7 @@ fn drawn_shape(x_pt: i64, name: &str, shape: ShapeFormat) -> Inline {
     Inline::Run(Run {
         properties: RunProperties::default(),
         content: vec![RunContent::Drawing(Box::new(Drawing {
+            wrap: Default::default(),
             media: None,
             width: 1_270_000,
             height: 1_270_000,

@@ -24,6 +24,7 @@ mod table;
 mod textbox;
 mod ucd;
 mod units;
+mod wrap;
 
 use std::sync::Arc;
 

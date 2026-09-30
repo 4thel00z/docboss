@@ -2,11 +2,12 @@
 //! §17.3.2, §17.4 and §17.6).
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Color, Columns, FontSlots, Indentation, Justification, LineRule,
-    NumberingRef, Orientation, PageBorderDisplay, PageBorderOffset, PageBorders, PageMargins,
-    PageSize, ParagraphProperties, RunProperties, SectionBreak, SectionProperties, Shading,
-    Spacing, TabAlignment, TabLeader, TabStop, TableCellProperties, TableProperties,
-    TableRowProperties, TextDirection, Underline, VerticalAlign, VerticalMerge,
+    Border, BorderStyle, Borders, Color, Columns, DrawingPosition, DropCap, FontSlots,
+    FrameProperties, Indentation, Justification, LineRule, NumberingRef, Orientation,
+    PageBorderDisplay, PageBorderOffset, PageBorders, PageMargins, PageSize, ParagraphProperties,
+    PositionAlign, PositionBase, RunProperties, SectionBreak, SectionProperties, Shading, Spacing,
+    TabAlignment, TabLeader, TabStop, TableCellProperties, TableFloat, TableProperties,
+    TableRowProperties, TextDirection, Underline, VerticalAlign, VerticalMerge, WrapKind,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -111,12 +112,142 @@ pub fn paragraph_properties<'a>(reader: &mut Reader<'a>, theme: &Theme) -> Parag
             "tabs" => p.tabs = tabs(reader),
             "pBdr" => p.borders = Some(borders(reader)),
             "shd" => p.shading = shading(&e),
+            "framePr" => p.frame = Some(frame_properties(&e)),
             "rPr" => format.mark = run_properties(reader, theme),
             "sectPr" => format.section = Some(section_properties(reader)),
             _ => {}
         }
     });
     format
+}
+
+const TWIPS_TO_EMU: i64 = 635;
+
+/// An `ST_XAlign` or `ST_YAlign` value (ECMA-376 Part 1 §22.9.2.18,
+/// §22.9.2.20); `inline` and unknown values align nothing.
+fn frame_align(value: Option<&str>) -> Option<PositionAlign> {
+    let align = match value? {
+        "left" | "top" => PositionAlign::Start,
+        "center" => PositionAlign::Center,
+        "right" | "bottom" => PositionAlign::End,
+        "inside" => PositionAlign::Inside,
+        "outside" => PositionAlign::Outside,
+        _ => return None,
+    };
+    Some(align)
+}
+
+/// A frame's or floating table's position on one axis from its anchor
+/// (`ST_HAnchor`, `ST_VAnchor`), its offset in twips and its alignment. An
+/// alignment against the text is ignored vertically.
+/// ECMA-376 Part 1 §17.18.35, §17.18.100.
+fn anchored_position(
+    anchor: Option<&str>,
+    default: PositionBase,
+    horizontal: bool,
+    offset: Option<i64>,
+    align: Option<&str>,
+) -> DrawingPosition {
+    let base = match anchor {
+        Some("page") => PositionBase::Page,
+        Some("margin") => PositionBase::Margin,
+        Some("text") if horizontal => PositionBase::Column,
+        Some("text") => PositionBase::Paragraph,
+        _ => default,
+    };
+    let align = frame_align(align).filter(|_| horizontal || base != PositionBase::Paragraph);
+    DrawingPosition {
+        base,
+        align,
+        offset: offset.unwrap_or(0).clamp(-31_680, 31_680) * TWIPS_TO_EMU,
+    }
+}
+
+/// `w:framePr`: size, anchors, position, wrapping (`ST_Wrap`), padding and
+/// drop cap (`ST_DropCap`). A height without `hRule` is a minimum, as Word
+/// and LibreOffice treat it.
+/// ECMA-376 Part 1 §17.3.1.11, §17.18.104, §17.18.20.
+fn frame_properties(e: &Element<'_>) -> FrameProperties {
+    let raw = |name: &str| e.attr_raw(Ns::W, name);
+    let number = |name: &str| raw(name).and_then(crate::xml::int);
+    FrameProperties {
+        width: twips_attr(e, "w").filter(|w| *w > 0),
+        height: twips_attr(e, "h").unwrap_or(0).max(0),
+        height_rule: match raw("hRule") {
+            Some("exact") => LineRule::Exact,
+            Some("auto") => LineRule::Auto,
+            _ => LineRule::AtLeast,
+        },
+        horizontal: anchored_position(
+            raw("hAnchor"),
+            FRAME_HORIZONTAL_BASE,
+            true,
+            number("x"),
+            raw("xAlign"),
+        ),
+        vertical: anchored_position(
+            raw("vAnchor"),
+            match number("y").unwrap_or(0) {
+                0 => PositionBase::Paragraph,
+                _ => PositionBase::Margin,
+            },
+            false,
+            number("y"),
+            raw("yAlign"),
+        ),
+        wrap: match raw("wrap") {
+            Some("notBeside") => WrapKind::TopAndBottom,
+            Some("none") => WrapKind::None,
+            Some("tight") => WrapKind::Tight,
+            Some("through") => WrapKind::Through,
+            _ => WrapKind::Square,
+        },
+        h_space: twips_attr(e, "hSpace").unwrap_or(0).clamp(0, 31_680),
+        v_space: twips_attr(e, "vSpace").unwrap_or(0).clamp(0, 31_680),
+        drop_cap: match raw("dropCap") {
+            Some("drop") => DropCap::Drop,
+            Some("margin") => DropCap::Margin,
+            _ => DropCap::None,
+        },
+        lines: number("lines").unwrap_or(1).clamp(1, 10) as u32,
+    }
+}
+
+/// The anchors Word assumes when `w:framePr` and `w:tblpPr` leave them
+/// out, as LibreOffice reads them: the column across, and down the text
+/// for a frame at `y` 0, else the margin.
+const FRAME_HORIZONTAL_BASE: PositionBase = PositionBase::Column;
+const TABLE_HORIZONTAL_BASE: PositionBase = PositionBase::Column;
+const TABLE_VERTICAL_BASE: PositionBase = PositionBase::Margin;
+
+/// `w:tblpPr` (ECMA-376 Part 1 §17.4.57): a floating table's anchors,
+/// position and distances from the text.
+fn table_float(e: &Element<'_>) -> TableFloat {
+    let raw = |name: &str| e.attr_raw(Ns::W, name);
+    let number = |name: &str| raw(name).and_then(crate::xml::int);
+    let distance = |name: &str| twips_attr(e, name).unwrap_or(0).clamp(0, 31_680);
+    TableFloat {
+        horizontal: anchored_position(
+            raw("horzAnchor"),
+            TABLE_HORIZONTAL_BASE,
+            true,
+            number("tblpX"),
+            raw("tblpXSpec"),
+        ),
+        vertical: anchored_position(
+            raw("vertAnchor"),
+            TABLE_VERTICAL_BASE,
+            false,
+            number("tblpY"),
+            raw("tblpYSpec"),
+        ),
+        distance: [
+            distance("topFromText"),
+            distance("bottomFromText"),
+            distance("leftFromText"),
+            distance("rightFromText"),
+        ],
+    }
 }
 
 fn indentation(e: &Element<'_>) -> Indentation {
@@ -423,6 +554,7 @@ pub fn table_properties(reader: &mut Reader<'_>) -> TableProperties {
         "tblCellMar" => p.cell_margins = Some(margins(reader)),
         "tblLayout" => p.fixed_layout = attr(&e, "type").as_deref() == Some("fixed"),
         "bidiVisual" => p.bidi_visual = on_off(&e),
+        "tblpPr" => p.floating = Some(table_float(&e)),
         _ => {}
     });
     p

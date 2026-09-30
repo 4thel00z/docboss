@@ -86,6 +86,59 @@ impl DrawingPosition {
     }
 }
 
+/// How text flows around a floating object.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum WrapKind {
+    /// Text runs over or under the object.
+    #[default]
+    None,
+    /// Text flows around the object's bounding box.
+    Square,
+    /// Text flows around the object's outline on its left and right.
+    Tight,
+    /// Text flows around the object's outline, into its open parts too.
+    Through,
+    /// Text stops above the object and resumes below it.
+    TopAndBottom,
+}
+
+/// Which sides of a floating object text may flow along.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum WrapSide {
+    #[default]
+    Both,
+    Left,
+    Right,
+    /// Only the side with more room.
+    Largest,
+}
+
+/// The text wrapping of a floating object.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct TextWrap {
+    pub kind: WrapKind,
+    pub side: WrapSide,
+    /// The distances kept from the text above, below, left and right, in
+    /// EMU.
+    pub distance: [i64; 4],
+    /// The outline text wraps to under tight and through wrapping, in
+    /// units of 1/21600 of the object's width and height; empty for the
+    /// bounding box.
+    pub polygon: Vec<(i32, i32)>,
+}
+
+impl TextWrap {
+    /// Whether text avoids the object.
+    pub fn wraps(&self) -> bool {
+        self.kind != WrapKind::None
+    }
+}
+
 /// A picture placed in the text.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -97,6 +150,8 @@ pub struct Drawing {
     /// Displayed height in EMU.
     pub height: i64,
     pub placement: DrawingPlacement,
+    /// How text flows around a floating drawing.
+    pub wrap: TextWrap,
     pub name: Option<String>,
     pub description: Option<String>,
     /// The content of a text box the drawing carries, empty for a plain

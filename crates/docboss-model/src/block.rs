@@ -61,6 +61,21 @@ pub struct TableProperties {
     pub fixed_layout: bool,
     /// The cells run right to left (`w:bidiVisual`).
     pub bidi_visual: bool,
+    /// The position of a floating table.
+    pub floating: Option<TableFloat>,
+}
+
+/// A floating table's position and the distances it keeps from the text
+/// around it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct TableFloat {
+    /// The position on each axis, offsets in EMU.
+    pub horizontal: crate::DrawingPosition,
+    pub vertical: crate::DrawingPosition,
+    /// The distances kept from the text above, below, left and right, in
+    /// twips.
+    pub distance: [i32; 4],
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -8,13 +8,14 @@ use docboss_cfb::CompoundFile;
 use docboss_model::{
     Block, Comment, Diagnostic, Document, HeaderFooter, HeaderFooterKind, Inline, Note, NoteKind,
     Paragraph, PositionBase, Run, RunContent, Section, SectionProperties, Settings, SourceFormat,
+    WrapKind, WrapSide,
 };
 
 use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
 use crate::fib::{slot, Fib};
 use crate::picture::{
     blip, children, record, shape_alignment, shape_blip_index, shape_containers, shape_format,
-    shape_geometry, shape_groups, shape_id,
+    shape_geometry, shape_groups, shape_id, shape_wrap_distance,
 };
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
@@ -408,7 +409,8 @@ fn bookmarks(context: &mut Context<'_>, table: &[u8], fib: &Fib) {
 /// in the OfficeArt drawing data ([MS-DOC] §2.9.171 OfficeArtContent: the
 /// drawing group, then one OfficeArtWordDrawing per story, each a dgglbl
 /// byte and a drawing container, §2.9.172).
-/// The Spa bx and by fields give the origin of each axis.
+/// The Spa bx and by fields give the origin of each axis, wr and wrk the
+/// text wrapping; fBelowText counts only for a shape text runs through.
 /// [MS-DOC] §2.8.27, §2.9.253, §2.9.171, §2.9.172.
 fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts: &Parts) {
     let main = plc(table_range(table, fib, slot::PLC_SPA_MOM), 26);
@@ -441,7 +443,20 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
                     1 => PositionBase::Page,
                     _ => PositionBase::Paragraph,
                 },
-                behind_text: flags & 0x4000 != 0,
+                wrap: match (flags >> 5) & 0xF {
+                    1 => WrapKind::TopAndBottom,
+                    3 => WrapKind::None,
+                    4 => WrapKind::Tight,
+                    5 => WrapKind::Through,
+                    _ => WrapKind::Square,
+                },
+                wrap_side: match (flags >> 9) & 0xF {
+                    1 => WrapSide::Left,
+                    2 => WrapSide::Right,
+                    3 => WrapSide::Largest,
+                    _ => WrapSide::Both,
+                },
+                behind_text: (flags >> 5) & 0xF == 3 && flags & 0x4000 != 0,
             },
         );
     }
@@ -534,6 +549,9 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
             context
                 .shape_alignments
                 .insert(id, shape_alignment(table, &container));
+            context
+                .shape_wrap_distances
+                .insert(id, shape_wrap_distance(table, &container));
             if let Some(geometry) = shape_geometry(table, &container) {
                 context.shape_geometries.insert(id, geometry);
             }

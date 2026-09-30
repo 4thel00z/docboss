@@ -155,6 +155,7 @@ impl Para {
             width,
             height,
             placement: DrawingPlacement::Inline,
+            wrap: Default::default(),
             name: None,
             description: None,
             text_box: Vec::new(),

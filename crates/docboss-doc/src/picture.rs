@@ -446,6 +446,35 @@ fn line_dashing(value: u32) -> Option<DashPattern> {
     DashPattern::from_bits(bits)
 }
 
+/// A shape's distances from the text above, below, left and right in EMU:
+/// the dyWrapDistTop, dyWrapDistBottom, dxWrapDistLeft and dxWrapDistRight
+/// properties of its OfficeArtFOPT or OfficeArtTertiaryFOPT, with their
+/// defaults of 0 above and below and 0.125 inch beside.
+/// [MS-ODRAW] §2.3.4.9, §2.3.4.10, §2.3.4.11, §2.3.4.12.
+pub fn shape_wrap_distance(bytes: &[u8], container: &Record) -> [i64; 4] {
+    let mut distance = [0i64, 0, 114_300, 114_300];
+    let tables = children(bytes, container.body, container.body + container.length)
+        .into_iter()
+        .filter(|r| r.kind == 0xF00B || r.kind == 0xF122);
+    for options in tables {
+        for i in 0..usize::from(options.instance) {
+            let at = options.body + i * 6;
+            let (Some(id), Some(value)) = (u16_at(bytes, at), u32_at(bytes, at + 2)) else {
+                break;
+            };
+            let slot = match id & 0x3FFF {
+                0x0384 => 2,
+                0x0385 => 0,
+                0x0386 => 3,
+                0x0387 => 1,
+                _ => continue,
+            };
+            distance[slot] = i64::from(value as i32).clamp(0, 51_206_400);
+        }
+    }
+    distance
+}
+
 /// A shape's alignment on each axis, horizontal then vertical: the posh
 /// and posrelh, posv and posrelv properties of its OfficeArtFOPT or
 /// OfficeArtTertiaryFOPT. None on an axis positioned by offset.

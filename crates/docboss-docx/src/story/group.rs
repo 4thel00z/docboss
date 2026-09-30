@@ -4,7 +4,9 @@
 use docboss_model::{ChildBox, Diagnostic, Geometry, GroupFrame, GroupMember, ShapeFormat};
 use docboss_xml::{Element, Ns, Reader};
 
-use super::{css_length, css_property, int, vml_shape, xml_true, DrawingInfo, StoryParser};
+use super::{
+    css_length, css_property, int, vml_shape, vml_wrap, xml_true, DrawingInfo, StoryParser,
+};
 use crate::xml::children;
 
 /// The deepest nesting of groups read; deeper groups are dropped.
@@ -296,6 +298,7 @@ impl StoryParser<'_> {
                     self.add_member(info, GroupMember::new(member.drawing, placed));
                 }
             }
+            (Ns::W10, "wrap") if frames.len() == 1 => vml_wrap(child, &mut info.wrap),
             _ => {}
         }
     }

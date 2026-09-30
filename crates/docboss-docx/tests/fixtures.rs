@@ -125,3 +125,62 @@ fn word_aligned_text_box() {
     assert_eq!(boxes[0].width, 2_388_870);
     assert!(!boxes[0].text_box.is_empty());
 }
+
+/// The wrapping, distances and wrap polygon of anchored pictures, a text
+/// frame, a floating table and a VML shape's `w10:wrap` with its
+/// `mso-wrap-distance-left`.
+/// ECMA-376 Part 1 §20.4.2.3, §20.4.2.17, §20.4.2.19, §20.4.2.16, §20.4.2.14, §20.4.2.9.
+/// ECMA-376 Part 1 §20.4.3.6, §20.4.3.7, §17.3.1.11, §17.18.35, §17.18.100, §17.18.104.
+/// ECMA-376 Part 1 §17.4.57.
+#[test]
+fn wrapping_frames_and_floating_tables_are_read() {
+    use docboss_model::{FrameProperties, LineRule, TableFloat, WrapKind, WrapSide};
+    let doc = open("wrap.docx");
+    assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+    let found = drawings(&doc);
+    assert_eq!(found.len(), 3);
+    assert_eq!(found[0].wrap.kind, WrapKind::Square);
+    assert_eq!(found[0].wrap.side, WrapSide::Both);
+    assert_eq!(found[0].wrap.distance, [0, 0, 114_300, 114_300]);
+    assert_eq!(found[1].wrap.kind, WrapKind::Tight);
+    assert_eq!(found[1].wrap.side, WrapSide::Left);
+    assert_eq!(found[1].wrap.distance, [12_700, 25_400, 38_100, 50_800]);
+    assert_eq!(found[1].wrap.polygon.len(), 5);
+    assert_eq!(found[1].wrap.polygon[2], (21_600, 21_600));
+    assert_eq!(found[2].wrap.kind, WrapKind::TopAndBottom);
+    assert_eq!(found[2].wrap.distance, [0, 0, 50_800, 114_300]);
+    let blocks = &doc.sections[0].blocks;
+    let Block::Paragraph(framed) = &blocks[2] else {
+        panic!("the third block is the frame's paragraph");
+    };
+    assert_eq!(
+        framed.properties.frame,
+        Some(FrameProperties {
+            width: Some(2880),
+            height: 720,
+            height_rule: LineRule::Exact,
+            horizontal: DrawingPosition {
+                base: PositionBase::Margin,
+                align: Some(PositionAlign::End),
+                offset: 0,
+            },
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 635),
+            wrap: WrapKind::Square,
+            h_space: 180,
+            v_space: 90,
+            drop_cap: docboss_model::DropCap::None,
+            lines: 1,
+        })
+    );
+    let Block::Table(table) = &blocks[4] else {
+        panic!("the fifth block is the floating table");
+    };
+    assert_eq!(
+        table.properties.floating,
+        Some(TableFloat {
+            horizontal: DrawingPosition::offset(PositionBase::Page, 1440 * 635),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 200 * 635),
+            distance: [60, 120, 180, 360],
+        })
+    );
+}

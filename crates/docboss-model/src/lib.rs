@@ -26,7 +26,7 @@ mod style;
 mod text;
 
 pub use block::{
-    Block, Paragraph, Table, TableCell, TableCellProperties, TableProperties, TableRow,
+    Block, Paragraph, Table, TableCell, TableCellProperties, TableFloat, TableProperties, TableRow,
     TableRowProperties, VerticalMerge,
 };
 pub use chart::{
@@ -41,7 +41,7 @@ pub use inline::{
     Break, CustomGeometry, DashPattern, Drawing, DrawingPlacement, DrawingPosition, Field,
     Geometry, GeometryPath, Guide, Hyperlink, Inline, LineCap, LineEnd, LineEndKind, LineEndSize,
     LineJoin, PathCommand, PathFill, PositionAlign, PositionBase, Revision, RevisionKind, Run,
-    RunContent, ShapeFormat,
+    RunContent, ShapeFormat, TextWrap, WrapKind, WrapSide,
 };
 pub use math::{linear_text, FractionKind, Math, MathJustification, MathNode, MathStyle};
 pub use media::{sniff_image, FontEntry, Media, MediaId};
@@ -49,9 +49,9 @@ pub use numbering::{
     AbstractNumbering, Level, NumberFormat, Numbering, NumberingCounter, NumberingInstance,
 };
 pub use props::{
-    Border, BorderStyle, Borders, Color, FontSlots, Highlight, Indentation, Justification,
-    LineRule, NumberingRef, ParagraphProperties, RunProperties, Shading, Spacing, TabAlignment,
-    TabLeader, TabStop, TextDirection, Underline, VerticalAlign,
+    Border, BorderStyle, Borders, Color, DropCap, FontSlots, FrameProperties, Highlight,
+    Indentation, Justification, LineRule, NumberingRef, ParagraphProperties, RunProperties,
+    Shading, Spacing, TabAlignment, TabLeader, TabStop, TextDirection, Underline, VerticalAlign,
 };
 pub use section::{
     Columns, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Orientation, PageBorderDisplay,

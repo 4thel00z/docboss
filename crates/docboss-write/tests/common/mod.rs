@@ -95,6 +95,7 @@ pub fn kitchen_sink() -> Document {
             media: Some(media),
             width: 914400,
             height: 914400,
+            wrap: Default::default(),
             placement: DrawingPlacement::Anchored {
                 horizontal: DrawingPosition::offset(PositionBase::Column, 914400),
                 vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),

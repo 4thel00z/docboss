@@ -559,3 +559,64 @@ fn word2_files_read_as_text() {
     let document = docboss_doc::read(&bytes).unwrap();
     assert!(!plain_text(&document).trim().is_empty());
 }
+
+/// [MS-DOC] §2.9.253: the Spa's wr and wrk give each shape's wrapping,
+/// with its distances from the text from the OfficeArt properties
+/// ([MS-ODRAW] §2.3.4.9, §2.3.4.10, §2.3.4.11, §2.3.4.12); [MS-DOC]
+/// §2.6.3, §2.9.208, §2.9.351, §2.9.357: sprmTPc, sprmTDxaAbs, sprmTDyaAbs
+/// and the distance sprms place a floating table. The fixture is
+/// LibreOffice's DOC export of the DOCX writer's wrap fixture.
+#[test]
+fn shape_wrapping_and_floating_tables() {
+    use docboss_model::{TableFloat, WrapKind, WrapSide};
+    let document = fixture("wrap");
+    let drawings: Vec<docboss_model::Drawing> = paragraphs(&document)
+        .iter()
+        .flat_map(|p| runs(p))
+        .flat_map(|r| &r.content)
+        .filter_map(|c| match c {
+            RunContent::Drawing(d) => Some(d.as_ref().clone()),
+            _ => None,
+        })
+        .collect();
+    let wraps: Vec<(WrapKind, WrapSide)> = drawings
+        .iter()
+        .map(|d| (d.wrap.kind, d.wrap.side))
+        .collect();
+    assert_eq!(
+        wraps,
+        [
+            (WrapKind::Square, WrapSide::Both),
+            (WrapKind::Tight, WrapSide::Left),
+            (WrapKind::Square, WrapSide::Both),
+            (WrapKind::TopAndBottom, WrapSide::Both),
+        ]
+    );
+    assert_eq!(drawings[1].wrap.distance, [12_700, 25_400, 38_100, 50_800]);
+    assert_eq!(
+        first_table(&document).properties.floating,
+        Some(TableFloat {
+            horizontal: DrawingPosition::offset(PositionBase::Page, 1326 * 635),
+            vertical: DrawingPosition::offset(PositionBase::Paragraph, 199 * 635),
+            distance: [60, 120, 180, 360],
+        })
+    );
+}
+
+/// [MS-DOC] §2.6.2, §2.9.51, §2.9.208: a positioned paragraph holding a
+/// drop cap, from sprmPDcs and sprmPPc. Apache POI's `test.doc`.
+#[test]
+fn drop_cap_frames() {
+    use docboss_model::{DropCap, WrapKind};
+    let document = fixture("drop-cap");
+    let framed: Vec<&Paragraph> = paragraphs(&document)
+        .into_iter()
+        .filter(|p| p.properties.frame.is_some())
+        .collect();
+    assert_eq!(framed.len(), 1);
+    let frame = framed[0].properties.frame.unwrap();
+    assert_eq!(frame.drop_cap, DropCap::Margin);
+    assert_eq!(frame.lines, 3);
+    assert_eq!(frame.wrap, WrapKind::Square);
+    assert_eq!(frame.horizontal.base, PositionBase::Page);
+}

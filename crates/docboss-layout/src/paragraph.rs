@@ -7,6 +7,8 @@ use docboss_model::{
     NoteKind, Paragraph, RevisionKind, RunContent, TabAlignment, TabLeader, TabStop, Underline,
 };
 
+use std::sync::Arc;
+
 use crate::breaks;
 use crate::complex::{self, Letter};
 use crate::flow::{Ctx, Floating, Slab};
@@ -155,6 +157,16 @@ enum LineEnd {
 struct Line {
     placed: Vec<Placed>,
     end: LineEnd,
+    /// The atom the line starts at.
+    start: usize,
+    /// The right edge the line fills up to.
+    right: f32,
+    /// The line continues the row of the line before, beside an object.
+    joined: bool,
+    /// How far an object pushed the row down.
+    drop: f32,
+    /// The line is shorter than the paragraph's width because of an object.
+    narrow: bool,
 }
 
 struct Geometry {
@@ -501,103 +513,26 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     let lines = break_lines(ctx, &styles, &mut atoms, &geometry);
 
     let spacing = props.spacing;
-    let line_value = spacing.line.unwrap_or(240);
-    let rule = spacing.line_rule.unwrap_or(LineRule::Auto);
     let mark_font = ctx.shaper.primary(&styles[0]);
     let mark_metrics = ctx.shaper.metrics(mark_font, styles[0].base_size);
-    let justification = props.justification.unwrap_or(Justification::Left);
-    let shading = props.shading.and_then(|s| s.fill);
-    let borders = props.borders;
-    let count = lines.len();
-    let widow_control = props.widow_control.unwrap_or(false);
-    let keep_lines = props.keep_lines.unwrap_or(false);
-    let keep_next = props.keep_next.unwrap_or(false);
-
-    let mut slabs = Vec::with_capacity(count);
-    let mut pending_break: Option<Break> = None;
-    for (index, line) in lines.iter().enumerate() {
-        let extent = |objects: bool| {
-            line.placed
-                .iter()
-                .map(|p| &atoms[p.atom])
-                .filter(|a| a.kind != Kind::Tab && (a.kind == Kind::Object) == objects)
-                .fold((0.0f32, 0.0f32), |(a, d), atom| {
-                    (a.max(atom.ascent), d.max(atom.descent))
-                })
-        };
-        let (mut ascent, mut descent) = extent(false);
-        let (object_height, object_descent) = extent(true);
-        if ascent + descent <= 0.0 {
-            ascent = mark_metrics.ascent;
-            descent = mark_metrics.descent;
-        }
-        let lowest = descent.max(object_descent);
-        let natural = ascent.max(object_height) + lowest;
-        let (height, baseline) = match rule {
-            LineRule::Auto => {
-                let text = (ascent + descent) * line_value.max(1) as f32 / 240.0;
-                let h = (text + lowest - descent).max(object_height + lowest);
-                (h, h - lowest)
-            }
-            LineRule::Exact => {
-                let h = twips_to_pt(line_value).max(0.1);
-                (h, h - lowest)
-            }
-            LineRule::AtLeast => {
-                let h = natural.max(twips_to_pt(line_value));
-                (h, h - lowest)
-            }
-        };
-        let mut items = Vec::new();
-        if let Some(fill) = shading {
-            let (x0, x1) = geometry.extent(rtl);
-            items.push(Item::Rect {
-                rect: Rect::new(x0, 0.0, x1 - x0, height),
-                color: fill,
-            });
-        }
-        let is_last = index + 1 == count;
-        emit_line(
-            ctx,
-            &styles,
-            &atoms,
-            line,
-            &geometry,
-            justification,
-            baseline,
-            is_last,
-            rtl,
-            &mut items,
-        );
-        if let Some(borders) = borders {
-            let (joins_previous, joins_next) = ctx.border_group;
-            paragraph_borders(
-                &borders,
-                geometry.extent(rtl),
-                height,
-                index == 0 && !joins_previous,
-                is_last && !joins_next,
-                is_last && joins_next,
-                &mut items,
-            );
-        }
-        let mut slab = Slab::new(height, items);
-        slab.extent = line_extent(&atoms, line, &geometry);
-        slab.break_before = pending_break.take().filter(|b| *b != Break::Line);
-        if let LineEnd::Mandatory(kind) = line.end {
-            pending_break = Some(kind);
-        }
-        slab.notes = line
-            .placed
-            .iter()
-            .flat_map(|p| atoms[p.atom].notes.iter().copied())
-            .collect();
-        let first_two = widow_control && count >= 2 && index == 0;
-        let last_two = widow_control && count >= 2 && index + 2 == count;
-        slab.keep_with_next =
-            (keep_lines && !is_last) || first_two || last_two || (keep_next && is_last);
-        slabs.push(slab);
-    }
+    let settings = Settings {
+        styles,
+        geometry,
+        rtl,
+        justification: props.justification.unwrap_or(Justification::Left),
+        shading: props.shading.and_then(|s| s.fill),
+        borders: props.borders,
+        border_group: ctx.border_group,
+        rule: spacing.line_rule.unwrap_or(LineRule::Auto),
+        line_value: spacing.line.unwrap_or(240),
+        mark: (mark_metrics.ascent, mark_metrics.descent),
+        widow_control: props.widow_control.unwrap_or(false),
+        keep_lines: props.keep_lines.unwrap_or(false),
+        keep_next: props.keep_next.unwrap_or(false),
+        notes,
+    };
+    let count = rows(&lines);
+    let mut slabs = build_slabs(ctx, &settings, &atoms, &lines, 0, count);
     if props.page_break_before.unwrap_or(false) {
         if let Some(first) = slabs.first_mut() {
             first.break_before = Some(Break::Page);
@@ -605,10 +540,13 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
     }
     if let Some(first) = slabs.first_mut() {
         first.floats = floats;
-        first.notes.extend(notes);
     }
-    if let (Some(last), Some(kind)) = (slabs.last_mut(), pending_break) {
-        last.break_after = Some(kind).filter(|k| *k != Break::Line);
+    if ctx.retain_lines() {
+        let prepared = Prepared {
+            settings: Arc::new(settings),
+            atoms: Arc::new(atoms),
+        };
+        attach_resume(&mut slabs, &prepared, &lines, 0, 0);
     }
     Laid {
         slabs,
@@ -616,6 +554,264 @@ pub(crate) fn layout_paragraph(ctx: &mut Ctx<'_>, paragraph: &Paragraph, width: 
         after: twips_to_pt(spacing.after.unwrap_or(0)),
         contextual: props.contextual_spacing.unwrap_or(false),
     }
+}
+
+/// What breaking a paragraph's lines needs besides its atoms.
+pub(crate) struct Settings {
+    styles: Vec<RunStyle>,
+    geometry: Geometry,
+    rtl: bool,
+    justification: Justification,
+    shading: Option<docboss_model::Color>,
+    borders: Option<docboss_model::Borders>,
+    border_group: (bool, bool),
+    rule: LineRule,
+    line_value: i32,
+    /// The ascent and descent of the paragraph mark's font.
+    mark: (f32, f32),
+    widow_control: bool,
+    keep_lines: bool,
+    keep_next: bool,
+    /// Notes whose references stand before any text.
+    notes: Vec<i64>,
+}
+
+/// A paragraph kept after layout so that its lines can be broken again
+/// around floating objects.
+#[derive(Clone)]
+pub(crate) struct Prepared {
+    settings: Arc<Settings>,
+    atoms: Arc<Vec<Atom>>,
+}
+
+/// Where a line of a kept paragraph starts, for breaking the paragraph
+/// again from there.
+#[derive(Clone)]
+pub(crate) struct Resume {
+    prepared: Prepared,
+    atom: usize,
+    row: usize,
+    /// How many slabs of the paragraph follow this one.
+    pub rest: usize,
+    /// The exclusions the line was broken against.
+    pub generation: u32,
+    /// The line was shortened or moved down by an object.
+    pub narrow: bool,
+}
+
+impl std::fmt::Debug for Resume {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Resume")
+            .field("atom", &self.atom)
+            .field("row", &self.row)
+            .field("rest", &self.rest)
+            .finish()
+    }
+}
+
+impl PartialEq for Resume {
+    fn eq(&self, other: &Resume) -> bool {
+        Arc::ptr_eq(&self.prepared.atoms, &other.prepared.atoms)
+            && self.atom == other.atom
+            && self.row == other.row
+    }
+}
+
+/// The room a row of text has beside floating objects: the free spans
+/// across the paragraph's width, left to right, and the lowest point the
+/// row can move down to when none is wide enough.
+pub(crate) struct Band {
+    pub spans: Vec<(f32, f32)>,
+    pub below: f32,
+}
+
+/// Answers, for a row `height` points tall starting `top` points below the
+/// paragraph's first row, the room it has; `None` when nothing is in the
+/// way.
+pub(crate) type Room<'r> = &'r dyn Fn(f32, f32) -> Option<Band>;
+
+impl Resume {
+    /// Breaks the paragraph again from this slab's line with `room` and
+    /// returns the slabs from here on, tagged with `generation`.
+    pub(crate) fn rewrap(&self, ctx: &mut Ctx<'_>, room: Room<'_>, generation: u32) -> Vec<Slab> {
+        let settings = &self.prepared.settings;
+        let mut atoms = (*self.prepared.atoms).clone();
+        let lines = break_rows(ctx, settings, &mut atoms, self.atom, self.row == 0, room);
+        let count = self.row + rows(&lines);
+        let mut slabs = build_slabs(ctx, settings, &atoms, &lines, self.row, count);
+        let prepared = Prepared {
+            settings: settings.clone(),
+            atoms: Arc::new(atoms),
+        };
+        attach_resume(&mut slabs, &prepared, &lines, self.row, generation);
+        slabs
+    }
+}
+
+/// The number of rows in `lines`: pieces joined to the line before share
+/// its row.
+fn rows(lines: &[Line]) -> usize {
+    lines.iter().filter(|line| !line.joined).count()
+}
+
+/// The groups of lines that share a row.
+fn row_groups(lines: &[Line]) -> impl Iterator<Item = &[Line]> {
+    let mut rest = lines;
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let end = rest
+            .iter()
+            .skip(1)
+            .position(|line| !line.joined)
+            .map_or(rest.len(), |p| p + 1);
+        let (group, tail) = rest.split_at(end);
+        rest = tail;
+        Some(group)
+    })
+}
+
+fn attach_resume(
+    slabs: &mut [Slab],
+    prepared: &Prepared,
+    lines: &[Line],
+    first_row: usize,
+    generation: u32,
+) {
+    let total = slabs.len();
+    for (index, (slab, group)) in slabs.iter_mut().zip(row_groups(lines)).enumerate() {
+        slab.resume = Some(Box::new(Resume {
+            prepared: prepared.clone(),
+            atom: group[0].start,
+            row: first_row + index,
+            rest: total - index - 1,
+            generation,
+            narrow: group.iter().any(|line| line.narrow),
+        }));
+    }
+}
+
+/// The height and baseline of a row holding `atoms`, under the paragraph's
+/// line spacing.
+fn row_metrics<'a>(settings: &Settings, atoms: impl Iterator<Item = &'a Atom>) -> (f32, f32) {
+    let (mut ascent, mut descent, mut object_height, mut object_descent) =
+        (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    for atom in atoms.filter(|a| a.kind != Kind::Tab) {
+        match atom.kind == Kind::Object {
+            true => {
+                object_height = object_height.max(atom.ascent);
+                object_descent = object_descent.max(atom.descent);
+            }
+            false => {
+                ascent = ascent.max(atom.ascent);
+                descent = descent.max(atom.descent);
+            }
+        }
+    }
+    if ascent + descent <= 0.0 {
+        (ascent, descent) = settings.mark;
+    }
+    let lowest = descent.max(object_descent);
+    let natural = ascent.max(object_height) + lowest;
+    let height = match settings.rule {
+        LineRule::Auto => {
+            let text = (ascent + descent) * settings.line_value.max(1) as f32 / 240.0;
+            (text + lowest - descent).max(object_height + lowest)
+        }
+        LineRule::Exact => twips_to_pt(settings.line_value).max(0.1),
+        LineRule::AtLeast => natural.max(twips_to_pt(settings.line_value)),
+    };
+    (height, height - lowest)
+}
+
+/// One slab per row of `lines`, the first being row `first_row` of a
+/// paragraph of `count` rows.
+fn build_slabs(
+    ctx: &mut Ctx<'_>,
+    settings: &Settings,
+    atoms: &[Atom],
+    lines: &[Line],
+    first_row: usize,
+    count: usize,
+) -> Vec<Slab> {
+    let geometry = &settings.geometry;
+    let rtl = settings.rtl;
+    let mut slabs = Vec::with_capacity(lines.len());
+    let mut pending_break: Option<Break> = None;
+    let groups = row_groups(lines);
+    for (offset, group) in groups.enumerate() {
+        let index = first_row + offset;
+        let placed = group
+            .iter()
+            .flat_map(|line| line.placed.iter().map(|p| &atoms[p.atom]));
+        let (height, baseline) = row_metrics(settings, placed);
+        let drop = group[0].drop;
+        let mut items = Vec::new();
+        if let Some(fill) = settings.shading {
+            let (x0, x1) = geometry.extent(rtl);
+            items.push(Item::Rect {
+                rect: Rect::new(x0, 0.0, x1 - x0, height + drop),
+                color: fill,
+            });
+        }
+        let is_last = index + 1 == count;
+        let pieces = group.len();
+        for (piece, line) in group.iter().enumerate() {
+            emit_line(
+                ctx,
+                &settings.styles,
+                atoms,
+                line,
+                geometry,
+                settings.justification,
+                baseline + drop,
+                is_last && piece + 1 == pieces,
+                rtl,
+                &mut items,
+            );
+        }
+        if let Some(borders) = settings.borders {
+            let (joins_previous, joins_next) = settings.border_group;
+            paragraph_borders(
+                &borders,
+                geometry.extent(rtl),
+                height + drop,
+                index == 0 && !joins_previous,
+                is_last && !joins_next,
+                is_last && joins_next,
+                &mut items,
+            );
+        }
+        let mut slab = Slab::new(height + drop, items);
+        slab.extent = group
+            .iter()
+            .map(|line| line_extent(atoms, line, geometry))
+            .fold(0.0, f32::max);
+        slab.break_before = pending_break.take().filter(|b| *b != Break::Line);
+        if let Some(LineEnd::Mandatory(kind)) = group.last().map(|line| line.end) {
+            pending_break = Some(kind);
+        }
+        slab.notes = group
+            .iter()
+            .flat_map(|line| line.placed.iter())
+            .flat_map(|p| atoms[p.atom].notes.iter().copied())
+            .collect();
+        if index == 0 {
+            slab.notes.extend(settings.notes.iter().copied());
+        }
+        let first_two = settings.widow_control && count >= 2 && index == 0;
+        let last_two = settings.widow_control && count >= 2 && index + 2 == count;
+        slab.keep_with_next = (settings.keep_lines && !is_last)
+            || first_two
+            || last_two
+            || (settings.keep_next && is_last);
+        slabs.push(slab);
+    }
+    if let (Some(last), Some(kind)) = (slabs.last_mut(), pending_break) {
+        last.break_after = Some(kind).filter(|k| *k != Break::Line);
+    }
+    slabs
 }
 
 /// ECMA-376 Part 1 §17.3.1.24: paragraphs with identical borders form one
@@ -847,6 +1043,9 @@ fn build_atoms(
                     vertical,
                     behind: behind_text,
                     content,
+                    wrap: drawing.wrap.clone(),
+                    local: None,
+                    id: ctx.next_float(),
                 });
             }
             Elem::Note(id) => match word.as_mut() {
@@ -932,6 +1131,125 @@ fn split_atom(atoms: &mut Vec<Atom>, index: usize, room: f32) {
     atoms.insert(index + 1, tail);
 }
 
+/// Fills one line from atom `start` between `left` and `right` and returns
+/// it with the atom the next line starts at. A strict fill gives `None`
+/// instead of overflowing when the first atom does not fit.
+#[allow(clippy::too_many_arguments)]
+fn fill_line(
+    ctx: &mut Ctx<'_>,
+    styles: &[RunStyle],
+    atoms: &mut Vec<Atom>,
+    g: &Geometry,
+    start: usize,
+    left: f32,
+    right: f32,
+    strict: bool,
+) -> Option<(Line, usize)> {
+    let mut x = left;
+    let mut placed: Vec<Placed> = Vec::new();
+    let mut last_break: Option<usize> = None;
+    let mut end = LineEnd::Last;
+    let mut i = start;
+    while i < atoms.len() {
+        let kind = atoms[i].kind;
+        if let Kind::Break(b) = kind {
+            placed.push(Placed {
+                atom: i,
+                x,
+                width: 0.0,
+            });
+            i += 1;
+            end = LineEnd::Mandatory(b);
+            break;
+        }
+        let width = match kind {
+            Kind::Tab => {
+                let (stop, alignment, _) = g.next_stop(x);
+                let (w, decimal) = lookahead(atoms, i + 1);
+                let target = match alignment {
+                    TabAlignment::Right => stop - w,
+                    TabAlignment::Center => stop - w / 2.0,
+                    TabAlignment::Decimal => stop - decimal,
+                    _ => stop,
+                };
+                (target - x).max(0.0).min((right - x).max(0.0))
+            }
+            _ => atoms[i].width,
+        };
+        let has_content = placed.iter().any(|p| !atoms[p.atom].is_space());
+        let overflows = x + width > right + 0.01;
+        if overflows && !matches!(kind, Kind::Space | Kind::Tab) && has_content {
+            if let Some(bp) = last_break {
+                placed.truncate(bp + 1);
+                i = placed.last().map_or(i, |p| p.atom + 1);
+            }
+            end = LineEnd::Wrap;
+            break;
+        }
+        if overflows && strict && !matches!(kind, Kind::Space | Kind::Tab) {
+            return None;
+        }
+        if overflows && kind == Kind::Word && !has_content {
+            split_atom(atoms, i, (right - x).max(0.0));
+        }
+        let width = if kind == Kind::Word {
+            atoms[i].width
+        } else {
+            width
+        };
+        placed.push(Placed { atom: i, x, width });
+        x += width;
+        if atoms[i].break_after {
+            last_break = Some(placed.len() - 1);
+        }
+        i += 1;
+    }
+    if end == LineEnd::Wrap && placed.is_empty() && i < atoms.len() {
+        if strict {
+            return None;
+        }
+        placed.push(Placed {
+            atom: i,
+            x,
+            width: atoms[i].width,
+        });
+        i += 1;
+    }
+    if end == LineEnd::Wrap {
+        hyphenate(ctx, styles, atoms, &mut placed);
+    }
+    let line = Line {
+        placed,
+        end,
+        start,
+        right,
+        joined: false,
+        drop: 0.0,
+        narrow: false,
+    };
+    Some((line, i))
+}
+
+/// The empty line a paragraph ends with after a break at its end.
+fn empty_line(start: usize, right: f32) -> Line {
+    Line {
+        placed: Vec::new(),
+        end: LineEnd::Last,
+        start,
+        right,
+        joined: false,
+        drop: 0.0,
+        narrow: false,
+    }
+}
+
+/// Settles the end of a line that fills a paragraph's last atoms.
+fn finish_end(line: &mut Line, done: bool) {
+    if done && !matches!(line.end, LineEnd::Mandatory(_)) {
+        line.end = LineEnd::Last;
+    }
+}
+
 fn break_lines(
     ctx: &mut Ctx<'_>,
     styles: &[RunStyle],
@@ -942,102 +1260,185 @@ fn break_lines(
     let mut start = 0usize;
     let max_x = g.max_x();
     loop {
-        let first = lines.is_empty();
-        let line_left = if first {
-            g.left + g.first_offset
-        } else {
-            g.left
+        let line_left = match lines.is_empty() {
+            true => g.left + g.first_offset,
+            false => g.left,
         };
-        let mut x = line_left;
-        let mut placed: Vec<Placed> = Vec::new();
-        let mut last_break: Option<usize> = None;
-        let mut end = LineEnd::Last;
-        let mut i = start;
-        while i < atoms.len() {
-            let kind = atoms[i].kind;
-            if let Kind::Break(b) = kind {
-                placed.push(Placed {
-                    atom: i,
-                    x,
-                    width: 0.0,
-                });
-                i += 1;
-                end = LineEnd::Mandatory(b);
-                break;
-            }
-            let width = match kind {
-                Kind::Tab => {
-                    let (stop, alignment, _) = g.next_stop(x);
-                    let (w, decimal) = lookahead(atoms, i + 1);
-                    let target = match alignment {
-                        TabAlignment::Right => stop - w,
-                        TabAlignment::Center => stop - w / 2.0,
-                        TabAlignment::Decimal => stop - decimal,
-                        _ => stop,
-                    };
-                    (target - x).max(0.0).min((max_x - x).max(0.0))
-                }
-                _ => atoms[i].width,
-            };
-            let has_content = placed.iter().any(|p| !atoms[p.atom].is_space());
-            let overflows = x + width > max_x + 0.01;
-            if overflows && !matches!(kind, Kind::Space | Kind::Tab) && has_content {
-                if let Some(bp) = last_break {
-                    placed.truncate(bp + 1);
-                    i = placed.last().map_or(i, |p| p.atom + 1);
-                }
-                end = LineEnd::Wrap;
-                break;
-            }
-            if overflows && kind == Kind::Word && !has_content {
-                split_atom(atoms, i, (max_x - x).max(0.0));
-            }
-            let width = if kind == Kind::Word {
-                atoms[i].width
-            } else {
-                width
-            };
-            placed.push(Placed { atom: i, x, width });
-            x += width;
-            if atoms[i].break_after {
-                last_break = Some(placed.len() - 1);
-            }
-            i += 1;
-        }
-        if end == LineEnd::Wrap && placed.is_empty() && i < atoms.len() {
-            placed.push(Placed {
-                atom: i,
-                x,
-                width: atoms[i].width,
-            });
-            i += 1;
-        }
-        if end == LineEnd::Wrap {
-            hyphenate(ctx, styles, atoms, &mut placed);
-        }
-        start = i;
+        let Some((mut line, next)) =
+            fill_line(ctx, styles, atoms, g, start, line_left, max_x, false)
+        else {
+            break;
+        };
+        start = next;
         let done = start >= atoms.len();
-        let mandatory = matches!(end, LineEnd::Mandatory(_));
-        lines.push(Line {
-            placed,
-            end: if done && !mandatory {
-                LineEnd::Last
-            } else {
-                end
-            },
-        });
+        let mandatory = matches!(line.end, LineEnd::Mandatory(_));
+        finish_end(&mut line, done);
+        lines.push(line);
         if done && !mandatory {
             break;
         }
         if done {
-            lines.push(Line {
-                placed: Vec::new(),
-                end: LineEnd::Last,
-            });
+            lines.push(empty_line(start, max_x));
             break;
         }
     }
     lines
+}
+
+/// The narrowest span beside an object a line goes into, as LibreOffice
+/// fills them in documents from Word.
+const MIN_SPAN: f32 = 15.0;
+const MAX_ROWS: usize = 100_000;
+
+/// The height a row starting at atom `start` would have at full width.
+fn estimate_height(settings: &Settings, atoms: &[Atom], start: usize, room: f32) -> f32 {
+    let mut used = 0.0;
+    let fitting = atoms[start.min(atoms.len())..].iter().take_while(|atom| {
+        let fits = used <= room || used == 0.0;
+        used += atom.width;
+        fits && !matches!(atom.kind, Kind::Break(_))
+    });
+    row_metrics(settings, fitting).0
+}
+
+/// The spans of a band a row fills, in the paragraph's logical order and
+/// within its indents.
+fn row_spans(settings: &Settings, band: &Band, left: f32, right: f32) -> Vec<(f32, f32)> {
+    let width = settings.geometry.width;
+    let logical: Vec<(f32, f32)> = match settings.rtl {
+        true => band
+            .spans
+            .iter()
+            .rev()
+            .map(|&(a, b)| (width - b, width - a))
+            .collect(),
+        false => band.spans.clone(),
+    };
+    logical
+        .into_iter()
+        .map(|(a, b)| (a.max(left), b.min(right)))
+        .filter(|(a, b)| b - a >= MIN_SPAN)
+        .collect()
+}
+
+/// Breaks a paragraph's lines from atom `start` into rows that leave out
+/// what `room` says is taken, each row split into a line per free span:
+/// text flows on both sides of an object, and a row with no span wide
+/// enough moves down below the object.
+fn break_rows(
+    ctx: &mut Ctx<'_>,
+    settings: &Settings,
+    atoms: &mut Vec<Atom>,
+    mut start: usize,
+    mut first: bool,
+    room: Room<'_>,
+) -> Vec<Line> {
+    let g = &settings.geometry;
+    let styles = &settings.styles;
+    let max_x = g.max_x();
+    let mut lines: Vec<Line> = Vec::new();
+    let mut y = 0.0f32;
+    let mut drop = 0.0f32;
+    for _ in 0..MAX_ROWS {
+        if start >= atoms.len() && !lines.is_empty() {
+            break;
+        }
+        let left = match first {
+            true => g.left + g.first_offset,
+            false => g.left,
+        };
+        let estimate = estimate_height(settings, atoms, start, max_x - left);
+        let mut pieces = match room(y, estimate) {
+            None => Vec::new(),
+            Some(band) => {
+                let spans = row_spans(settings, &band, left, max_x);
+                let pieces = fill_spans(ctx, styles, atoms, g, start, &spans);
+                let whole = spans.first() == Some(&(left, max_x));
+                if pieces.is_empty() && !whole && band.below > y + 0.01 && band.below.is_finite() {
+                    drop += band.below - y;
+                    y = band.below;
+                    continue;
+                }
+                pieces
+            }
+        };
+        if pieces.is_empty() {
+            let Some(whole) = fill_line(ctx, styles, atoms, g, start, left, max_x, false) else {
+                break;
+            };
+            pieces.push(whole);
+        }
+        let height = row_metrics(
+            settings,
+            pieces
+                .iter()
+                .flat_map(|(line, _)| line.placed.iter().map(|p| &atoms[p.atom])),
+        )
+        .0;
+        let narrow = pieces.len() > 1 || pieces[0].0.right < max_x - 0.01;
+        if height > estimate + 0.5 && !narrow {
+            if let Some(band) = room(y, height) {
+                let spans = row_spans(settings, &band, left, max_x);
+                let refit = fill_spans(ctx, styles, atoms, g, start, &spans);
+                if !refit.is_empty() {
+                    pieces = refit;
+                }
+            }
+        }
+        let count = pieces.len();
+        let mut next = start;
+        for (index, (mut line, after)) in pieces.into_iter().enumerate() {
+            line.joined = index > 0;
+            line.narrow = drop > 0.0 || count > 1 || line.right < max_x - 0.01;
+            if index == 0 {
+                line.drop = drop;
+            }
+            next = after;
+            finish_end(&mut line, next >= atoms.len());
+            lines.push(line);
+        }
+        drop = 0.0;
+        y += height;
+        first = false;
+        start = next;
+        let mandatory = lines
+            .last()
+            .is_some_and(|line| matches!(line.end, LineEnd::Mandatory(_)));
+        if start >= atoms.len() && mandatory {
+            lines.push(empty_line(start, max_x));
+            break;
+        }
+    }
+    lines
+}
+
+/// Fills the spans of one row in turn, each with a strict fill, until the
+/// text or the row ends.
+fn fill_spans(
+    ctx: &mut Ctx<'_>,
+    styles: &[RunStyle],
+    atoms: &mut Vec<Atom>,
+    g: &Geometry,
+    start: usize,
+    spans: &[(f32, f32)],
+) -> Vec<(Line, usize)> {
+    let mut pieces: Vec<(Line, usize)> = Vec::new();
+    let mut at = start;
+    for &(left, right) in spans {
+        if at >= atoms.len() {
+            break;
+        }
+        let Some((line, next)) = fill_line(ctx, styles, atoms, g, at, left, right, true) else {
+            continue;
+        };
+        let ended = matches!(line.end, LineEnd::Mandatory(_));
+        at = next;
+        pieces.push((line, next));
+        if ended {
+            break;
+        }
+    }
+    pieces
 }
 
 /// A line broken at a soft hyphen shows a hyphen there.
@@ -1147,7 +1548,7 @@ fn emit_line(
     };
     let placed = &line.placed[..=content_end];
     let end_x = placed.last().map_or(0.0, |p| p.x + p.width);
-    let slack = (g.max_x() - end_x).max(0.0);
+    let slack = (line.right - end_x).max(0.0);
     let last_tab = placed
         .iter()
         .rposition(|p| atoms[p.atom].kind == Kind::Tab)

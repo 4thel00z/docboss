@@ -223,6 +223,7 @@ pub fn drawing(media: u32, description: &str) -> Inline {
         media: Some(MediaId(media)),
         width: 952500,
         height: 476250,
+        wrap: Default::default(),
         placement: DrawingPlacement::Inline,
         name: Some("Picture 1".into()),
         description: Some(description.into()),
@@ -240,6 +241,7 @@ pub fn text_box(blocks: Vec<Block>) -> Inline {
         media: None,
         width: 1905000,
         height: 952500,
+        wrap: Default::default(),
         placement: DrawingPlacement::Anchored {
             horizontal: DrawingPosition::offset(PositionBase::Column, 0),
             vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),

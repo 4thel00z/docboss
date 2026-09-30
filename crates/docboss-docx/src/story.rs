@@ -7,8 +7,8 @@ use docboss_model::{
     Block, Break, ChildBox, Color, DashPattern, Diagnostic, Drawing, DrawingPlacement,
     DrawingPosition, Field, Geometry, Gradient, GradientPath, Hyperlink, Inline, LineCap, LineJoin,
     MediaId, Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent,
-    RunProperties, Section, SectionProperties, Table, TableCell, TableRow, TextDirection,
-    VerticalAlign,
+    RunProperties, Section, SectionProperties, Table, TableCell, TableRow, TextDirection, TextWrap,
+    VerticalAlign, WrapKind, WrapSide,
 };
 use docboss_xml::{Element, Ns, Reader};
 
@@ -259,6 +259,8 @@ fn css_property<'s>(style: &'s str, name: &str) -> Option<&'s str> {
 }
 
 const DEFAULT_INSETS: [i64; 4] = [91_440, 45_720, 91_440, 45_720];
+const MAX_POLYGON: usize = 1024;
+const VML_WRAP_DISTANCE: i64 = 114_300;
 
 /// A named color: DrawingML preset names (ECMA-376 Part 1 §20.1.10.48) and
 /// VML names, with the light and dark theme slots read as white and black.
@@ -718,12 +720,43 @@ fn vml_box(style: &str, info: &mut DrawingInfo) {
             .unwrap_or(0)
             .max(0);
     }
+    info.hidden |= css_property(style, "visibility").is_some_and(|v| v == "hidden");
     if css_property(style, "position").is_some_and(|p| p == "absolute") {
         info.anchored = true;
         info.horizontal = vml_position(style, true);
         info.vertical = vml_position(style, false);
         info.behind = css_property(style, "z-index").is_some_and(|z| z.starts_with('-'));
+        let names = [
+            ("mso-wrap-distance-top", 0),
+            ("mso-wrap-distance-bottom", 0),
+            ("mso-wrap-distance-left", VML_WRAP_DISTANCE),
+            ("mso-wrap-distance-right", VML_WRAP_DISTANCE),
+        ];
+        for (slot, (name, default)) in names.into_iter().enumerate() {
+            info.wrap.distance[slot] = css_property(style, name)
+                .and_then(css_length)
+                .unwrap_or(default)
+                .clamp(0, 51_206_400);
+        }
     }
+}
+
+/// The text wrapping `w10:wrap` gives a VML shape: its `type` and `side`.
+/// A shape without one lies in front of the text.
+fn vml_wrap(e: &Element<'_>, wrap: &mut TextWrap) {
+    wrap.kind = match e.attr_raw(Ns::NONE, "type") {
+        Some("square") => WrapKind::Square,
+        Some("tight") => WrapKind::Tight,
+        Some("through") => WrapKind::Through,
+        Some("topAndBottom") => WrapKind::TopAndBottom,
+        _ => WrapKind::None,
+    };
+    wrap.side = match e.attr_raw(Ns::NONE, "side") {
+        Some("left") => WrapSide::Left,
+        Some("right") => WrapSide::Right,
+        Some("largest") => WrapSide::Largest,
+        _ => WrapSide::Both,
+    };
 }
 
 /// The description, fill, outline and geometry of a VML shape element
@@ -931,6 +964,8 @@ struct DrawingInfo {
     horizontal: DrawingPosition,
     vertical: DrawingPosition,
     behind: bool,
+    wrap: TextWrap,
+    hidden: bool,
 }
 
 impl DrawingInfo {
@@ -941,6 +976,7 @@ impl DrawingInfo {
                 width: 0,
                 height: 0,
                 placement: DrawingPlacement::Inline,
+                wrap: Default::default(),
                 name: None,
                 description: None,
                 text_box: Vec::new(),
@@ -958,6 +994,8 @@ impl DrawingInfo {
             horizontal: DrawingPosition::offset(PositionBase::Column, 0),
             vertical: DrawingPosition::offset(PositionBase::Paragraph, 0),
             behind: false,
+            wrap: TextWrap::default(),
+            hidden: false,
         }
     }
 
@@ -968,6 +1006,7 @@ impl DrawingInfo {
                 vertical: self.vertical,
                 behind_text: self.behind,
             };
+            self.drawing.wrap = self.wrap;
         }
         self.drawing
     }
@@ -1027,6 +1066,28 @@ fn vml_position(style: &str, horizontal: bool) -> DrawingPosition {
         align,
         offset,
     }
+}
+
+/// The `distT`, `distB`, `distL` and `distR` attributes of `wp:anchor` or
+/// a wrap element (ECMA-376 Part 1 §20.4.2.3, §20.4.3.6) over `distance`.
+fn wrap_distances(e: &Element<'_>, distance: &mut [i64; 4]) {
+    for (slot, name) in ["distT", "distB", "distL", "distR"].into_iter().enumerate() {
+        if let Some(value) = e.attr_raw(Ns::NONE, name).and_then(int) {
+            distance[slot] = value.clamp(0, 51_206_400);
+        }
+    }
+}
+
+/// A `wrapText` value (ECMA-376 Part 1 §20.4.3.7).
+fn wrap_side(value: &str) -> Option<WrapSide> {
+    let side = match value {
+        "bothSides" => WrapSide::Both,
+        "left" => WrapSide::Left,
+        "right" => WrapSide::Right,
+        "largest" => WrapSide::Largest,
+        _ => return None,
+    };
+    Some(side)
 }
 
 /// A `wp:align` value (ECMA-376 Part 1 §20.4.3.1, §20.4.3.2).
@@ -1422,7 +1483,9 @@ impl<'p> StoryParser<'p> {
             "drawing" => {
                 let mut info = DrawingInfo::new();
                 self.drawing_children(reader, &mut info);
-                content.push(RunContent::Drawing(Box::new(info.finish())));
+                if self.shown(&info) {
+                    content.push(RunContent::Drawing(Box::new(info.finish())));
+                }
             }
             "pict" | "object" => {
                 let mut info = DrawingInfo::new();
@@ -1431,12 +1494,26 @@ impl<'p> StoryParser<'p> {
                     || !info.drawing.text_box.is_empty()
                     || info.drawing.geometry.is_some()
                     || !info.drawing.members.is_empty();
-                if drawn {
+                if drawn && self.shown(&info) {
                     content.push(RunContent::Drawing(Box::new(info.finish())));
                 }
             }
             _ => {}
         }
+    }
+
+    /// Whether a drawing is shown: one marked hidden (`wp:docPr hidden`,
+    /// ECMA-376 Part 1 §20.4.2.5, or a VML `visibility:hidden`) is left out
+    /// and reported.
+    fn shown(&mut self, info: &DrawingInfo) -> bool {
+        if !info.hidden {
+            return true;
+        }
+        self.diagnostics.push(Diagnostic::dropped(
+            self.ctx.part,
+            "a hidden drawing is left out",
+        ));
+        false
     }
 
     fn media_for(&mut self, id: &str) -> Option<MediaId> {
@@ -1498,6 +1575,14 @@ impl<'p> StoryParser<'p> {
                     info.behind = e
                         .attr_raw(Ns::NONE, "behindDoc")
                         .is_some_and(|v| v == "1" || v == "true");
+                    wrap_distances(&e, &mut info.wrap.distance);
+                }
+                (
+                    Ns::WP,
+                    "wrapNone" | "wrapSquare" | "wrapTight" | "wrapThrough" | "wrapTopAndBottom",
+                ) => {
+                    self.wrap(reader, &e, &mut info.wrap);
+                    return;
                 }
                 (Ns::WP, "extent") => {
                     info.drawing.width =
@@ -1507,6 +1592,9 @@ impl<'p> StoryParser<'p> {
                     return;
                 }
                 (Ns::WP, "docPr") => {
+                    info.hidden = e
+                        .attr_raw(Ns::NONE, "hidden")
+                        .is_some_and(|v| v == "1" || v == "true");
                     info.drawing.name = e
                         .attr(Ns::NONE, "name")
                         .map(Into::into)
@@ -1622,6 +1710,48 @@ impl<'p> StoryParser<'p> {
                 _ => {}
             }
             self.drawing_children(reader, info);
+        });
+    }
+
+    /// The text wrapping of an anchored drawing, with its distances, side and
+    /// wrap polygon.
+    /// ECMA-376 Part 1 §20.4.2.15, §20.4.2.17, §20.4.2.18, §20.4.2.19, §20.4.2.20.
+    /// ECMA-376 Part 1 §20.4.3.7, §20.4.2.16, §20.4.2.14, §20.4.2.9.
+    fn wrap(&mut self, reader: &mut Reader<'_>, e: &Element<'_>, wrap: &mut TextWrap) {
+        wrap.kind = match e.local {
+            "wrapSquare" => WrapKind::Square,
+            "wrapTight" => WrapKind::Tight,
+            "wrapThrough" => WrapKind::Through,
+            "wrapTopAndBottom" => WrapKind::TopAndBottom,
+            _ => WrapKind::None,
+        };
+        wrap_distances(e, &mut wrap.distance);
+        if let Some(value) = e.attr_raw(Ns::NONE, "wrapText") {
+            match wrap_side(value) {
+                Some(side) => wrap.side = side,
+                None => self.diagnostics.push(Diagnostic::approximated(
+                    self.ctx.part,
+                    format!("wrapText=\"{value}\" is read as bothSides"),
+                )),
+            }
+        }
+        children(reader, |reader, child| {
+            if child.local != "wrapPolygon" {
+                return;
+            }
+            children(reader, |_, point| {
+                if !matches!(point.local, "start" | "lineTo") || wrap.polygon.len() >= MAX_POLYGON {
+                    return;
+                }
+                let at = |name: &str| {
+                    point
+                        .attr_raw(Ns::NONE, name)
+                        .and_then(int)
+                        .unwrap_or(0)
+                        .clamp(-216_000, 216_000) as i32
+                };
+                wrap.polygon.push((at("x"), at("y")));
+            });
         });
     }
 
@@ -1755,6 +1885,10 @@ impl<'p> StoryParser<'p> {
                 }
                 (Ns::W, "txbxContent") => {
                     self.text_box(reader, info);
+                    return;
+                }
+                (Ns::W10, "wrap") => {
+                    vml_wrap(&e, &mut info.wrap);
                     return;
                 }
                 _ => {}

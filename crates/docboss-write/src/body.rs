@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use docboss_model::{
     Block, Break, Document, Drawing, DrawingPlacement, DrawingPosition, Field, Hyperlink, Inline,
     Paragraph, PositionAlign, PositionBase, Revision, RevisionKind, Run, RunContent, Table,
-    TableCell,
+    TableCell, TextWrap, WrapKind, WrapSide,
 };
 
 use crate::package::{office_rel, Rels, NS_A, NS_PIC};
@@ -312,13 +312,14 @@ impl<'s, 'a> Story<'s, 'a> {
             } => {
                 let behind = if behind_text { "1" } else { "0" };
                 let height = id.as_str();
+                let [top, bottom, left, right] = drawing.wrap.distance.map(|d| d.to_string());
                 xml.open(
                     "wp:anchor",
                     &[
-                        ("distT", "0"),
-                        ("distB", "0"),
-                        ("distL", "114300"),
-                        ("distR", "114300"),
+                        ("distT", &top),
+                        ("distB", &bottom),
+                        ("distL", &left),
+                        ("distR", &right),
                         ("simplePos", "0"),
                         ("relativeHeight", height),
                         ("behindDoc", behind),
@@ -337,12 +338,8 @@ impl<'s, 'a> Story<'s, 'a> {
             "wp:effectExtent",
             &[("l", "0"), ("t", "0"), ("r", "0"), ("b", "0")],
         );
-        if let DrawingPlacement::Anchored { behind_text, .. } = drawing.placement {
-            if behind_text {
-                xml.empty("wp:wrapNone", &[]);
-            } else {
-                xml.empty("wp:wrapSquare", &[("wrapText", "bothSides")]);
-            }
+        if let DrawingPlacement::Anchored { .. } = drawing.placement {
+            wrap(xml, &drawing.wrap);
         }
         let mut doc_pr = vec![("id", id.as_str()), ("name", name)];
         if let Some(description) = drawing.description.as_deref() {
@@ -418,6 +415,44 @@ impl<'s, 'a> Story<'s, 'a> {
         self.blocks(&cell.blocks, true);
         self.xml.close("w:tc");
     }
+}
+
+/// A floating drawing's wrap element, its `wrapText` and, under tight and
+/// through wrapping, its polygon.
+/// ECMA-376 Part 1 §20.4.2.15, §20.4.2.17, §20.4.2.18, §20.4.2.19, §20.4.2.20.
+/// ECMA-376 Part 1 §20.4.3.7, §20.4.2.16.
+fn wrap(xml: &mut Xml, wrap: &TextWrap) {
+    let element = match wrap.kind {
+        WrapKind::None => "wp:wrapNone",
+        WrapKind::Square => "wp:wrapSquare",
+        WrapKind::Tight => "wp:wrapTight",
+        WrapKind::Through => "wp:wrapThrough",
+        WrapKind::TopAndBottom => "wp:wrapTopAndBottom",
+    };
+    let side = match wrap.side {
+        WrapSide::Both => "bothSides",
+        WrapSide::Left => "left",
+        WrapSide::Right => "right",
+        WrapSide::Largest => "largest",
+    };
+    let attributes: &[(&str, &str)] = match wrap.kind {
+        WrapKind::None | WrapKind::TopAndBottom => &[],
+        _ => &[("wrapText", side)],
+    };
+    let polygon =
+        matches!(wrap.kind, WrapKind::Tight | WrapKind::Through) && wrap.polygon.len() >= 3;
+    if !polygon {
+        xml.empty(element, attributes);
+        return;
+    }
+    xml.open(element, attributes);
+    xml.open("wp:wrapPolygon", &[("edited", "0")]);
+    for (index, (x, y)) in wrap.polygon.iter().enumerate() {
+        let name = if index == 0 { "wp:start" } else { "wp:lineTo" };
+        xml.empty(name, &[("x", &x.to_string()), ("y", &y.to_string())]);
+    }
+    xml.close("wp:wrapPolygon");
+    xml.close(element);
 }
 
 /// A floating drawing's `wp:positionH` or `wp:positionV`: its

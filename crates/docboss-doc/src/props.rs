@@ -1,9 +1,10 @@
 //! Conversion of property modifiers ([MS-DOC] §2.6) into model properties.
 
 use docboss_model::{
-    Border, BorderStyle, Borders, Color, Justification, LineRule, NumberingRef, Orientation,
-    PageBorderDisplay, PageBorderOffset, ParagraphProperties, RunProperties, SectionBreak,
-    SectionProperties, Shading, TabAlignment, TabLeader, TabStop, Underline, VerticalAlign,
+    Border, BorderStyle, Borders, Color, DrawingPosition, DropCap, FrameProperties, Justification,
+    LineRule, NumberingRef, Orientation, PageBorderDisplay, PageBorderOffset, ParagraphProperties,
+    PositionAlign, PositionBase, RunProperties, SectionBreak, SectionProperties, Shading,
+    TabAlignment, TabLeader, TabStop, Underline, VerticalAlign, WrapKind,
 };
 
 use crate::bytes::{i16_at, u16_at, u32_at, u8_at};
@@ -449,7 +450,145 @@ fn justification(value: u8) -> Justification {
     }
 }
 
+const TWIPS_TO_EMU: i64 = 635;
+
+/// A frame as a positioned paragraph starts: at the top margin and the left
+/// of the column, sized to its content, text wrapping around it.
+fn default_frame() -> FrameProperties {
+    FrameProperties {
+        width: None,
+        height: 0,
+        height_rule: LineRule::Auto,
+        horizontal: DrawingPosition::offset(PositionBase::Column, 0),
+        vertical: DrawingPosition::offset(PositionBase::Margin, 0),
+        wrap: WrapKind::Square,
+        h_space: 0,
+        v_space: 0,
+        drop_cap: DropCap::None,
+        lines: 1,
+    }
+}
+
+/// The bases a PositionCodeOperand ([MS-DOC] §2.9.208) gives the frame
+/// or table position: pcVert, then pcHorz; `None` for "not positioned".
+pub fn position_code(value: u8) -> (Option<PositionBase>, Option<PositionBase>) {
+    let vertical = match (value >> 4) & 3 {
+        0 => Some(PositionBase::Margin),
+        1 => Some(PositionBase::Page),
+        2 => Some(PositionBase::Paragraph),
+        _ => None,
+    };
+    let horizontal = match (value >> 6) & 3 {
+        0 => Some(PositionBase::Column),
+        1 => Some(PositionBase::Margin),
+        2 => Some(PositionBase::Page),
+        _ => None,
+    };
+    (vertical, horizontal)
+}
+
+/// An XAS_plusOne or YAS_plusOne position ([MS-DOC] §2.9.351, §2.9.357)
+/// over `position`: the special values align (ST_XAlign, ST_YAlign), any
+/// other is the offset plus one. A vertical 0 is inline: at the paragraph.
+pub fn plus_one_position(value: i16, horizontal: bool, position: &mut DrawingPosition) {
+    let aligns: &[(i16, PositionAlign)] = match horizontal {
+        true => &[
+            (0, PositionAlign::Start),
+            (-4, PositionAlign::Center),
+            (-8, PositionAlign::End),
+            (-12, PositionAlign::Inside),
+            (-16, PositionAlign::Outside),
+        ],
+        false => &[
+            (-4, PositionAlign::Start),
+            (-8, PositionAlign::Center),
+            (-12, PositionAlign::End),
+            (-16, PositionAlign::Inside),
+            (-20, PositionAlign::Outside),
+        ],
+    };
+    position.align = aligns.iter().find(|(v, _)| *v == value).map(|(_, a)| *a);
+    position.offset = match position.align {
+        Some(_) => 0,
+        None => (i64::from(value) - 1).max(-31_680) * TWIPS_TO_EMU,
+    };
+    if !horizontal && value == 0 {
+        position.base = PositionBase::Paragraph;
+        position.offset = 0;
+    }
+}
+
+/// The frame sprms: sprmPPc, sprmPDxaAbs, sprmPDyaAbs, sprmPDxaWidth,
+/// sprmPWr, sprmPWHeightAbs, sprmPDcs, sprmPDyaFromText, sprmPDxaFromText.
+/// [MS-DOC] §2.6.2, §2.9.345, §2.9.51.
+fn apply_frame_prl(prl: &Prl<'_>, frame: &mut FrameProperties) {
+    match prl.sprm {
+        0x261B => {
+            let (vertical, horizontal) = position_code(prl.u8());
+            if let Some(base) = vertical {
+                frame.vertical.base = base;
+            }
+            if let Some(base) = horizontal {
+                frame.horizontal.base = base;
+            }
+        }
+        0x8418 => plus_one_position(prl.i16(), true, &mut frame.horizontal),
+        0x8419 => plus_one_position(prl.i16(), false, &mut frame.vertical),
+        0x841A => frame.width = Some(i32::from(prl.u16())).filter(|w| *w > 0),
+        0x2423 => {
+            frame.wrap = match prl.u8() {
+                1 => WrapKind::TopAndBottom,
+                3 => WrapKind::None,
+                4 => WrapKind::Tight,
+                5 => WrapKind::Through,
+                _ => WrapKind::Square,
+            }
+        }
+        0x442B => {
+            let value = prl.u16();
+            frame.height = i32::from(value & 0x7FFF);
+            frame.height_rule = match (frame.height, value & 0x8000 != 0) {
+                (0, _) => LineRule::Auto,
+                (_, true) => LineRule::AtLeast,
+                (_, false) => LineRule::Exact,
+            };
+        }
+        0x442C => {
+            let value = prl.u16();
+            frame.drop_cap = match value & 7 {
+                1 => DropCap::Drop,
+                2 => DropCap::Margin,
+                _ => DropCap::None,
+            };
+            frame.lines = u32::from((value >> 3) & 0x1F).clamp(1, 10);
+        }
+        0x842E => frame.v_space = i32::from(prl.u16()).min(31_680),
+        0x842F => frame.h_space = i32::from(prl.u16()).min(31_680),
+        _ => {}
+    }
+}
+
 fn apply_pap_prl(prl: &Prl<'_>, props: &mut ParagraphProperties, extra: &mut ParaExtra) {
+    let positions = match prl.sprm {
+        0x261B => prl.u8() & 0xF0 != 0xF0,
+        0x8418 | 0x8419 | 0x841A | 0x442B => true,
+        0x442C => prl.u16() & 7 != 0,
+        0x2423 | 0x842E | 0x842F => false,
+        _ => {
+            apply_paragraph_prl(prl, props, extra);
+            return;
+        }
+    };
+    if positions {
+        apply_frame_prl(prl, props.frame.get_or_insert_with(default_frame));
+        return;
+    }
+    if let Some(frame) = props.frame.as_mut() {
+        apply_frame_prl(prl, frame);
+    }
+}
+
+fn apply_paragraph_prl(prl: &Prl<'_>, props: &mut ParagraphProperties, extra: &mut ParaExtra) {
     match prl.sprm {
         0x4600 => extra.istd = prl.u16(),
         0x2403 | 0x2461 => props.justification = Some(justification(prl.u8())),
@@ -681,6 +820,31 @@ mod tests {
             shd(&red_on_white).and_then(|s| s.fill),
             Some(Color(255, 127, 127))
         );
+    }
+
+    /// The frame sprms of a positioned paragraph: sprmPPc against the page,
+    /// a centered sprmPDxaAbs, sprmPDyaAbs 1 inch down, a minimum height
+    /// from sprmPWHeightAbs and a three-line drop cap from sprmPDcs.
+    /// [MS-DOC] §2.6.2, §2.9.208, §2.9.351, §2.9.357, §2.9.345, §2.9.51.
+    #[test]
+    fn frame_sprms_position_a_paragraph() {
+        let mut grpprl = vec![0x1B, 0x26, 0x90];
+        grpprl.extend([0x18, 0x84, 0xFC, 0xFF]);
+        grpprl.extend([0x19, 0x84, 0xA1, 0x05]);
+        grpprl.extend([0x2B, 0x44, 0xD0, 0x82]);
+        grpprl.extend([0x2C, 0x44, 0x19, 0x00]);
+        let mut props = ParagraphProperties::default();
+        apply_pap(&grpprl, &mut props, &mut ParaExtra::default());
+        let frame = props.frame.expect("the sprms make a frame");
+        assert_eq!(frame.horizontal.base, PositionBase::Page);
+        assert_eq!(frame.horizontal.align, Some(PositionAlign::Center));
+        assert_eq!(frame.vertical.base, PositionBase::Page);
+        assert_eq!(frame.vertical.offset, 1440 * 635);
+        assert_eq!((frame.height, frame.height_rule), (720, LineRule::AtLeast));
+        assert_eq!((frame.drop_cap, frame.lines), (DropCap::Drop, 3));
+        let mut plain = ParagraphProperties::default();
+        apply_pap(&[0x23, 0x24, 0x02], &mut plain, &mut ParaExtra::default());
+        assert!(plain.frame.is_none());
     }
 
     /// [MS-DOC] §2.9.17 and §2.9.16: the fShadow bit sits above dptSpace.
