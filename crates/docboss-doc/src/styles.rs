@@ -5,7 +5,7 @@ use docboss_model::{
     ParagraphProperties, RunProperties, Style, StyleKind, Styles, TableProperties,
 };
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::bytes::{slice, u16_at, u8_at, utf16};
 use crate::props::{apply_chp, apply_pap, CharContext, CharExtra, ParaExtra};
@@ -85,15 +85,17 @@ fn parse_as(bytes: &[u8], version: Version, dropped: &mut BTreeSet<u8>) -> Style
         raw.push(parse_std(index, std, cb_base, version, dropped));
     }
     let mut ids: Vec<Option<String>> = Vec::with_capacity(raw.len());
+    let mut taken: HashSet<String> = HashSet::with_capacity(raw.len());
     for style in &raw {
         let id = style.as_ref().map(|style| {
             let mut id = sanitize(&style.name);
             if id.is_empty() {
                 id = format!("Style{}", style.istd);
             }
-            if ids.iter().flatten().any(|existing| *existing == id) {
+            if taken.contains(&id) {
                 id = format!("{id}{}", style.istd);
             }
+            taken.insert(id.clone());
             id
         });
         ids.push(id);

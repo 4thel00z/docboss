@@ -2,6 +2,8 @@
 //! numbering.
 //! [MS-DOC] §2.9.201, §2.9.200, §2.9.147, §2.9.149, §2.9.150, §2.9.131.
 
+use std::collections::HashMap;
+
 use docboss_model::{
     AbstractNumbering, Justification, Level, NumberFormat, Numbering, NumberingInstance,
     RunProperties,
@@ -47,16 +49,24 @@ fn bullet(c: u16) -> char {
 
 /// Reads one LVL ([MS-DOC] §2.9.149) at `at`, returning it and the offset
 /// after it.
+/// The byte length of the LVL at `at`: its LVLF, grpprlPapx, grpprlChpx
+/// and xst.
+fn level_size(bytes: &[u8], at: usize) -> Option<usize> {
+    let lvlf = bytes.get(at..at + LVLF_SIZE)?;
+    let xst_at = LVLF_SIZE + usize::from(lvlf[24]) + usize::from(lvlf[25]);
+    let cch = usize::from(u16_at(bytes, at + xst_at)?);
+    Some(xst_at + 2 + cch * 2)
+}
+
 fn level(bytes: &[u8], at: usize, index: u8, context: &CharContext<'_>) -> Option<(Level, usize)> {
     let lvlf = bytes.get(at..at + LVLF_SIZE)?;
     let start = i32_at(lvlf, 0)?.max(0) as u32;
     let nfc = lvlf[4];
     let flags = lvlf[5];
-    let placeholders: Vec<usize> = lvlf[6..15]
-        .iter()
-        .take_while(|&&b| b != 0)
-        .map(|&b| usize::from(b))
-        .collect();
+    let mut placeholder = [false; 256];
+    for &b in lvlf[6..15].iter().take_while(|&&b| b != 0) {
+        placeholder[usize::from(b)] = true;
+    }
     let cb_chpx = usize::from(lvlf[24]);
     let cb_papx = usize::from(lvlf[25]);
     let restart = lvlf[26];
@@ -64,27 +74,28 @@ fn level(bytes: &[u8], at: usize, index: u8, context: &CharContext<'_>) -> Optio
     let chpx_at = papx_at + cb_papx;
     let xst_at = chpx_at + cb_chpx;
     let cch = usize::from(u16_at(bytes, xst_at)?);
-    let units: Vec<u16> = (0..cch)
-        .filter_map(|i| u16_at(bytes, xst_at + 2 + i * 2))
-        .collect();
+    let units = (0..cch).filter_map(|i| u16_at(bytes, xst_at + 2 + i * 2));
     let end = xst_at + 2 + cch * 2;
     let format = format(nfc);
     let text = if format == NumberFormat::Bullet {
         units
-            .first()
-            .map(|&c| bullet(c).to_string())
+            .clone()
+            .next()
+            .map(|c| bullet(c).to_string())
             .unwrap_or_else(|| "\u{2022}".to_string())
     } else {
-        units
-            .iter()
-            .enumerate()
-            .map(|(i, &c)| match placeholders.contains(&(i + 1)) && c < 9 {
-                true => format!("%{}", c + 1),
-                false => char::from_u32(u32::from(c))
-                    .map(String::from)
-                    .unwrap_or_default(),
-            })
-            .collect()
+        let mut text = String::with_capacity(cch * 2);
+        for (i, c) in units.enumerate() {
+            if placeholder[(i + 1).min(255)] && c < 9 {
+                text.push('%');
+                text.push(char::from(b'1' + c as u8));
+                continue;
+            }
+            if let Some(c) = char::from_u32(u32::from(c)) {
+                text.push(c);
+            }
+        }
+        text
     };
     let mut result = Level {
         level: index,
@@ -134,6 +145,17 @@ pub fn parse(
         base: &empty,
     };
     let mut numbering = Numbering::default();
+    let mut seen: HashMap<(u8, &[u8]), (Level, usize)> = HashMap::new();
+    let mut cached = |at: usize, index: u8| -> Option<(Level, usize)> {
+        let size = level_size(table, at)?;
+        let key = (index, table.get(at..at + size)?);
+        if let Some((level, size)) = seen.get(&key) {
+            return Some((level.clone(), at + size));
+        }
+        let (level, end) = level(table, at, index, &context)?;
+        seen.insert(key, (level.clone(), end - at));
+        Some((level, end))
+    };
     if let Some((fc, _)) = lst {
         let count = usize::from(u16_at(table, fc).unwrap_or(0));
         let mut at = fc + 2 + count * LSTF_SIZE;
@@ -149,7 +171,7 @@ pub fn parse(
                 levels: Vec::with_capacity(levels),
             };
             for l in 0..levels {
-                let Some((level, next)) = level(table, at, l as u8, &context) else {
+                let Some((level, next)) = cached(at, l as u8) else {
                     break;
                 };
                 definition.levels.push(level);
@@ -186,7 +208,7 @@ pub fn parse(
                 instance.start_overrides.push((ilvl, start.max(0) as u32));
             }
             if flags & 0x20 != 0 {
-                let Some((level, next)) = level(table, data_at, ilvl, &context) else {
+                let Some((level, next)) = cached(data_at, ilvl) else {
                     break;
                 };
                 instance.level_overrides.push(level);

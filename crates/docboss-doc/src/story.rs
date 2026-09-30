@@ -5,6 +5,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use docboss_model::{
     Block, Borders, Break, ChildBox, Diagnostic, Drawing, DrawingPlacement, DrawingPosition, Field,
@@ -129,6 +130,9 @@ pub enum StoryKind {
     TextBox,
 }
 
+type RunKey = ((usize, usize), u16, u16);
+type BaseKey = (u16, Option<u16>);
+
 pub struct Context<'a> {
     pub word: &'a [u8],
     pub data: &'a [u8],
@@ -160,7 +164,10 @@ pub struct Context<'a> {
     pub blip_store: Vec<Option<Image>>,
     pub media: RefCell<Vec<Media>>,
     pub diagnostics: RefCell<Vec<Diagnostic>>,
-    base_cache: RefCell<HashMap<(u16, Option<String>), RunProperties>>,
+    base_cache: RefCell<HashMap<BaseKey, Rc<RunProperties>>>,
+    /// Run formatting by CHPX grpprl, piece Prm and paragraph style: runs
+    /// sharing a CHPX in the FKPs are formatted once.
+    run_cache: RefCell<HashMap<RunKey, Rc<(RunProperties, CharExtra)>>>,
     media_index: RefCell<HashMap<u64, Vec<MediaId>>>,
 }
 
@@ -389,6 +396,7 @@ impl<'a> Context<'a> {
             media: RefCell::new(Vec::new()),
             diagnostics: RefCell::new(Vec::new()),
             base_cache: RefCell::new(HashMap::new()),
+            run_cache: RefCell::new(HashMap::new()),
             media_index: RefCell::new(HashMap::new()),
         }
     }
@@ -457,36 +465,47 @@ impl<'a> Context<'a> {
     }
 
     /// The style-level run properties a toggle operand is relative to.
-    fn base_run(&self, istd: u16, character_style: Option<String>) -> RunProperties {
-        let key = (istd, character_style.clone());
+    /// Cached by paragraph style and character style istd.
+    fn base_run(&self, istd: u16, character_istd: Option<u16>) -> Rc<RunProperties> {
+        let key = (istd, character_istd);
         if let Some(cached) = self.base_cache.borrow().get(&key) {
-            return cached.clone();
+            return Rc::clone(cached);
         }
         let paragraph_style = self.sheet.id(istd);
         let direct = RunProperties {
-            style_id: character_style,
+            style_id: character_istd.and_then(|c| self.sheet.id(c)),
             ..RunProperties::default()
         };
-        let resolved = self.styles.resolve_run(paragraph_style.as_deref(), &direct);
-        self.base_cache.borrow_mut().insert(key, resolved.clone());
+        let resolved = Rc::new(self.styles.resolve_run(paragraph_style.as_deref(), &direct));
+        self.base_cache
+            .borrow_mut()
+            .insert(key, Rc::clone(&resolved));
         resolved
     }
 
     /// Run properties for the characters at `cp`, and the run's extras.
-    fn run_formatting(&self, cp: u32, istd: u16) -> (RunProperties, CharExtra, u32) {
+    fn run_formatting(&self, cp: u32, istd: u16) -> (Rc<(RunProperties, CharExtra)>, u32) {
         let Some(piece) = self.pieces.piece_at(cp) else {
-            return (RunProperties::default(), CharExtra::default(), cp + 1);
+            return (Rc::default(), cp + 1);
         };
         let fc = piece.fc_of(cp);
         let run = find(&self.chpx, fc);
+        let run_end = run.map_or(u32::MAX, |r| r.fc_end);
+        let cps_left_in_run = run_end.saturating_sub(fc).div_ceil(piece.char_size());
+        let end = piece.cp_end.min(cp.saturating_add(cps_left_in_run.max(1)));
+        let key = (run.map_or((0, 0), |r| r.grpprl), piece.prm, istd);
+        if let Some(cached) = self.run_cache.borrow().get(&key) {
+            return (Rc::clone(cached), end);
+        }
         let chpx: &[u8] = run.map_or(&[], |r| self.grpprl(r));
         let prm = self.pieces.prm_grpprl(piece.prm);
-        let character_style = prls(chpx)
+        let character_istd = prls(chpx)
             .chain(prls(&prm))
             .filter(|p| p.sprm == 0x4A30)
             .last()
-            .and_then(|p| self.sheet.id(p.u16()));
-        let base = self.base_run(istd, character_style);
+            .map(|p| p.u16())
+            .filter(|&c| self.sheet.id(c).is_some());
+        let base = self.base_run(istd, character_istd);
         let context = CharContext {
             fonts: &self.fonts,
             styles: &self.sheet.ids,
@@ -504,10 +523,11 @@ impl<'a> Context<'a> {
             })
             .collect();
         apply_chp(&character, &mut props, &mut extra, &context);
-        let run_end = run.map_or(u32::MAX, |r| r.fc_end);
-        let cps_left_in_run = run_end.saturating_sub(fc).div_ceil(piece.char_size());
-        let end = piece.cp_end.min(cp.saturating_add(cps_left_in_run.max(1)));
-        (props, extra, end)
+        let formatted = Rc::new((props, extra));
+        self.run_cache
+            .borrow_mut()
+            .insert(key, Rc::clone(&formatted));
+        (formatted, end)
     }
 
     fn revision(&self, extra: &CharExtra) -> Option<Revision> {
@@ -782,19 +802,21 @@ impl<'a> Context<'a> {
         let mut next_marker = 0;
         let mut cp = start;
         while cp < end {
-            let (props, extra, run_end) = self.run_formatting(cp, istd);
-            let revision = self.revision(&extra);
+            let (formatted, run_end) = self.run_formatting(cp, istd);
+            let (props, extra) = &*formatted;
+            let revision = self.revision(extra);
             let run_end = run_end.min(end).max(cp + 1);
-            let mut text = String::new();
-            let mut units: Vec<u16> = Vec::new();
-            let flush = |units: &mut Vec<u16>, text: &mut String, out: &mut Inlines| {
-                text.extend(char::decode_utf16(units.drain(..)).map(|r| r.unwrap_or('\u{FFFD}')));
+            let mut pending: Option<u32> = None;
+            let flush = |pending: &mut Option<u32>, upto: u32, out: &mut Inlines| {
+                let Some(from) = pending.take() else {
+                    return;
+                };
+                let units = self.text.get(from as usize..upto as usize).unwrap_or(&[]);
+                let text: String = char::decode_utf16(units.iter().copied())
+                    .map(|r| r.unwrap_or('\u{FFFD}'))
+                    .collect();
                 if !text.is_empty() {
-                    out.content(
-                        &props,
-                        revision.as_ref(),
-                        RunContent::Text(std::mem::take(text)),
-                    );
+                    out.content(props, revision.as_ref(), RunContent::Text(text));
                 }
             };
             for at in cp..run_end {
@@ -802,16 +824,16 @@ impl<'a> Context<'a> {
                     if *marker_cp > at {
                         break;
                     }
-                    flush(&mut units, &mut text, &mut out);
+                    flush(&mut pending, at, &mut out);
                     out.push(marker_inline(marker));
                     next_marker += 1;
                 }
                 let unit = self.text.get(at as usize).copied().unwrap_or(0);
                 if unit >= 0x20 && !(extra.special && unit == 0x28) {
-                    units.push(unit);
+                    pending.get_or_insert(at);
                     continue;
                 }
-                flush(&mut units, &mut text, &mut out);
+                flush(&mut pending, at, &mut out);
                 let content = match unit {
                     0x09 => Some(RunContent::Tab),
                     0x0B => Some(RunContent::Break(Break::Line)),
@@ -858,10 +880,10 @@ impl<'a> Context<'a> {
                     _ => None,
                 };
                 if let Some(content) = content {
-                    out.content(&props, revision.as_ref(), content);
+                    out.content(props, revision.as_ref(), content);
                 }
             }
-            flush(&mut units, &mut text, &mut out);
+            flush(&mut pending, run_end, &mut out);
             cp = run_end;
         }
         for (_, _, marker) in &markers[next_marker..] {
@@ -903,7 +925,7 @@ impl<'a> Context<'a> {
     fn paragraph(&self, start: u32, mark: u32, kind: StoryKind) -> ParagraphInfo {
         let mark_cp = mark.min(self.text.len().saturating_sub(1) as u32);
         let mut info = self.paragraph_info(mark_cp);
-        info.paragraph.mark = self.run_formatting(mark_cp, info.extra.istd).0;
+        info.paragraph.mark = self.run_formatting(mark_cp, info.extra.istd).0 .0.clone();
         info.paragraph.inlines = self.inlines(start, mark, info.extra.istd, kind);
         info
     }
