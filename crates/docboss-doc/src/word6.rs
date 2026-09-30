@@ -254,6 +254,16 @@ fn def_table(operand: &[u8], out: &mut Vec<u8>) {
     out.extend_from_slice(&body);
 }
 
+/// A Word 6 sprmPAnld operand as the Word 97 one: its size byte, the
+/// 20-byte head, then the 32 label characters widened from 8 to 16 bits.
+fn anld(operand: &[u8]) -> Vec<u8> {
+    let body = operand.get(1..).unwrap_or(&[]);
+    let mut out = vec![84u8];
+    out.extend((0..20).map(|i| body.get(i).copied().unwrap_or(0)));
+    out.extend((0..32).flat_map(|i| [body.get(20 + i).copied().unwrap_or(0), 0]));
+    out
+}
+
 /// Translates a Word 6 grpprl into a Word 97 one. Codes without a Word 97
 /// counterpart docboss reads are left out and added to `dropped`.
 pub fn translate(grpprl: &[u8], dropped: &mut BTreeSet<u8>) -> Vec<u8> {
@@ -304,11 +314,12 @@ pub fn translate(grpprl: &[u8], dropped: &mut BTreeSet<u8>) -> Vec<u8> {
                 push(&mut out, 0xD605, &borders);
             }
             190 => def_table(operand, &mut out),
+            12 => push(&mut out, 0xC63E, &anld(operand)),
+            13 => push(&mut out, 0x263D, operand),
             4
             | 6
             | 10
             | 11
-            | 13
             | 14
             | 26..=37
             | 43..=46
@@ -577,6 +588,32 @@ pub fn header_stories(dop_flags: u8, section_flags: &[u8]) -> Vec<[Option<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Word 6 numbered paragraph: sprmPAnld's 52-byte ANLD, lower roman
+    /// from 3 with "(" before and ")" after, and sprmPNLvlAnm 10.
+    #[test]
+    fn numbered_paragraphs_carry_their_anld() {
+        let mut anld = vec![0u8; 52];
+        anld[0] = 2;
+        anld[1] = 1;
+        anld[2] = 2;
+        anld[10] = 3;
+        anld[20] = b'(';
+        anld[21] = b')';
+        let mut grpprl = vec![12, 52];
+        grpprl.extend(&anld);
+        grpprl.extend([13, 10]);
+        let mut dropped = BTreeSet::new();
+        let out = translate(&grpprl, &mut dropped);
+        assert!(dropped.is_empty());
+        let mut props = docboss_model::ParagraphProperties::default();
+        let mut extra = crate::props::ParaExtra::default();
+        crate::props::apply_pap(&out, &mut props, &mut extra);
+        assert_eq!(extra.anld_level, Some(10));
+        let anld = extra.anld.expect("the ANLD reads");
+        assert_eq!((anld.nfc, anld.start), (2, 3));
+        assert_eq!((anld.before.as_str(), anld.after.as_str()), ("(", ")"));
+    }
 
     #[test]
     fn grpprls_walk_by_the_word6_sizes() {

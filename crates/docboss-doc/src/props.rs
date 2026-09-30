@@ -362,6 +362,56 @@ pub struct ParaExtra {
     pub ilfo: Option<i16>,
     pub ilvl: Option<u8>,
     pub huge_papx: Option<u32>,
+    /// The old-style list of a Word 6 paragraph: its ANLD and its
+    /// sprmPNLvlAnm level.
+    pub anld: Option<Anld>,
+    pub anld_level: Option<u8>,
+}
+
+/// An ANLD: the numbering of an old-style (Word 6) numbered or bulleted
+/// paragraph.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct Anld {
+    pub nfc: u8,
+    /// The label's text before and after the number.
+    pub before: String,
+    pub after: String,
+    pub jc: u8,
+    pub bold: bool,
+    pub italic: bool,
+    pub font: Option<u16>,
+    /// The label size in half-points, when stated.
+    pub size: Option<u16>,
+    pub start: u16,
+}
+
+impl Anld {
+    /// Reads a Word 97 form ANLD: nfc, cxchTextBefore, cxchTextAfter, the
+    /// jc and formatting flags, ftc, hps, iStartAt, then 32 UTF-16 label
+    /// characters.
+    pub fn parse(bytes: &[u8]) -> Option<Anld> {
+        let nfc = u8_at(bytes, 0)?;
+        let before = usize::from(u8_at(bytes, 1)?).min(32);
+        let after = usize::from(u8_at(bytes, 2)?).clamp(before, 32);
+        let flags = u8_at(bytes, 3)?;
+        let styled = u8_at(bytes, 4)?;
+        let chars: Vec<u16> = (0..32)
+            .map(|i| u16_at(bytes, 20 + i * 2).unwrap_or(0))
+            .collect();
+        let text = |range: std::ops::Range<usize>| String::from_utf16_lossy(&chars[range]);
+        let font = i16_at(bytes, 6).filter(|f| *f >= 0).map(|f| f as u16);
+        Some(Anld {
+            nfc,
+            before: text(0..before),
+            after: text(before..after),
+            jc: flags & 3,
+            bold: flags & 0x10 != 0 && styled & 0x08 != 0,
+            italic: flags & 0x20 != 0 && styled & 0x10 != 0,
+            font: font.filter(|_| nfc == 23),
+            size: u16_at(bytes, 8).filter(|s| *s > 0),
+            start: u16_at(bytes, 10).unwrap_or(1),
+        })
+    }
 }
 
 impl ParaExtra {
@@ -645,6 +695,8 @@ fn apply_paragraph_prl(prl: &Prl<'_>, props: &mut ParagraphProperties, extra: &m
         0xC651 => set_border(props, brc(prl.variable()), |b| &mut b.right),
         0xC652 => set_border(props, brc(prl.variable()), |b| &mut b.inside_horizontal),
         0x6646 => extra.huge_papx = Some(prl.u32()),
+        0xC63E => extra.anld = Anld::parse(prl.variable()),
+        0x263D => extra.anld_level = Some(prl.u8()),
         _ => {}
     }
 }

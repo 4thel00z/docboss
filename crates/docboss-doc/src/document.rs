@@ -739,8 +739,9 @@ fn code_page(lid: u16) -> u32 {
 /// Word 6 and Word 95 files: the Word 97 assembly over the one
 /// WordDocument stream, which also holds the tables, with the formatting
 /// translated by [`word6`] and the text in the code page of the document
-/// language (or Cyrillic when the bytes say so). Lists (ANLD), comments and
-/// drawing objects are left out and reported.
+/// language (or Cyrillic when the bytes say so). Numbered and bulleted
+/// paragraphs become lists from their ANLDs; comments and drawing objects,
+/// whose Word 6 records differ from Word 97's, are left out and reported.
 fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> Document {
     let stated = code_page(fib.lid);
     let text_bytes = fib.fc_mac.saturating_sub(fib.fc_min).min(1 << 16);
@@ -806,6 +807,7 @@ fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> 
         docboss_model::Numbering::default(),
         fonts,
     );
+    context.word6 = true;
     let footnotes = notes(
         &mut context,
         word,
@@ -844,18 +846,13 @@ fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> 
             "Word 6/95 drawing objects are not read",
         ));
     }
-    let dropped = dropped.into_inner();
-    if dropped.contains(&12) {
-        diagnostics.push(Diagnostic::approximated(
-            "WordDocument",
-            "Word 6/95 paragraph numbering (ANLD) is not read; numbered paragraphs lose their numbers",
-        ));
+    for (definition, instance) in context.anld_numbering() {
+        context.numbering.abstracts.push(definition);
+        context.numbering.instances.push(instance);
     }
-    let others: Vec<String> = dropped
-        .iter()
-        .filter(|&&code| code != 12)
-        .map(|code| code.to_string())
-        .collect();
+    context.numbering.sort_by_id();
+    let dropped = dropped.into_inner();
+    let others: Vec<String> = dropped.iter().map(|code| code.to_string()).collect();
     if !others.is_empty() {
         diagnostics.push(Diagnostic::approximated(
             "WordDocument",

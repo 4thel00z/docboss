@@ -133,6 +133,10 @@ pub enum StoryKind {
     TextBox,
 }
 
+/// The first list id given to Word 6 ANLD lists.
+const ANLD_LISTS: i64 = 0x10_0000;
+const MAX_ANLDS: usize = 4096;
+
 type RunKey = ((usize, usize), u16, u16);
 type BaseKey = (u16, Option<u16>);
 
@@ -161,6 +165,10 @@ pub struct Context<'a> {
     /// The equations of the Equation Editor objects in the ObjectPool, by
     /// object id.
     pub equations: HashMap<u32, docboss_model::Math>,
+    /// The file is Word 6 or Word 95, whose lists are ANLDs.
+    pub word6: bool,
+    /// The distinct ANLDs of the paragraphs read so far; each is one list.
+    pub anlds: std::cell::RefCell<Vec<crate::props::Anld>>,
     /// The preset geometry of each floating shape by shape id.
     pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
@@ -401,6 +409,8 @@ impl<'a> Context<'a> {
             shape_formats: HashMap::new(),
             shape_wrap_distances: HashMap::new(),
             equations: HashMap::new(),
+            word6: false,
+            anlds: Default::default(),
             shape_groups: HashMap::new(),
             shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
@@ -461,7 +471,9 @@ impl<'a> Context<'a> {
             ..ParaExtra::default()
         };
         apply_pap(&grpprl, &mut properties, &mut extra);
-        properties.numbering = numbering_ref(&extra).or(properties.numbering);
+        properties.numbering = numbering_ref(&extra)
+            .or(properties.numbering)
+            .or_else(|| self.anld_list(&extra));
         let style_id = self.sheet.id(extra.istd).or_else(|| self.sheet.id(0));
         let mark = self.text.get(mark_cp as usize).copied().unwrap_or(0x0D);
         ParagraphInfo {
@@ -475,6 +487,106 @@ impl<'a> Context<'a> {
             mark,
             grpprl,
         }
+    }
+
+    /// The list of a Word 6 paragraph numbered by an ANLD at a sprmPNLvlAnm
+    /// level from 1 to 11: one list per distinct ANLD, numbered past the
+    /// ids of the file's own lists.
+    fn anld_list(&self, extra: &ParaExtra) -> Option<docboss_model::NumberingRef> {
+        let level = extra
+            .anld_level
+            .filter(|l| (1..=11).contains(l) && self.word6)?;
+        let anld = extra.anld.as_ref()?;
+        let mut anlds = self.anlds.borrow_mut();
+        let index = match anlds.iter().position(|a| a == anld) {
+            Some(index) => index,
+            None if anlds.len() < MAX_ANLDS => {
+                anlds.push(anld.clone());
+                anlds.len() - 1
+            }
+            None => return None,
+        };
+        Some(docboss_model::NumberingRef {
+            num_id: ANLD_LISTS + index as i64,
+            level: match level {
+                1..=9 => level - 1,
+                _ => 0,
+            },
+        })
+    }
+
+    /// The list definitions of the ANLDs read, as the paragraphs refer to
+    /// them: each ANLD numbers every level alike.
+    pub fn anld_numbering(
+        &self,
+    ) -> Vec<(
+        docboss_model::AbstractNumbering,
+        docboss_model::NumberingInstance,
+    )> {
+        use docboss_model::{NumberFormat, RunProperties};
+        self.anlds
+            .borrow()
+            .iter()
+            .enumerate()
+            .map(|(index, anld)| {
+                let id = ANLD_LISTS + index as i64;
+                let format = match anld.nfc {
+                    0 => NumberFormat::Decimal,
+                    1 => NumberFormat::UpperRoman,
+                    2 => NumberFormat::LowerRoman,
+                    3 => NumberFormat::UpperLetter,
+                    4 => NumberFormat::LowerLetter,
+                    5 => NumberFormat::Ordinal,
+                    22 => NumberFormat::DecimalZero,
+                    23 => NumberFormat::Bullet,
+                    _ => NumberFormat::None,
+                };
+                let run = RunProperties {
+                    bold: anld.bold.then_some(true),
+                    italic: anld.italic.then_some(true),
+                    size: anld.size.map(u32::from),
+                    fonts: docboss_model::FontSlots {
+                        ascii: anld
+                            .font
+                            .and_then(|f| self.fonts.get(usize::from(f)).cloned()),
+                        high_ansi: anld
+                            .font
+                            .and_then(|f| self.fonts.get(usize::from(f)).cloned()),
+                        ..Default::default()
+                    },
+                    ..RunProperties::default()
+                };
+                let levels = (0..9u8)
+                    .map(|level| docboss_model::Level {
+                        level,
+                        start: u32::from(anld.start),
+                        text: match format {
+                            NumberFormat::Bullet => {
+                                let bullet = anld.before.chars().chain(anld.after.chars()).next();
+                                bullet.unwrap_or('\u{2022}').to_string()
+                            }
+                            NumberFormat::None => format!("{}{}", anld.before, anld.after),
+                            _ => format!("{}%{}{}", anld.before, level + 1, anld.after),
+                        },
+                        format: format.clone(),
+                        justification: match anld.jc {
+                            1 => Some(docboss_model::Justification::Center),
+                            2 => Some(docboss_model::Justification::Right),
+                            _ => None,
+                        },
+                        run: run.clone(),
+                        ..docboss_model::Level::default()
+                    })
+                    .collect();
+                let definition = docboss_model::AbstractNumbering { id, levels };
+                let instance = docboss_model::NumberingInstance {
+                    num_id: id,
+                    abstract_id: id,
+                    ..Default::default()
+                };
+                (definition, instance)
+            })
+            .collect()
     }
 
     /// The style-level run properties a toggle operand is relative to.
