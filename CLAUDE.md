@@ -13,7 +13,7 @@ the Python bindings. Sister project of pdfboss; mirror its conventions.
 - `crates/docboss-cfb`, `docboss-doc`: compound file ([MS-CFB]) and Word
   binary ([MS-DOC]) readers.
 - `crates/docboss-crypt`: password-protected DOCX ([MS-OFFCRYPTO] Agile and
-  Standard encryption).
+  Standard encryption) and the XOR obfuscation of DOC.
 - `crates/docboss-core`: format sniffing and `Document::open` over both.
 - `crates/docboss-aio`: async reads over files or http(s) URLs that fetch only
   the byte ranges they need.

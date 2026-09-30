@@ -11,9 +11,8 @@
 //! [`docboss_model::Document::diagnostics`]. Word 6 and Word 95 files are
 //! read as plain text with a diagnostic saying so.
 //!
-//! Password-protected files encrypted with RC4 or RC4 CryptoAPI open with
-//! [`read_with_password`]; XOR-obfuscated files are refused with
-//! [`Error::UnsupportedEncryption`].
+//! Password-protected files, encrypted with RC4 or RC4 CryptoAPI or
+//! XOR-obfuscated, open with [`read_with_password`].
 
 mod bytes;
 mod crypt;

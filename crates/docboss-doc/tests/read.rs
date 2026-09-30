@@ -318,6 +318,42 @@ fn encrypted_documents() {
     let rc4 = read("encrypted-rc4");
     let document = docboss_doc::read_with_password(&rc4, "tika").unwrap();
     assert!(plain_text(&document).contains("This is an encrypted Word 2007 File."));
+    assert!(matches!(
+        docboss_doc::read_with_password(&rc4, "nope"),
+        Err(docboss_doc::Error::WrongPassword)
+    ));
+}
+
+/// [MS-DOC] §2.2.6.1 XOR obfuscation: the fixtures are text.doc and
+/// image.doc obfuscated by tools/xor_obfuscate.py; the right password gives
+/// back their text and picture.
+#[test]
+fn xor_obfuscated_documents() {
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/fixtures/{name}.doc",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let plain = docboss_doc::read(&read("text")).unwrap();
+    let obfuscated = read("encrypted-xor");
+    let document = docboss_doc::read_with_password(&obfuscated, "docboss").unwrap();
+    assert_eq!(plain_text(&document), plain_text(&plain));
+    assert_eq!(document.styles.styles.len(), plain.styles.styles.len());
+    assert!(matches!(
+        docboss_doc::read(&obfuscated),
+        Err(docboss_doc::Error::Encrypted)
+    ));
+    assert!(matches!(
+        docboss_doc::read_with_password(&obfuscated, "docbos"),
+        Err(docboss_doc::Error::WrongPassword)
+    ));
+    let picture = docboss_doc::read(&read("image")).unwrap();
+    let document =
+        docboss_doc::read_with_password(&read("encrypted-xor-image"), "docboss").unwrap();
+    assert_eq!(document.media.len(), 1);
+    assert_eq!(document.media[0].data, picture.media[0].data);
 }
 
 /// [MS-DOC] §2.8.27 PlcfSpa anchors, [MS-ODRAW] §2.2.32 BLIP store and

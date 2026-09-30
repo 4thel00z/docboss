@@ -31,7 +31,7 @@ Reading a Word document should not require LibreOffice, a JVM or a C library. do
 - **Markdown and HTML**: headings from styles, nested lists with the document's own labels, GFM tables with merged cells, footnotes, links and images, in one pass.
 - **Layout and rendering**: Word-like line breaking, the Unicode bidirectional algorithm for right-to-left paragraphs, runs and tables, OpenType shaping (GSUB and GPOS, Arabic joining) for Arabic and Hebrew, tab stops, list labels, keep and widow rules, tables split across pages with repeated header rows, sections and columns, headers and footers with page numbers, footnotes, inline and floating images; an anti-aliased rasterizer over its own TrueType and CFF parsers, with metric-compatible font substitution (Carlito for Calibri, Liberation for Arial and Times New Roman). PNG, PPM, BMP and JPEG output, pages rendered on all cores.
 - **DOCX writing**: model to DOCX, a builder API, Markdown to DOCX, and DOC to DOCX conversion, with deterministic output: the same input gives identical bytes.
-- **Encrypted files**: password-protected DOCX (Agile and Standard encryption, [MS-OFFCRYPTO]) and DOC (RC4 and RC4 CryptoAPI).
+- **Encrypted files**: password-protected DOCX (Agile and Standard encryption, [MS-OFFCRYPTO]) and DOC (RC4, RC4 CryptoAPI and XOR obfuscation).
 - **Range-fetching I/O**: documents open over files or `http(s)://` URLs and fetch only the byte ranges they need: the ZIP central directory and the XML parts of a DOCX, the sectors of the Word streams of a DOC.
 - **Conformance ledger checked by Lean**: every clause of the specifications docboss reads has a row with a status, and a Lean 4 gate fails the build when a row claims more than the code and tests cite ([conformance](docs/src/reference/conformance.md)).
 - **Terminal explorer** (`docboss tui`): element tree, resolved-style inspector, ZIP or compound-file container view with hex and XML, Markdown and page previews.
@@ -230,7 +230,7 @@ The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` p
 
 - **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left sections lay out left to right; no column balancing; text does not wrap around floating images; groups, canvases, SmartArt, charts and equations are not drawn, and shapes use solid fills only; conditional formatting from table styles is not applied. CFF2 fonts are refused. WMF, EMF and TIFF images draw a placeholder and are reported.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; DrawingML charts, SmartArt, math (OMML) and ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: XOR-obfuscated files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
+- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 2, 6 and 95 files are read as text only; shapes that are neither a picture, a text box nor a preset shape type (freeforms, WordArt, groups) are reported as dropped.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.

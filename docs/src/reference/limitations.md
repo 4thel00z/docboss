@@ -10,7 +10,7 @@ missing. The largest gaps:
 - DOCX: `w:altChunk` content is skipped and reported. DrawingML charts,
   SmartArt, math (OMML), ActiveX controls and custom XML data binding are not
   read as content. Ruby text is ignored.
-- DOC: XOR-obfuscated files are refused. Word 2, 6 and 95 files are read as
+- DOC: password-protected Word 6 and 95 files are refused. Word 2, 6 and 95 files are read as
   text only, with the code page taken from the document language. Shapes that
   are neither pictures, text boxes nor preset shape types (freeforms, WordArt,
   groups) are reported as dropped.

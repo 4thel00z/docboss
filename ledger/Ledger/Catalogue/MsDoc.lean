@@ -48,7 +48,7 @@ def rows0 : List Feature := [
   { standard := .msDoc, ref := .clause [2, 2, 5], title := "Property Storage", status := .implemented,
     note := "grpprls are walked with operand sizes from the spra bits (sprm.rs, unit tests and read.rs character_and_paragraph_formatting)." },
   { standard := .msDoc, ref := .clause [2, 2, 6], title := "Encryption and Obfuscation (Password to Open)", status := .incomplete,
-    note := "RC4 and RC4 CryptoAPI encryption are decrypted with the password (crypt.rs, test read.rs encrypted_documents); XOR obfuscation is refused with a clear error." },
+    note := "RC4 and RC4 CryptoAPI encryption are decrypted with the password (crypt.rs, test read.rs encrypted_documents), and XOR obfuscation undone with the docboss-crypt XOR array, the password tried through the document code page and by low bytes (document.rs deobfuscate, test read.rs xor_obfuscated_documents, fixtures made by tools/xor_obfuscate.py); password-protected Word 6 and 95 files are refused." },
   { standard := .msDoc, ref := .clause [2, 3], title := "Document Parts", status := .incomplete,
     note := "All seven document parts are located by their CP ranges; no test has a header text box." },
   { standard := .msDoc, ref := .clause [2, 3, 1], title := "Main Document", status := .implemented,

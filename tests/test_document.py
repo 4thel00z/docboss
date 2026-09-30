@@ -55,6 +55,14 @@ def test_encrypted_doc_needs_its_password() -> None:
     assert doc.extract_text().strip()
 
 
+def test_xor_obfuscated_doc_opens_with_its_password() -> None:
+    path = DOC / "encrypted-xor.doc"
+    with pytest.raises(docboss.DocbossError, match="password"):
+        docboss.Document(path, password="nope")
+    doc = docboss.Document(path, password="docboss")
+    assert doc.extract_text() == docboss.Document(DOC / "text.doc").extract_text()
+
+
 def test_detect_reads_the_bytes(rich_docx: Path, lists_doc: Path) -> None:
     assert docboss.detect(rich_docx.read_bytes()) == "docx"
     assert docboss.detect(lists_doc.read_bytes()) == "doc"

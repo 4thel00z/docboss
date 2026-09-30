@@ -71,6 +71,11 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         .map_err(|_| Error::NotWord("no WordDocument stream"))?;
     let fib = Fib::parse(&word_stream)?;
     let metadata = docboss_cfb::property::read_metadata(&file, &mut diagnostics);
+    if !fib.is_word97() && fib.encrypted {
+        return Err(Error::UnsupportedEncryption(
+            "Word 6/95 password protection",
+        ));
+    }
     if !fib.is_word97() {
         let mut document = legacy(&word_stream, &fib);
         document.metadata = metadata;
@@ -115,12 +120,12 @@ fn decrypt<'a>(
     data: &[u8],
     password: Option<&str>,
 ) -> Result<Streams<'a>> {
-    if fib.obfuscated {
-        return Err(Error::UnsupportedEncryption("XOR obfuscation"));
-    }
     let Some(password) = password else {
         return Err(Error::Encrypted);
     };
+    if fib.obfuscated {
+        return deobfuscate(fib, word, table, data, password);
+    }
     let (cipher, header) = crypt::open(table, password)?;
     let header = if fib.key == 0 {
         header
@@ -132,6 +137,26 @@ fn decrypt<'a>(
         Cow::Owned(cipher.decrypt_stream(table, header)),
         Cow::Owned(cipher.decrypt_stream(data, 0)),
     ))
+}
+
+/// [MS-DOC] §2.2.6.1: XOR obfuscation of the WordDocument stream past its
+/// first 68 bytes, the table stream and the Data stream, keyed by the
+/// password whose verifier FibBase.lKey holds.
+fn deobfuscate<'a>(
+    fib: &Fib,
+    word: &[u8],
+    table: &[u8],
+    data: &[u8],
+    password: &str,
+) -> Result<Streams<'a>> {
+    let xor = docboss_crypt::xor::XorObfuscation::open(password, fib.key, code_page(fib.lid))
+        .map_err(|_| Error::WrongPassword)?;
+    let clear = |stream: &[u8], header: usize| {
+        let mut out = stream.to_vec();
+        xor.apply(&mut out, header);
+        Cow::Owned(out)
+    };
+    Ok((clear(word, 68), clear(table, 0), clear(data, 0)))
 }
 
 fn assemble(

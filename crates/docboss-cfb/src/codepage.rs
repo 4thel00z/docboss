@@ -279,6 +279,17 @@ pub fn decode(code_page: u32, bytes: &[u8]) -> (String, Fidelity) {
     (text, Fidelity::Exact)
 }
 
+/// The byte a single-byte code page (874, 1250 to 1258, Mac Roman) stores
+/// `c` as, or `None` when the page has no such character.
+pub fn encode_char(code_page: u32, c: char) -> Option<u8> {
+    if c.is_ascii() {
+        return Some(c as u8);
+    }
+    let unit = u16::try_from(u32::from(c)).ok()?;
+    let index = high_table(code_page)?.iter().position(|&u| u == unit)?;
+    Some(0x80 + index as u8)
+}
+
 /// One byte in Windows-1252, the encoding of compressed text pieces.
 pub fn cp1252_char(byte: u8) -> char {
     if byte < 0x80 {
@@ -323,5 +334,14 @@ mod tests {
         );
         assert_eq!(decode(949, b"\xc7\xd1").0, "\u{D55C}");
         assert_eq!(utf16le(&[0x41, 0, 0x3D, 0xD8, 0x00, 0xDE]), "A\u{1F600}");
+    }
+
+    #[test]
+    fn single_byte_pages_encode_what_they_decode() {
+        assert_eq!(encode_char(1252, 'a'), Some(b'a'));
+        assert_eq!(encode_char(1252, '\u{20AC}'), Some(0x80));
+        assert_eq!(encode_char(1251, '\u{41F}'), Some(0xCF));
+        assert_eq!(encode_char(1252, '\u{41F}'), None);
+        assert_eq!(encode_char(932, '\u{65E5}'), None);
     }
 }

@@ -8,3 +8,8 @@
 - `encrypted-cryptoapi.doc` (password `password`) and `encrypted-rc4.doc`
   (password `tika`): Apache POI test data (`password_password_cryptoapi.doc`,
   `password_tika_binaryrc4.doc`), Apache License 2.0.
+- `encrypted-xor.doc` and `encrypted-xor-image.doc` (password `docboss`):
+  `text.doc` and `image.doc` XOR-obfuscated by
+  `python3 crates/docboss-doc/tools/xor_obfuscate.py`, which follows
+  [MS-DOC] §2.2.6.1 and [MS-OFFCRYPTO] §2.3.7; nothing on hand writes XOR
+  obfuscation and no corpus file uses it.

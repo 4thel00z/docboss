@@ -33,6 +33,7 @@ fn password_for(path: &Path) -> Option<String> {
     match name {
         "encrypted-cryptoapi.doc" => Some("password".to_string()),
         "encrypted-rc4.doc" => Some("tika".to_string()),
+        "encrypted-xor.doc" | "encrypted-xor-image.doc" => Some("docboss".to_string()),
         _ => None,
     }
 }

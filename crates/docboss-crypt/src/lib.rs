@@ -8,12 +8,16 @@
 //! SHA-2 key derivation, [MS-OFFCRYPTO] §2.3.4.10) is checked against its
 //! data integrity HMAC; Standard encryption (AES-ECB with SHA-1,
 //! [MS-OFFCRYPTO] §2.3.4.5) has no integrity data.
+//!
+//! [`xor`] holds the XOR obfuscation of Word binary documents
+//! ([MS-OFFCRYPTO] §2.3.7), which `docboss-doc` opens with the same password.
 
 mod agile;
 mod base64;
 mod cipher;
 mod hash;
 mod standard;
+pub mod xor;
 
 use docboss_cfb::CompoundFile;
 

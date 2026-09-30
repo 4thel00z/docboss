@@ -23,10 +23,14 @@ What opens:
   Standard encryption (AES-128 in ECB mode, SHA-1), then reads the package
   like any other. Word 2007 to 2013 and LibreOffice files open.
 - **DOC** with RC4 or RC4 CryptoAPI encryption ([MS-DOC] with the
-  [MS-OFFCRYPTO] key derivations).
+  [MS-OFFCRYPTO] key derivations), or with XOR obfuscation (the password
+  verifier and XOR array of [MS-OFFCRYPTO] method 2; the password is tried
+  in the document's code page and by the low byte of each character, as the
+  specification asks).
 
 A wrong password is an error that says so; a tampered Agile package fails its
-integrity check. XOR-obfuscated DOC files are refused with an error.
+integrity check. Password-protected Word 6 and Word 95 files are refused with
+an error.
 
 `convert` writes the decrypted document as a plain, unencrypted DOCX; there
 is no way to write an encrypted one yet.

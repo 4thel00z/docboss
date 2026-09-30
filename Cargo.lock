@@ -649,6 +649,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "docboss-cfb",
+ "docboss-crypt",
  "docboss-model",
  "flate2",
  "thiserror",
