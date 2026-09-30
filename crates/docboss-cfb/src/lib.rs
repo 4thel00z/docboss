@@ -320,12 +320,12 @@ impl<'a> CompoundFile<'a> {
                 ));
                 break;
             };
-            out.extend_from_slice(sector);
+            let take = sector.len().min(length - out.len());
+            out.extend_from_slice(&sector[..take]);
             if out.len() >= length {
                 break;
             }
         }
-        out.truncate(length);
         Cow::Owned(out)
     }
 
@@ -356,7 +356,8 @@ impl<'a> CompoundFile<'a> {
                 ));
                 break;
             };
-            out.extend_from_slice(chunk);
+            let take = chunk.len().min(length - out.len());
+            out.extend_from_slice(&chunk[..take]);
             next = self.mini_fat[index];
         }
         if out.len() < length {

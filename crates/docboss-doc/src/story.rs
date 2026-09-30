@@ -565,7 +565,7 @@ impl<'a> Context<'a> {
         media.push(Media {
             name,
             content_type: image.content_type.to_string(),
-            data: image.data.into(),
+            data: image.data,
         });
         id
     }
@@ -873,21 +873,31 @@ impl<'a> Context<'a> {
     /// Splits `start..end` into paragraphs and assembles blocks.
     pub fn story(&self, start: u32, end: u32, kind: StoryKind) -> Vec<Block> {
         let end = end.min(self.text.len() as u32);
-        let mut paragraphs = Vec::new();
         let mut paragraph_start = start;
-        for cp in start..end {
-            let unit = self.text[cp as usize];
-            let ends = unit == 0x0D || unit == 0x07 || (unit == 0x0C && cp + 1 == end);
-            if !ends {
-                continue;
+        let mut cp = start;
+        let paragraphs = std::iter::from_fn(move || {
+            while cp < end {
+                let at = cp;
+                cp += 1;
+                let unit = self.text[at as usize];
+                let ends = unit == 0x0D || unit == 0x07 || (unit == 0x0C && at + 1 == end);
+                if !ends {
+                    continue;
+                }
+                let paragraph = self.paragraph(paragraph_start, at, kind);
+                paragraph_start = at + 1;
+                return Some(paragraph);
             }
-            paragraphs.push(self.paragraph(paragraph_start, cp, kind));
-            paragraph_start = cp + 1;
-        }
-        if paragraph_start < end {
-            paragraphs.push(self.paragraph(paragraph_start, end, kind));
-        }
-        blocks(&mut paragraphs.into_iter().peekable(), self)
+            if paragraph_start < end {
+                let paragraph = self.paragraph(paragraph_start, end, kind);
+                paragraph_start = end;
+                return Some(paragraph);
+            }
+            None
+        });
+        let boxed: Box<dyn Iterator<Item = ParagraphInfo> + '_> = Box::new(paragraphs);
+        let mut paragraphs: Paragraphs<'_> = boxed.peekable();
+        blocks(&mut paragraphs, self)
     }
 
     fn paragraph(&self, start: u32, mark: u32, kind: StoryKind) -> ParagraphInfo {
@@ -911,7 +921,7 @@ fn marker_inline(marker: &Marker) -> Inline {
     }
 }
 
-type Paragraphs = std::iter::Peekable<std::vec::IntoIter<ParagraphInfo>>;
+type Paragraphs<'p> = std::iter::Peekable<Box<dyn Iterator<Item = ParagraphInfo> + 'p>>;
 
 fn is_row_end(info: &ParagraphInfo, level: i32) -> bool {
     match level {
@@ -931,7 +941,7 @@ fn is_cell_end(info: &ParagraphInfo, level: i32) -> bool {
 
 /// Top-level blocks: paragraphs outside tables, and a table for each run
 /// of paragraphs inside one.
-fn blocks(paragraphs: &mut Paragraphs, context: &Context<'_>) -> Vec<Block> {
+fn blocks(paragraphs: &mut Paragraphs<'_>, context: &Context<'_>) -> Vec<Block> {
     let mut out = Vec::new();
     while let Some(next) = paragraphs.peek() {
         if next.extra.depth() > 0 {
@@ -947,7 +957,7 @@ fn blocks(paragraphs: &mut Paragraphs, context: &Context<'_>) -> Vec<Block> {
 }
 
 /// A table at `level`: cells end at cell marks, rows at row marks.
-fn table(paragraphs: &mut Paragraphs, level: i32, context: &Context<'_>) -> Table {
+fn table(paragraphs: &mut Paragraphs<'_>, level: i32, context: &Context<'_>) -> Table {
     let mut out = Table::default();
     let mut cells: Vec<TableCell> = Vec::new();
     let mut cell_blocks: Vec<Block> = Vec::new();

@@ -58,7 +58,9 @@ pub fn children(bytes: &[u8], start: usize, end: usize) -> Vec<Record> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Image {
     pub content_type: &'static str,
-    pub data: Vec<u8>,
+    /// Shared with the model's media entry, so a BLIP drawn many times is
+    /// held once.
+    pub data: std::sync::Arc<[u8]>,
 }
 
 /// Decodes a BLIP record ([MS-ODRAW] §2.2.23 OfficeArtBlip): metafiles are
@@ -87,16 +89,22 @@ pub fn blip(bytes: &[u8], rec: &Record) -> Option<Image> {
             true => inflate(payload, raw_size)?,
             false => payload.to_vec(),
         };
-        return Some(Image { content_type, data });
+        return Some(Image {
+            content_type,
+            data: data.into(),
+        });
     }
     let data = body.get(uid_size + 1..)?.to_vec();
     if rec.kind == 0xF01F {
         return Some(Image {
             content_type,
-            data: dib_to_bmp(&data)?,
+            data: dib_to_bmp(&data)?.into(),
         });
     }
-    Some(Image { content_type, data })
+    Some(Image {
+        content_type,
+        data: data.into(),
+    })
 }
 
 fn inflate(data: &[u8], size_hint: usize) -> Option<Vec<u8>> {
@@ -212,13 +220,13 @@ fn raw_picture(bytes: &[u8]) -> Option<Image> {
     if matches!(kind, 1 | 2) && header == 9 {
         return Some(Image {
             content_type: "image/x-wmf",
-            data: bytes.to_vec(),
+            data: bytes.into(),
         });
     }
     if u32_at(bytes, 0)? == 40 {
         return Some(Image {
             content_type: "image/bmp",
-            data: dib_to_bmp(bytes)?,
+            data: dib_to_bmp(bytes)?.into(),
         });
     }
     None
