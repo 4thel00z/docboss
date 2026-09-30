@@ -148,6 +148,7 @@ fn chunk(index: usize, note_id: i64) -> Vec<Block> {
         ..RunProperties::default()
     };
     let border = Some(Border {
+        shadow: false,
         style: BorderStyle::Single,
         size: 4,
         space: 0,

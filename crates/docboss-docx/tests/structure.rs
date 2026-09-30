@@ -774,7 +774,9 @@ fn dashed_border_styles() {
     assert_eq!(border("dotDash"), BorderStyle::DotDash);
     assert_eq!(border("dotDotDash"), BorderStyle::DotDotDash);
     assert_eq!(border("dashSmallGap"), BorderStyle::DashSmallGap);
-    assert_eq!(border("dashDotStroked"), BorderStyle::Other);
+    assert_eq!(border("dashDotStroked"), BorderStyle::DashDotStroked);
+    assert_eq!(border("mapleMuffins"), BorderStyle::Art);
+    assert_eq!(border("threeDEmboss"), BorderStyle::Other);
 }
 
 /// ECMA-376 Part 1 §20.1.2.2.37, §20.1.4.2.10, §20.1.4.2.19: a shape whose

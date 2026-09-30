@@ -113,6 +113,7 @@ fn color_highlight_and_underline_paint() {
 #[test]
 fn table_borders_land_on_the_grid() {
     let border = Border {
+        shadow: false,
         style: BorderStyle::Single,
         size: 8,
         space: 0,
@@ -392,6 +393,7 @@ fn dashed_outlines_follow_their_pattern_caps_and_joins() {
 #[test]
 fn dashed_borders_paint_dashes() {
     let border = Border {
+        shadow: false,
         style: BorderStyle::Dashed,
         size: 8,
         space: 1,

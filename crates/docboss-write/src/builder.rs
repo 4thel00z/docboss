@@ -288,6 +288,7 @@ fn monospace() -> docboss_model::FontSlots {
 
 fn single_border(size: u32) -> Option<Border> {
     Some(Border {
+        shadow: false,
         style: BorderStyle::Single,
         size,
         space: 0,

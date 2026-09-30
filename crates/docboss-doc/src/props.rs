@@ -115,6 +115,8 @@ fn brc_style(kind: u8) -> BorderStyle {
         8 => BorderStyle::DotDash,
         9 => BorderStyle::DotDotDash,
         22 => BorderStyle::DashSmallGap,
+        23 => BorderStyle::DashDotStroked,
+        0x40..=0xE3 => BorderStyle::Art,
         _ => BorderStyle::Other,
     }
 }
@@ -130,6 +132,7 @@ pub fn brc80(bytes: &[u8]) -> Option<Border> {
         size: u32::from(bytes[0]),
         space: u32::from(bytes[3] & 0x1F),
         color: ico(bytes[2]),
+        shadow: bytes[3] & 0x20 != 0,
     })
 }
 
@@ -146,6 +149,7 @@ pub fn brc(bytes: &[u8]) -> Option<Border> {
         size,
         space: u32::from(bytes[6] & 0x1F),
         color: colorref(u32_at(bytes, 0).unwrap_or(0xFF00_0000)),
+        shadow: bytes[6] & 0x20 != 0,
     })
 }
 
@@ -621,6 +625,14 @@ pub fn apply_sep(grpprl: &[u8], section: &mut SectionProperties) {
 mod tests {
     use super::*;
 
+    /// [MS-DOC] §2.9.17 and §2.9.16: the fShadow bit sits above dptSpace.
+    #[test]
+    fn border_shadow_bits() {
+        assert!(brc80(&[8, 1, 1, 0x20 | 3]).unwrap().shadow);
+        assert!(!brc80(&[8, 1, 1, 3]).unwrap().shadow);
+        assert!(brc(&[0, 0, 0, 0, 8, 1, 0x24, 0]).unwrap().shadow);
+    }
+
     /// [MS-DOC] §2.9.22: the dashed BrcType values.
     #[test]
     fn dashed_border_types() {
@@ -629,7 +641,8 @@ mod tests {
         assert_eq!(brc_style(8), BorderStyle::DotDash);
         assert_eq!(brc_style(9), BorderStyle::DotDotDash);
         assert_eq!(brc_style(0x16), BorderStyle::DashSmallGap);
-        assert_eq!(brc_style(0x17), BorderStyle::Other);
+        assert_eq!(brc_style(0x17), BorderStyle::DashDotStroked);
+        assert_eq!(brc_style(0x50), BorderStyle::Art);
     }
 
     /// [MS-DOC] §2.9.65 DTTM packs minutes, hours, day, month and years

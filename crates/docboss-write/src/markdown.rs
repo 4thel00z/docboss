@@ -94,6 +94,7 @@ const INDENT: i32 = 720;
 
 fn horizontal_rule() -> Paragraph {
     let border = Border {
+        shadow: false,
         style: BorderStyle::Single,
         size: 6,
         space: 1,

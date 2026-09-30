@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use docboss_font::FontDatabase;
-use docboss_layout::{layout, Item, Layout};
+use docboss_layout::{layout, Item, Layout, Rect};
 use docboss_model::{
     AbstractNumbering, Block, Border, BorderStyle, Borders, Break, Document, DrawingPosition,
     Field, HeaderFooter, HeaderFooterKind, HeaderFooterRefs, Indentation, Inline, Justification,
@@ -167,6 +167,7 @@ fn page_breaks_start_a_new_page() {
 
 fn border() -> Border {
     Border {
+        shadow: false,
         style: BorderStyle::Single,
         size: 4,
         space: 0,
@@ -196,6 +197,7 @@ fn border_lines(layout: &Layout, page: usize) -> Vec<Segment> {
 fn page_borders_sit_at_their_offsets() {
     let side = |size: u32, space: u32| {
         Some(Border {
+            shadow: false,
             style: BorderStyle::Single,
             size,
             space,
@@ -239,6 +241,61 @@ fn page_borders_sit_at_their_offsets() {
         ..Default::default()
     });
     assert!(border_lines(&laid(&document), 0).is_empty());
+}
+
+/// ECMA-376 Part 1 §17.6.15 and §17.6.2: a page border with a shadow casts
+/// a black shadow as wide as the border to the right and below, and the
+/// right and bottom lines move in by that width; §17.18.2: an art border is
+/// left out and reported.
+#[test]
+fn page_border_shadows_and_art_borders() {
+    let side = |style: BorderStyle, shadow: bool| {
+        Some(Border {
+            shadow,
+            style,
+            size: 48,
+            space: 24,
+            color: None,
+        })
+    };
+    let mut document = doc(vec![para("one")]);
+    let all = |style: BorderStyle, shadow: bool| Borders {
+        top: side(style, shadow),
+        left: side(style, shadow),
+        bottom: side(style, shadow),
+        right: side(style, shadow),
+        ..Borders::default()
+    };
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides: all(BorderStyle::Single, true),
+        offset_from: docboss_model::PageBorderOffset::Page,
+        ..Default::default()
+    });
+    let layout = laid(&document);
+    let lines = border_lines(&layout, 0);
+    assert_eq!(lines[1], ((579.0, 24.0), (579.0, 762.0), 6.0));
+    let shadows: Vec<Rect> = layout.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Rect { rect, color } if *color == docboss_model::Color::BLACK => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(shadows.len(), 2);
+    assert_eq!(shadows[0], Rect::new(582.0, 30.0, 6.0, 738.0));
+    assert_eq!(shadows[1], Rect::new(30.0, 762.0, 558.0, 6.0));
+
+    document.sections[0].properties.page_borders = Some(docboss_model::PageBorders {
+        sides: all(BorderStyle::Art, false),
+        ..Default::default()
+    });
+    let layout = laid(&document);
+    assert!(border_lines(&layout, 0).is_empty());
+    assert!(layout
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("art page borders")));
 }
 
 /// ECMA-376 Part 1 §17.4: cells sit on the table grid with their margins

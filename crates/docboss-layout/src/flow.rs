@@ -546,6 +546,21 @@ impl Paginator<'_, '_> {
             .page_borders
             .filter(|b| shows_on(b.display, self.section_first_page))
         {
+            let art = [
+                borders.sides.top,
+                borders.sides.left,
+                borders.sides.bottom,
+                borders.sides.right,
+            ]
+            .iter()
+            .flatten()
+            .any(|b| b.style == docboss_model::BorderStyle::Art);
+            if art && self.section_first_page {
+                self.ctx.diagnostics.push(Diagnostic::dropped(
+                    "page borders",
+                    "art page borders are not drawn",
+                ));
+            }
             let lines = page_border_lines(&borders, (width, height), text);
             match borders.behind_text {
                 true => back = lines,
@@ -974,6 +989,12 @@ fn shows_on(display: PageBorderDisplay, first: bool) -> bool {
 /// edge; from the text, its inner edge lies `space` points outside the
 /// text area, as LibreOffice places them. Each line runs between the outer
 /// edges of its neighbours so that the corners close.
+///
+/// A border with `w:shadow` (§17.6.15, §17.6.2) casts a black shadow as
+/// wide as the border to the right and below, as LibreOffice draws it:
+/// from the page, the right and bottom lines move in by that width so the
+/// shadow ends where they did. Art borders (§17.18.2) are left out, as
+/// LibreOffice leaves them out.
 fn page_border_lines(
     borders: &PageBorders,
     (width, height): (f32, f32),
@@ -994,8 +1015,26 @@ fn page_border_lines(
         space(sides.bottom),
         space(sides.right),
     );
+    let shadow = [sides.right, sides.bottom, sides.top, sides.left]
+        .into_iter()
+        .flatten()
+        .find(|b| {
+            b.shadow
+                && b.style != docboss_model::BorderStyle::None
+                && b.style != docboss_model::BorderStyle::Art
+        })
+        .map(|b| border_width(&b));
+    let inset = match borders.offset_from {
+        PageBorderOffset::Page => shadow.unwrap_or(0.0),
+        PageBorderOffset::Text => 0.0,
+    };
     let (y0, x0, y1, x1) = match borders.offset_from {
-        PageBorderOffset::Page => (st + ht, sl + hl, height - sb - hb, width - sr - hr),
+        PageBorderOffset::Page => (
+            st + ht,
+            sl + hl,
+            height - sb - hb - inset,
+            width - sr - hr - inset,
+        ),
         PageBorderOffset::Text => (
             top - st - ht,
             left - sl - hl,
@@ -1003,15 +1042,30 @@ fn page_border_lines(
             right + sr + hr,
         ),
     };
-    [
-        (sides.top, (x0 - hl, y0), (x1 + hr, y0)),
-        (sides.right, (x1, y0 - ht), (x1, y1 + hb)),
-        (sides.bottom, (x0 - hl, y1), (x1 + hr, y1)),
-        (sides.left, (x0, y0 - ht), (x0, y1 + hb)),
-    ]
-    .into_iter()
-    .filter_map(|(side, from, to)| border_line(&side?, from, to))
-    .collect()
+    let mut items: Vec<Item> = Vec::new();
+    if let Some(w) = shadow {
+        let (outer_right, outer_bottom) = (x1 + hr, y1 + hb);
+        let (outer_left, outer_top) = (x0 - hl, y0 - ht);
+        items.push(Item::Rect {
+            rect: Rect::new(outer_right, outer_top + w, w, outer_bottom - outer_top),
+            color: Color::BLACK,
+        });
+        items.push(Item::Rect {
+            rect: Rect::new(outer_left + w, outer_bottom, outer_right - outer_left, w),
+            color: Color::BLACK,
+        });
+    }
+    items.extend(
+        [
+            (sides.top, (x0 - hl, y0), (x1 + hr, y0)),
+            (sides.right, (x1, y0 - ht), (x1, y1 + hb)),
+            (sides.bottom, (x0 - hl, y1), (x1 + hr, y1)),
+            (sides.left, (x0, y0 - ht), (x0, y1 + hb)),
+        ]
+        .into_iter()
+        .filter_map(|(side, from, to)| border_line(&side?, from, to)),
+    );
+    items
 }
 
 fn separator_line(width: f32) -> Item {

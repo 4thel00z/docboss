@@ -116,6 +116,12 @@ pub enum BorderStyle {
     DotDotDash,
     /// Dashes with small gaps between them.
     DashSmallGap,
+    /// Alternating groups of thin diagonal strokes (`dashDotStroked`),
+    /// drawn dash-dotted as LibreOffice draws it.
+    DashDotStroked,
+    /// A page border drawn from an image of Word's art set, such as
+    /// `mapleMuffins`.
+    Art,
     /// Any other line style, drawn as single.
     Other,
 }
@@ -129,6 +135,8 @@ pub struct Border {
     /// Space from the text in points.
     pub space: u32,
     pub color: Option<Color>,
+    /// The border has a shadow.
+    pub shadow: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

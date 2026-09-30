@@ -93,6 +93,7 @@ fn page_borders_follow_the_margins() {
     builder.text("Bordered.");
     let mut document = builder.build();
     let side = docboss_model::Border {
+        shadow: false,
         style: docboss_model::BorderStyle::Dashed,
         size: 8,
         space: 24,

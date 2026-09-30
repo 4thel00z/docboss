@@ -34,11 +34,11 @@ fn span(cell: &docboss_model::TableCell) -> usize {
 pub(crate) fn border_line(border: &Border, from: (f32, f32), to: (f32, f32)) -> Option<Item> {
     let width = border_width(border);
     let dashes: &[(f32, f32)] = match border.style {
-        BorderStyle::None => return None,
+        BorderStyle::None | BorderStyle::Art => return None,
         BorderStyle::Dotted => &[(0.5, 1.0)],
         BorderStyle::Dashed => &[(8.0, 2.5)],
         BorderStyle::DashSmallGap => &[(3.0, 1.0)],
-        BorderStyle::DotDash => &[(2.5, 2.5), (8.0, 2.5)],
+        BorderStyle::DotDash | BorderStyle::DashDotStroked => &[(2.5, 2.5), (8.0, 2.5)],
         BorderStyle::DotDotDash => &[(2.5, 2.5), (2.5, 2.5), (8.0, 2.5)],
         _ => &[],
     };

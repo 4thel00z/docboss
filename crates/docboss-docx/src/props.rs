@@ -11,7 +11,8 @@ use docboss_model::{
 use docboss_xml::{Element, Ns, Reader};
 
 use crate::xml::{
-    attr, children, color, highlight, int_attr, on_off, twips, twips_attr, u32_attr, val,
+    attr, children, color, highlight, int_attr, on_off, on_off_value, twips, twips_attr, u32_attr,
+    val,
 };
 
 /// The fonts of a theme's font scheme (ECMA-376 Part 1 §20.1.4.1.18): latin,
@@ -197,8 +198,8 @@ fn tabs(reader: &mut Reader<'_>) -> Vec<TabStop> {
     stops
 }
 
-/// One border (ECMA-376 Part 1 §17.3.4): style (§17.18.2), width, spacing
-/// and color.
+/// One border (ECMA-376 Part 1 §17.3.4): style (§17.18.2), width, spacing,
+/// color and shadow. A value outside the line styles names an art border.
 fn border(e: &Element<'_>) -> Border {
     let style = match val(e).as_deref() {
         Some("nil" | "none") => BorderStyle::None,
@@ -210,6 +211,8 @@ fn border(e: &Element<'_>) -> Border {
         Some("dotDash") => BorderStyle::DotDash,
         Some("dotDotDash") => BorderStyle::DotDotDash,
         Some("dashSmallGap") => BorderStyle::DashSmallGap,
+        Some("dashDotStroked") => BorderStyle::DashDotStroked,
+        Some(v) if !LINE_STYLES.contains(&v) => BorderStyle::Art,
         _ => BorderStyle::Other,
     };
     Border {
@@ -217,8 +220,40 @@ fn border(e: &Element<'_>) -> Border {
         size: u32_attr(e, "sz").unwrap_or(4),
         space: u32_attr(e, "space").unwrap_or(0),
         color: attr(e, "color").and_then(|c| color(&c)).flatten(),
+        shadow: attr(e, "shadow").is_some_and(|v| on_off_value(Some(v.as_ref()))),
     }
 }
+
+/// The ST_Border values that are line styles; the others are art borders.
+const LINE_STYLES: [&str; 27] = [
+    "nil",
+    "none",
+    "single",
+    "thick",
+    "double",
+    "dotted",
+    "dashed",
+    "dotDash",
+    "dotDotDash",
+    "triple",
+    "thinThickSmallGap",
+    "thickThinSmallGap",
+    "thinThickThinSmallGap",
+    "thinThickMediumGap",
+    "thickThinMediumGap",
+    "thinThickThinMediumGap",
+    "thinThickLargeGap",
+    "thickThinLargeGap",
+    "thinThickThinLargeGap",
+    "wave",
+    "doubleWave",
+    "dashSmallGap",
+    "dashDotStroked",
+    "threeDEmboss",
+    "threeDEngrave",
+    "outset",
+    "inset",
+];
 
 /// Paragraph (`w:pBdr`), table (`w:tblBorders`) and cell (`w:tcBorders`)
 /// borders, each side and the inside edges.

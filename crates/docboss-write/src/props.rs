@@ -168,7 +168,7 @@ pub fn shading_element(xml: &mut Xml, name: &str, shading: Shading) {
 fn border_style_name(style: BorderStyle) -> &'static str {
     match style {
         BorderStyle::None => "none",
-        BorderStyle::Single | BorderStyle::Other => "single",
+        BorderStyle::Single | BorderStyle::Other | BorderStyle::Art => "single",
         BorderStyle::Thick => "thick",
         BorderStyle::Double => "double",
         BorderStyle::Dotted => "dotted",
@@ -176,6 +176,7 @@ fn border_style_name(style: BorderStyle) -> &'static str {
         BorderStyle::DotDash => "dotDash",
         BorderStyle::DotDotDash => "dotDotDash",
         BorderStyle::DashSmallGap => "dashSmallGap",
+        BorderStyle::DashDotStroked => "dashDotStroked",
     }
 }
 
@@ -183,15 +184,20 @@ fn border(xml: &mut Xml, name: &str, border: Option<Border>) {
     let Some(border) = border else {
         return;
     };
-    xml.empty(
-        name,
-        &[
-            ("w:val", border_style_name(border.style)),
-            ("w:sz", &border.size.to_string()),
-            ("w:space", &border.space.to_string()),
-            ("w:color", &color_value(border.color)),
-        ],
+    let (size, space, color) = (
+        border.size.to_string(),
+        border.space.to_string(),
+        color_value(border.color),
     );
+    let attrs = [
+        ("w:val", border_style_name(border.style)),
+        ("w:sz", size.as_str()),
+        ("w:space", space.as_str()),
+        ("w:color", color.as_str()),
+        ("w:shadow", "1"),
+    ];
+    let count = if border.shadow { 5 } else { 4 };
+    xml.empty(name, &attrs[..count]);
 }
 
 /// Writes a border group; `between` names the inner horizontal edge
