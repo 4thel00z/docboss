@@ -84,6 +84,20 @@ async fn docx_fixtures_match_the_synchronous_reader() {
     }
 }
 
+/// A text read fetches the OLE objects under `embeddings/`, so an Equation
+/// Editor equation reads as it does synchronously.
+#[tokio::test]
+async fn equations_read_without_media() {
+    let path = fixture("docboss-docx", "equation-editor.docx");
+    let bytes = std::fs::read(&path).unwrap();
+    let document = AsyncDocument::open(&path).await.unwrap();
+    let read = document.read(&ReadOptions::default()).await.unwrap();
+    let text = docboss_core::plain_text(&read);
+    assert!(text.contains("a=b/c"), "{text}");
+    assert_eq!(text, sync_text(&bytes));
+    assert!(read.diagnostics.is_empty(), "{:?}", read.diagnostics);
+}
+
 /// [MS-CFB] §2.2 to §2.6: the header, FAT, directory and mini stream come
 /// first, then the Word streams; the read equals the synchronous one.
 #[tokio::test]
@@ -184,6 +198,16 @@ mod http {
         let document = AsyncDocument::open_url(&server.url).await.unwrap();
         let read = document.read(&ReadOptions::default()).await.unwrap();
         assert_eq!(read.sections, docboss_core::read(&bytes).unwrap().sections);
+    }
+
+    #[tokio::test]
+    async fn equations_read_over_http() {
+        let bytes = std::fs::read(fixture("docboss-docx", "equation-editor.docx")).unwrap();
+        let server = common::start(bytes.clone(), true).await;
+        let document = AsyncDocument::open_url(&server.url).await.unwrap();
+        let read = document.read(&ReadOptions::default()).await.unwrap();
+        assert_eq!(docboss_core::plain_text(&read), sync_text(&bytes));
+        assert!(docboss_core::plain_text(&read).contains("a=b/c"));
     }
 
     #[tokio::test]

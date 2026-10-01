@@ -160,11 +160,13 @@ impl ZipIndex {
     }
 }
 
-/// Whether a part is markup the reader always needs: XML parts and
-/// relationship parts. Images, embedded fonts and OLE objects are not.
-pub fn is_markup(name: &str) -> bool {
+/// Whether a part is one the reader always needs: XML parts, relationship
+/// parts and the OLE objects under `embeddings/`, which hold Equation
+/// Editor equations. Images, embedded fonts and embedded packages are not.
+pub fn is_needed(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.ends_with(".xml") || lower.ends_with(".rels")
+    let ole = lower.contains("/embeddings/") && lower.ends_with(".bin");
+    ole || lower.ends_with(".xml") || lower.ends_with(".rels")
 }
 
 /// The compressed data of an entry inside its fetched region, after the

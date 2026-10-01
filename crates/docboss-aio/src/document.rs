@@ -214,7 +214,7 @@ impl AsyncDocument {
                     .iter()
                     .filter(|e| !e.is_dir())
                     .map(|e| e.name.as_str())
-                    .partition(|name| options.media || zip::is_markup(name));
+                    .partition(|name| options.media || zip::is_needed(name));
                 let bytes = self.zip_parts(index, &wanted, &skipped).await?;
                 (bytes, skipped.into_iter().map(String::from).collect())
             }

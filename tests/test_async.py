@@ -188,6 +188,23 @@ async def test_document_renders_like_the_sync_reader(range_url: str, big_image_d
     assert rendered.render(0, scale=0.5).startswith(b"\x89PNG")
 
 
+EQUATION = ROOT / "crates" / "docboss-docx" / "tests" / "fixtures" / "equation-editor.docx"
+
+
+@pytest.fixture
+def equation_url() -> Iterator[str]:
+    yield from serve(RangeHandler, EQUATION.read_bytes())
+
+
+@pytest.mark.asyncio
+async def test_equations_read_like_the_sync_reader(equation_url: str) -> None:
+    sync = Document(EQUATION)
+    for doc in (await AsyncDocument.open(EQUATION), await AsyncDocument.open_url(equation_url)):
+        assert "a=b/c" in await doc.extract_text()
+        assert await doc.extract_text() == sync.extract_text()
+        assert await doc.extract_markdown() == sync.extract_markdown()
+
+
 @pytest.mark.asyncio
 async def test_server_ignoring_range_still_reads(no_range_url: str, big_image_docx: bytes) -> None:
     doc = await AsyncDocument.open_url(no_range_url)
