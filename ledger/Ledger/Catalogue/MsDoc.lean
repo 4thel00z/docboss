@@ -10,7 +10,7 @@ open Ledger
 
 def rows0 : List Feature := [
   { standard := .msDoc, ref := .clause [2, 1], title := "File Structure", status := .incomplete,
-    note := "The WordDocument, table and Data streams and the summary streams are read; ObjectPool, custom XML, macros, signatures and IRM storages are not." },
+    note := "The WordDocument, table and Data streams, the summary streams and the Equation Native streams of the ObjectPool are read; other ObjectPool objects, custom XML, macros, signatures and IRM storages are not." },
   { standard := .msDoc, ref := .clause [2, 1, 1], title := "WordDocument Stream", status := .implemented,
     note := "The WordDocument stream holds the FIB, the text and the FKPs (document.rs, test read.rs text_matches_libreoffice)." },
   { standard := .msDoc, ref := .clause [2, 1, 3], title := "Data Stream", status := .implemented,
@@ -36,7 +36,7 @@ def rows0 : List Feature := [
   { standard := .msDoc, ref := .clause [2, 1, 13], title := "Protected Content Stream", status := .notImplemented,
     note := "IRM-protected documents are not decrypted." },
   { standard := .msDoc, ref := .clause [2, 2], title := "Fundamental Concepts", status := .incomplete,
-    note := "CPs, PLCs, STTBs, sprm property storage and RC4 decryption are handled; XOR obfuscation is refused." },
+    note := "CPs, PLCs, STTBs, sprm property storage, RC4 decryption and XOR obfuscation of Word 97 and later files are handled." },
   { standard := .msDoc, ref := .clause [2, 2, 1], title := "Character Position (CP)", status := .implemented,
     note := "CPs map to stream offsets through the piece table (text.rs, test read.rs text_matches_libreoffice)." },
   { standard := .msDoc, ref := .clause [2, 2, 2], title := "PLC", status := .implemented,
