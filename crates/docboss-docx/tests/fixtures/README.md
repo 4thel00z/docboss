@@ -20,6 +20,9 @@ preview.
 pictures wrapped square and tight, a text frame, a floating table and a VML
 shape wrapped top and bottom.
 
+`vml-tight-wrap.docx` is LibreOffice's `tdf135660.docx` from the same
+directory (MPL-2.0): a VML picture wrapped tight with no wrap polygon.
+
 `framed-table.docx` is LibreOffice's `tdf164474.docx` from the same
 directory (MPL-2.0): a table whose cell paragraphs carry a text frame.
 

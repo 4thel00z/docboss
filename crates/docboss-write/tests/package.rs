@@ -117,3 +117,42 @@ fn page_borders_follow_the_margins() {
         .unwrap();
     assert!(margins < borders);
 }
+
+/// ECMA-376 Part 1 §20.4.2.19, §20.4.2.16: a tight wrap is written with its
+/// wrap polygon, the one a DOC shape's pWrapPolygonVertices gives, or one
+/// around the whole drawing for a VML tight wrap that states none.
+#[test]
+fn tight_wraps_carry_a_polygon() {
+    let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
+    let doc = std::fs::read(format!("{fixtures}/docboss-doc/tests/fixtures/wrap.doc")).unwrap();
+    let docx = std::fs::read(format!(
+        "{fixtures}/docboss-docx/tests/fixtures/vml-tight-wrap.docx"
+    ))
+    .unwrap();
+    let documents = [
+        docboss_doc::read(&doc).unwrap(),
+        docboss_docx::read(&docx).unwrap(),
+    ];
+    for document in &documents {
+        let body = part(
+            &docboss_write::to_bytes(document).unwrap(),
+            "word/document.xml",
+        );
+        let tight = body.find("<wp:wrapTight").expect("a tight wrap");
+        let polygon = body[tight..].find("<wp:wrapPolygon").expect("its polygon");
+        let next = body[tight..].find("</wp:wrapTight>").unwrap();
+        assert!(polygon < next);
+        assert!(!body.contains("<wp:wrapTight wrapText=\"bothSides\"/>"));
+    }
+    assert!(body_has_points(&documents[0], 5));
+}
+
+fn body_has_points(document: &docboss_model::Document, count: usize) -> bool {
+    let body = part(
+        &docboss_write::to_bytes(document).unwrap(),
+        "word/document.xml",
+    );
+    let start = body.find("<wp:wrapPolygon").unwrap();
+    let end = body.find("</wp:wrapPolygon>").unwrap();
+    body[start..end].matches("<wp:").count() - 1 == count
+}

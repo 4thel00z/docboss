@@ -311,6 +311,7 @@ impl<'s, 'a> Story<'s, 'a> {
                 behind_text,
             } => {
                 let behind = if behind_text { "1" } else { "0" };
+                let in_cell = if drawing.wrap.outside_cell { "0" } else { "1" };
                 let height = id.as_str();
                 let [top, bottom, left, right] = drawing.wrap.distance.map(|d| d.to_string());
                 xml.open(
@@ -324,7 +325,7 @@ impl<'s, 'a> Story<'s, 'a> {
                         ("relativeHeight", height),
                         ("behindDoc", behind),
                         ("locked", "0"),
-                        ("layoutInCell", "1"),
+                        ("layoutInCell", in_cell),
                         ("allowOverlap", "1"),
                     ],
                 );
@@ -418,7 +419,8 @@ impl<'s, 'a> Story<'s, 'a> {
 }
 
 /// A floating drawing's wrap element, its `wrapText` and, under tight and
-/// through wrapping, its polygon.
+/// through wrapping, its polygon, which the schema requires: one around the
+/// whole drawing when the model has none.
 /// ECMA-376 Part 1 §20.4.2.15, §20.4.2.17, §20.4.2.18, §20.4.2.19, §20.4.2.20.
 /// ECMA-376 Part 1 §20.4.3.7, §20.4.2.16.
 fn wrap(xml: &mut Xml, wrap: &TextWrap) {
@@ -439,15 +441,18 @@ fn wrap(xml: &mut Xml, wrap: &TextWrap) {
         WrapKind::None | WrapKind::TopAndBottom => &[],
         _ => &[("wrapText", side)],
     };
-    let polygon =
-        matches!(wrap.kind, WrapKind::Tight | WrapKind::Through) && wrap.polygon.len() >= 3;
-    if !polygon {
+    if !matches!(wrap.kind, WrapKind::Tight | WrapKind::Through) {
         xml.empty(element, attributes);
         return;
     }
+    const WHOLE: [(i32, i32); 5] = [(0, 0), (0, 21_600), (21_600, 21_600), (21_600, 0), (0, 0)];
+    let points = match wrap.polygon.len() >= 3 {
+        true => wrap.polygon.as_slice(),
+        false => &WHOLE,
+    };
     xml.open(element, attributes);
     xml.open("wp:wrapPolygon", &[("edited", "0")]);
-    for (index, (x, y)) in wrap.polygon.iter().enumerate() {
+    for (index, (x, y)) in points.iter().enumerate() {
         let name = if index == 0 { "wp:start" } else { "wp:lineTo" };
         xml.empty(name, &[("x", &x.to_string()), ("y", &y.to_string())]);
     }

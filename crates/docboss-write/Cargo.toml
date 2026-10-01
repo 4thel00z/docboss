@@ -16,3 +16,7 @@ docboss-zip = { workspace = true }
 flate2 = { workspace = true }
 thiserror = { workspace = true }
 pulldown-cmark = { version = "0.13", default-features = false }
+
+[dev-dependencies]
+docboss-doc = { workspace = true }
+docboss-docx = { workspace = true }
