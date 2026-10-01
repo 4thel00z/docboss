@@ -569,7 +569,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-aio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "docboss-cfb",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-cfb"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "docboss-model",
@@ -594,7 +594,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "docboss-aio",
@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-cfb",
  "docboss-crypt",
@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-crypt"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes",
  "docboss-cfb",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-doc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "docboss-cfb",
@@ -659,7 +659,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-docx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "docboss-cfb",
@@ -673,14 +673,14 @@ dependencies = [
 
 [[package]]
 name = "docboss-font"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-model",
 ]
 
 [[package]]
 name = "docboss-layout"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-doc",
  "docboss-docx",
@@ -691,21 +691,21 @@ dependencies = [
 
 [[package]]
 name = "docboss-metafile"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-model",
 ]
 
 [[package]]
 name = "docboss-model"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "docboss-mtef"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-font",
  "docboss-model",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-output"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "docboss-model",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-py"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-aio",
  "docboss-core",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "docboss-font",
@@ -753,14 +753,14 @@ dependencies = [
 
 [[package]]
 name = "docboss-testkit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-zip",
 ]
 
 [[package]]
 name = "docboss-tui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "base64 0.23.1",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "docboss-write"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-doc",
  "docboss-docx",
@@ -790,14 +790,14 @@ dependencies = [
 
 [[package]]
 name = "docboss-xml"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "docboss-zip"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "docboss-model",
  "docboss-testkit",
