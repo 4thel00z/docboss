@@ -120,12 +120,36 @@ pub(crate) struct CellPlan {
 }
 
 impl CellPlan {
+    /// The cell's height: its text, or the floats text wraps around that
+    /// are laid out in the cell and placed against its paragraphs, where
+    /// they reach lower, as Word and LibreOffice grow a row for them.
     fn content_height(&self) -> f32 {
         let along = match self.direction {
-            TextDirection::LeftToRight => stack_height(&self.content) + self.trailing,
+            TextDirection::LeftToRight => {
+                (stack_height(&self.content) + self.trailing).max(self.float_bottom())
+            }
             _ => self.length,
         };
         along + self.margins[0] + self.margins[2]
+    }
+
+    /// The bottom of the lowest such float, from the top of the cell's
+    /// content.
+    fn float_bottom(&self) -> f32 {
+        let mut y = 0.0;
+        let mut bottom: f32 = 0.0;
+        for slab in &self.content {
+            y += slab.gap_before;
+            let inside = slab
+                .floats
+                .iter()
+                .filter(|f| f.local.is_none() && f.wrap.wraps() && !f.wrap.outside_cell);
+            for float in inside {
+                bottom = bottom.max(y + float.bottom_below_line());
+            }
+            y += slab.height;
+        }
+        bottom
     }
 
     /// The map from a turned cell's text frame into the row, `height` tall
@@ -230,13 +254,19 @@ impl RowPlan {
                 cell.width - cell.margins[1] - cell.margins[3],
             );
             let mut y = cell.margins[0];
+            let area = Rect::new(
+                x,
+                y,
+                width.max(1.0),
+                cell.content_height() - cell.margins[0] - cell.margins[2],
+            );
             for slab in &cell.content {
                 y += slab.gap_before;
                 out.extend(
                     slab.floats
                         .iter()
                         .cloned()
-                        .map(|float| float.nested(x, y, width.max(1.0), slab.height)),
+                        .map(|float| float.nested(x, y, width.max(1.0), slab.height, area)),
                 );
                 y += slab.height;
             }
@@ -403,7 +433,9 @@ fn cell_starting_at(
 pub(crate) fn layout_table(ctx: &mut Ctx<'_>, table: &Table, width: f32) -> (Vec<Slab>, f32, f32) {
     let props = effective_properties(ctx, table);
     let outer_style = std::mem::replace(&mut ctx.table_style, props.style_id.clone());
+    let outer_cell = std::mem::replace(&mut ctx.in_table, true);
     let laid = layout_table_rows(ctx, table, &props, width);
+    ctx.in_table = outer_cell;
     ctx.table_style = outer_style;
     laid
 }
@@ -571,6 +603,11 @@ fn layout_table_rows(
             });
         }
         let plan = RowPlan { cells };
+        ctx.report_nested_wraps(
+            plan.cells
+                .iter()
+                .flat_map(|c| c.content.iter().flat_map(|s| &s.floats)),
+        );
         let rp = &row.properties;
         let natural = plan.natural_height();
         let stated = rp.height.map(twips_to_pt).unwrap_or(0.0);
@@ -635,6 +672,8 @@ fn layout_table_rows(
     let mut slabs: Vec<Slab> = Vec::with_capacity(plans.len());
     for (index, (plan, height, exact, cant_split, _)) in plans.into_iter().enumerate() {
         let mut slab = Slab::new(height, plan.paint(height));
+        slab.extent = table_x + total;
+        slab.table_row = true;
         slab.floats = plan.floats();
         let splittable = !exact && !cant_split;
         slab.notes = plan

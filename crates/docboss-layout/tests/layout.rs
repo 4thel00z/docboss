@@ -2151,6 +2151,7 @@ fn wrapped(
         side,
         distance: [0, 0, 127_000, 127_000],
         polygon: Vec::new(),
+        outside_cell: false,
     }
 }
 
@@ -2487,4 +2488,114 @@ fn drop_caps_start_their_paragraph() {
         .filter(|s| s.0 > letter.baseline - 1.0 && s.0 < letter.baseline + 1.0 && s.1 > 72.0)
         .count();
     assert!(after > 0);
+}
+
+fn docx_fixture(name: &str) -> Document {
+    let path = format!(
+        "{}/../docboss-docx/tests/fixtures/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    docboss_docx::read(&std::fs::read(path).unwrap()).unwrap()
+}
+
+fn pictures(layout: &Layout, page: usize) -> Vec<Rect> {
+    layout.pages[page]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Image {
+                media: Some(_),
+                rect,
+            } => Some(*rect),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The baseline of the first glyph run holding `text`; runs carry no
+/// spaces.
+fn baseline_of(layout: &Layout, page: usize, text: &str) -> Option<f32> {
+    let text = text.replace(' ', "");
+    runs(layout, page)
+        .into_iter()
+        .find(|r| r.text.contains(&text))
+        .map(|r| r.baseline)
+}
+
+/// ECMA-376 Part 1 §17.3.1.11: a table whose cell paragraphs carry a text
+/// frame is framed as a whole (LibreOffice's tdf164474.docx): its cells
+/// keep their text side by side in one row, under the paragraph before.
+#[test]
+fn framed_tables_keep_their_cells() {
+    let layout = laid(&docx_fixture("framed-table.docx"));
+    let first = baseline_of(&layout, 0, "First table cell").expect("first cell");
+    let second = baseline_of(&layout, 0, "Second table cell").expect("second cell");
+    let text = baseline_of(&layout, 0, "Some text").expect("the paragraph");
+    assert!((first - second).abs() < 0.5, "{first} {second}");
+    assert!(text < first, "{text} {first}");
+}
+
+/// Paragraph frame properties inside a table cell do not
+/// make frames of their own; Apache POI's PageSpecificHeadFoot.doc keeps
+/// the page number of its even footer.
+#[test]
+fn frames_inside_table_cells_stay_in_their_cells() {
+    let path = format!(
+        "{}/../docboss-doc/tests/fixtures/framed-footer.doc",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let document = docboss_doc::read(&std::fs::read(path).unwrap()).unwrap();
+    let layout = laid(&document);
+    let label = runs(&layout, 1)
+        .into_iter()
+        .find(|r| r.text == "Page")
+        .map(|r| r.baseline)
+        .expect("the footer's page number");
+    let footer = baseline_of(&layout, 1, "simple footer").expect("the footer");
+    assert!(label > footer, "{label} {footer}");
+}
+
+/// ECMA-376 Part 1 §20.4.2.3: a floating picture anchored in a text frame
+/// or in a floating table's cell is painted.
+#[test]
+fn floats_inside_frames_and_floating_tables_are_painted() {
+    for name in ["float-in-frame.docx", "float-in-floating-table.docx"] {
+        let layout = laid(&docx_fixture(name));
+        assert_eq!(pictures(&layout, 0).len(), 1, "{name}");
+        assert!(
+            layout
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("does not wrap around a floating object")),
+            "{name}: {:?}",
+            layout.diagnostics
+        );
+    }
+}
+
+/// A row grows to hold a picture anchored in its cell, so the picture does
+/// not reach into the row below, as LibreOffice lays it out.
+#[test]
+fn rows_grow_to_hold_their_floats() {
+    let layout = laid(&docx_fixture("float-in-cell.docx"));
+    let picture = pictures(&layout, 0)[0];
+    let next = baseline_of(&layout, 0, "NEXT ROW").expect("the second row");
+    assert!(next > picture.bottom(), "{next} {picture:?}");
+}
+
+/// ECMA-376 Part 1 §20.4.2.20: a picture at the top margin whose anchor
+/// paragraph the text above pushes to the next page goes there with it;
+/// the first page keeps its lines and no empty band, as in LibreOffice.
+#[test]
+fn a_float_goes_with_an_anchor_that_moves_on() {
+    let layout = laid(&docx_fixture("anchor-moves-on.docx"));
+    assert_eq!(layout.pages.len(), 2);
+    assert!(pictures(&layout, 0).is_empty());
+    assert!(baseline_of(&layout, 0, "line 0").unwrap() < 90.0);
+    assert!(baseline_of(&layout, 0, "line 39").is_some());
+    let picture = pictures(&layout, 1)[0];
+    assert_eq!(picture.y, 72.0);
+    assert!(baseline_of(&layout, 1, "anchor").unwrap() > picture.bottom());
+    let tall = laid(&docx_fixture("anchor-moves-on-tall.docx"));
+    assert_eq!(tall.pages.len(), 2);
 }

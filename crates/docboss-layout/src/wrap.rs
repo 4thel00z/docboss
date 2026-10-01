@@ -156,6 +156,7 @@ mod tests {
             side,
             distance: [0, 0, 127_000, 127_000],
             polygon: Vec::new(),
+            outside_cell: false,
         }
     }
 
@@ -200,6 +201,7 @@ mod tests {
             side: WrapSide::Both,
             distance: [0; 4],
             polygon: vec![(10_800, 0), (21_600, 21_600), (0, 21_600), (10_800, 0)],
+            outside_cell: false,
         };
         let rect = Rect::new(100.0, 100.0, 100.0, 100.0);
         let exclusion = [Exclusion::new(rect, &wrap)];

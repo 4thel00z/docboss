@@ -130,6 +130,9 @@ pub struct TextWrap {
     /// units of 1/21600 of the object's width and height; empty for the
     /// bounding box.
     pub polygon: Vec<(i32, i32)>,
+    /// Laid out against the page rather than inside the table cell that
+    /// holds its anchor (`layoutInCell="0"`, fLayoutInCell unset).
+    pub outside_cell: bool,
 }
 
 impl TextWrap {

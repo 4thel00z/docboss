@@ -858,6 +858,7 @@ impl<'a> Context<'a> {
             side: anchor.wrap_side,
             distance: wrap.map_or([0, 0, 114_300, 114_300], |w| w.distance),
             polygon: wrap.map(|w| w.polygon.clone()).unwrap_or_default(),
+            outside_cell: wrap.is_some_and(|w| w.outside_cell),
         };
         Some(RunContent::Drawing(Box::new(drawing)))
     }

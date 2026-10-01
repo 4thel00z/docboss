@@ -16,4 +16,5 @@ docboss-font = { workspace = true }
 docboss-metafile = { workspace = true }
 
 [dev-dependencies]
+docboss-doc = { workspace = true }
 docboss-docx = { workspace = true }

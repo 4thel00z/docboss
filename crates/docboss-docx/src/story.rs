@@ -707,6 +707,13 @@ fn vml_color(value: &str) -> Option<Color> {
     Color::from_hex(hex)
 }
 
+/// Whether a VML shape or group is laid out outside the table cell that
+/// holds it: `o:allowincell="f"`.
+fn outside_cell(e: &Element<'_>) -> bool {
+    e.attr_raw(Ns::O, "allowincell")
+        .is_some_and(|v| v == "f" || v == "false")
+}
+
 /// The size and position a top-level VML shape or group's `style` gives
 /// the drawing: its first stated size, and its absolute position.
 fn vml_box(style: &str, info: &mut DrawingInfo) {
@@ -1520,6 +1527,7 @@ impl<'p> StoryParser<'p> {
     /// The equation of an embedded Equation Editor object: the MTEF data of
     /// the `Equation Native` stream in the compound file the relationship
     /// names. A stream that does not read is reported.
+    /// ECMA-376 Part 1 §15.2.10.
     fn equation(&mut self, id: &str) -> Option<Box<docboss_model::Math>> {
         let target = self
             .ctx
@@ -1606,6 +1614,9 @@ impl<'p> StoryParser<'p> {
                         .attr_raw(Ns::NONE, "behindDoc")
                         .is_some_and(|v| v == "1" || v == "true");
                     wrap_distances(&e, &mut info.wrap.distance);
+                    info.wrap.outside_cell = e
+                        .attr_raw(Ns::NONE, "layoutInCell")
+                        .is_some_and(|v| v == "0" || v == "false");
                 }
                 (
                     Ns::WP,
@@ -1838,12 +1849,14 @@ impl<'p> StoryParser<'p> {
                     if let Some(style) = e.attr(Ns::NONE, "style") {
                         vml_box(&style, info);
                     }
+                    info.wrap.outside_cell |= outside_cell(&e);
                     vml_shape(&e, info);
                 }
                 (Ns::V, "group") => {
                     if let Some(style) = e.attr(Ns::NONE, "style") {
                         vml_box(&style, info);
                     }
+                    info.wrap.outside_cell |= outside_cell(&e);
                     self.vml_group(reader, &e, info, &mut Vec::new());
                     return;
                 }

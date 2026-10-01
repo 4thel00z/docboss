@@ -19,3 +19,10 @@ preview.
 `wrap.docx` is written by `python3 crates/docboss-docx/tools/wrap_fixture.py`:
 pictures wrapped square and tight, a text frame, a floating table and a VML
 shape wrapped top and bottom.
+
+`framed-table.docx` is LibreOffice's `tdf164474.docx` from the same
+directory (MPL-2.0): a table whose cell paragraphs carry a text frame.
+
+`anchor-moves-on.docx`, `anchor-moves-on-tall.docx`, `float-in-frame.docx`,
+`float-in-floating-table.docx` and `float-in-cell.docx` are written by
+`python3 crates/docboss-docx/tools/float_fixtures.py crates/docboss-docx/tests/fixtures`.

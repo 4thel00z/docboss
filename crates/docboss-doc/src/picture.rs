@@ -454,6 +454,8 @@ pub struct ShapeWrap {
     /// The wrap polygon in a 21600 by 21600 space over the shape.
     pub polygon: Vec<(i32, i32)>,
     pub hidden: bool,
+    /// fLayoutInCell is set off.
+    pub outside_cell: bool,
 }
 
 /// The most wrap polygon points read.
@@ -464,7 +466,8 @@ const MAX_POLYGON: usize = 1024;
 /// OfficeArtTertiaryFOPT, with their defaults of 0 above and below and
 /// 0.125 inch beside; its pWrapPolygonVertices, an IMsoArray of POINTs in
 /// the space geoLeft, geoTop, geoRight and geoBottom give (0 to 21600 by
-/// default); and fHidden of its Group Shape Boolean Properties.
+/// default); and fHidden and fLayoutInCell of its Group Shape Boolean
+/// Properties.
 /// [MS-ODRAW] §2.3.4.9, §2.3.4.10, §2.3.4.11, §2.3.4.12, §2.3.4.7, §2.3.4.8, §2.2.51, §2.2.55, §2.3.6.1, §2.3.6.2, §2.3.6.3, §2.3.6.4, §2.3.4.44.
 pub fn shape_wrap(bytes: &[u8], container: &Record) -> ShapeWrap {
     let mut wrap = ShapeWrap {
@@ -507,6 +510,7 @@ pub fn shape_wrap(bytes: &[u8], container: &Record) -> ShapeWrap {
                 }
                 0x03BF => {
                     wrap.hidden = value & 0x0002_0000 != 0 && value & 0x0002 != 0;
+                    wrap.outside_cell = value & 0x8000_0000 != 0 && value & 0x8000 == 0;
                     continue;
                 }
                 _ => continue,

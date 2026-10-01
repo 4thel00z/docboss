@@ -3,8 +3,9 @@
 //! decorations, and producing one slab per line.
 
 use docboss_model::{
-    Break, DashPattern, Drawing, DrawingPlacement, Inline, Justification, LineCap, LineRule,
-    NoteKind, Paragraph, RevisionKind, RunContent, TabAlignment, TabLeader, TabStop, Underline,
+    Break, DashPattern, Diagnostic, Drawing, DrawingPlacement, Inline, Justification, LineCap,
+    LineRule, NoteKind, Paragraph, RevisionKind, RunContent, TabAlignment, TabLeader, TabStop,
+    Underline,
 };
 
 use std::sync::Arc;
@@ -1027,6 +1028,12 @@ fn build_atoms(
                 else {
                     continue;
                 };
+                if drawing.wrap.wraps() && drawing.shape.rotation % 21_600_000 != 0 {
+                    ctx.report_once(Diagnostic::approximated(
+                        "layout",
+                        "text wraps around a turned drawing as if it were not turned",
+                    ));
+                }
                 let text_box = layout_drawing(ctx, drawing);
                 let height = text_box
                     .as_ref()
@@ -1046,6 +1053,7 @@ fn build_atoms(
                     wrap: drawing.wrap.clone(),
                     local: None,
                     id: ctx.next_float(),
+                    children: Vec::new(),
                 });
             }
             Elem::Note(id) => match word.as_mut() {
