@@ -24,7 +24,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0" # x-release-please-version
+version = "0.2.0" # x-release-please-version
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/4thel00z/docboss"
@@ -34,23 +34,23 @@ readme = "README.md"
 keywords = ["docx", "doc", "word", "ecma-376", "ooxml"]
 
 [workspace.dependencies]
-docboss-model = { path = "crates/docboss-model", version = "0.1.0" } # x-release-please-version
-docboss-zip = { path = "crates/docboss-zip", version = "0.1.0" } # x-release-please-version
-docboss-xml = { path = "crates/docboss-xml", version = "0.1.0" } # x-release-please-version
-docboss-docx = { path = "crates/docboss-docx", version = "0.1.0" } # x-release-please-version
-docboss-cfb = { path = "crates/docboss-cfb", version = "0.1.0" } # x-release-please-version
-docboss-doc = { path = "crates/docboss-doc", version = "0.1.0" } # x-release-please-version
-docboss-core = { path = "crates/docboss-core", version = "0.1.0" } # x-release-please-version
-docboss-output = { path = "crates/docboss-output", version = "0.1.0" } # x-release-please-version
-docboss-font = { path = "crates/docboss-font", version = "0.1.0" } # x-release-please-version
-docboss-metafile = { path = "crates/docboss-metafile", version = "0.1.0" } # x-release-please-version
-docboss-mtef = { path = "crates/docboss-mtef", version = "0.1.0" } # x-release-please-version
-docboss-layout = { path = "crates/docboss-layout", version = "0.1.0" } # x-release-please-version
-docboss-render = { path = "crates/docboss-render", version = "0.1.0" } # x-release-please-version
-docboss-write = { path = "crates/docboss-write", version = "0.1.0" } # x-release-please-version
-docboss-tui = { path = "crates/docboss-tui", version = "0.1.0" } # x-release-please-version
-docboss-crypt = { path = "crates/docboss-crypt", version = "0.1.0" } # x-release-please-version
-docboss-aio = { path = "crates/docboss-aio", version = "0.1.0" } # x-release-please-version
+docboss-model = { path = "crates/docboss-model", version = "0.2.0" } # x-release-please-version
+docboss-zip = { path = "crates/docboss-zip", version = "0.2.0" } # x-release-please-version
+docboss-xml = { path = "crates/docboss-xml", version = "0.2.0" } # x-release-please-version
+docboss-docx = { path = "crates/docboss-docx", version = "0.2.0" } # x-release-please-version
+docboss-cfb = { path = "crates/docboss-cfb", version = "0.2.0" } # x-release-please-version
+docboss-doc = { path = "crates/docboss-doc", version = "0.2.0" } # x-release-please-version
+docboss-core = { path = "crates/docboss-core", version = "0.2.0" } # x-release-please-version
+docboss-output = { path = "crates/docboss-output", version = "0.2.0" } # x-release-please-version
+docboss-font = { path = "crates/docboss-font", version = "0.2.0" } # x-release-please-version
+docboss-metafile = { path = "crates/docboss-metafile", version = "0.2.0" } # x-release-please-version
+docboss-mtef = { path = "crates/docboss-mtef", version = "0.2.0" } # x-release-please-version
+docboss-layout = { path = "crates/docboss-layout", version = "0.2.0" } # x-release-please-version
+docboss-render = { path = "crates/docboss-render", version = "0.2.0" } # x-release-please-version
+docboss-write = { path = "crates/docboss-write", version = "0.2.0" } # x-release-please-version
+docboss-tui = { path = "crates/docboss-tui", version = "0.2.0" } # x-release-please-version
+docboss-crypt = { path = "crates/docboss-crypt", version = "0.2.0" } # x-release-please-version
+docboss-aio = { path = "crates/docboss-aio", version = "0.2.0" } # x-release-please-version
 docboss-testkit = { path = "crates/docboss-testkit" }
 thiserror = "2"
 memchr = "2"
