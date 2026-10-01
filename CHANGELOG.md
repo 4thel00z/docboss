@@ -1,27 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Features
-
-* **layout, render:** floating drawings placed by `wp:align` and every `relativeFrom` base; text box content clipped to the box less its insets; dashed, capped and joined outlines and dashed borders; page borders with their offsets, shadows and art-border reporting; preset and custom shape geometry with line ends, flips and rotation; groups, drawing canvases and gradient fills; turned and vertical text; right-to-left layout with the Unicode bidirectional algorithm and Arabic and Hebrew shaping.
-* **render:** SmartArt drawn from its saved drawing, charts from their cached values (and listed as tables in text and Markdown), WMF and EMF pictures played through the new `docboss-metafile` crate.
-* **layout:** Office Math read, laid out and extracted (Unicode linear format in text, LaTeX in Markdown).
-* **crypt, doc:** XOR-obfuscated DOC files open with their password.
-* **doc:** Word 6 and Word 95 files are read with their character, paragraph and style formatting, sections, headers and footers, tables, pictures and numbered paragraphs (ANLD); Word 2 files are detected.
-* **layout:** text wraps around floating pictures, text frames (`w:framePr`, DOC frame sprms) and floating tables (`w:tblpPr`, DOC table position sprms): square, tight and through with the wrap polygon, top and bottom, on both sides, one side or the larger one, at the object's distances; a float placed above text already on its page lays the page out again; floats in table cells are drawn; hidden drawings are left out.
-* **mtef, docx, doc:** Equation Editor 3 objects give their equation (plain text in Unicode linear format, LaTeX in Markdown) from the MTEF of their `Equation Native` stream, through the new `docboss-mtef` crate; the preview picture still draws them.
-
-### Bug Fixes
-
-* **json:** documents with comment ranges serialize (`docboss json` failed on them).
-* **layout:** inline pictures move with their run's position (DOC equations sat 3 pt high); horizontal borders count into table row heights, and tables in Word 2007-mode DOCX move left by their first cell's margin, as LibreOffice places them.
-* **doc:** compound files whose directory, FAT or header is damaged or cut off give their text from the FIB found at the start of a sector (142 of 150 damaged DOC files read, from 94); percentage shading patterns mix their colors.
-
-### Performance
-
-* **doc:** picture bytes shared between the BLIP store and the media list and stories built one paragraph at a time (peak heap on a 6.2 MB file 41.9 to 32.6 MB); run formatting and list levels cached (the 1,188-page benchmark DOC 155 to 105 ms).
-
 ## 0.1.0 (2026-09-28)
 
 ### Features

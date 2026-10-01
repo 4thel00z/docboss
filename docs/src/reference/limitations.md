@@ -12,13 +12,17 @@ missing. The largest gaps:
   Only the compatibilityMode compatibility setting is read.
 - DOC: password-protected Word 6 and 95 files are refused. Word 6 and 95
   files are read with their formatting, sections, headers, footers, tables,
-  pictures and numbered paragraphs (ANLD), but their comments and drawing
-  objects, whose Word 6 records differ from Word 97's, are left out; Word 2
-  files are read as text only. Equation Editor 3 objects keep their preview
-  picture and give their equation as text and LaTeX; MathType's MTEF 5 is
-  not read. A compound file whose directory is lost gives its text only.
-  Freeforms and WordArt shapes are reported as dropped.
-- RTF and Flat OPC XML are detected and refused.
+  pictures and numbered paragraphs (ANLD), but their comments, endnotes and
+  drawing objects, whose Word 6 records differ from Word 97's, and the
+  equations of their Equation Editor objects are left out and reported;
+  Word 2 files are read as text only. A Word 97 compound file whose
+  directory is lost gives its text only (a Word 6 or 95 one is read in
+  full). Freeforms and WordArt shapes are reported as dropped.
+- DOCX and DOC: Equation Editor 3 objects keep their preview picture and
+  give their equation as text and LaTeX; MathType's MTEF 4 and 5 are not
+  read, and the object is reported.
+- RTF is detected and refused. Flat OPC XML is not read: it is refused as
+  an unknown format.
 
 ## Layout and rendering
 
@@ -28,9 +32,12 @@ missing. The largest gaps:
   ligatures. Right-to-left sections (`w:bidi` in `w:sectPr`: column order,
   gutter side) and vertical sections (`tbRl`) lay out left to right.
 - No column balancing. Text wraps around floating images, text frames and
-  floating tables in the body; floats in headers and footers do not push
-  body text aside, tables beside a float are not narrowed, and the wrap
-  polygon of a rotated shape is not turned with it.
+  floating tables in the body. Text in a table cell or text frame does not
+  wrap around a float anchored there (the row grows to hold the float, which
+  is drawn over the text); floats in headers and footers do not push body
+  text aside; a table beside a float is not narrowed; text wraps around a
+  turned drawing as if it were not turned. `docboss diagnostics --layout`
+  reports each of these.
 - Shapes draw solid and gradient fills; picture and pattern fills and
   effects (shadows, glow, 3-D) are not drawn. SmartArt without its saved
   drawing shows an empty frame; 3-D, radar, stock, surface, bubble and

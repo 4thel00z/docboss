@@ -43,8 +43,7 @@ file as written.
 ## Scope
 
 docboss reads, lays out, renders and writes word-processing documents. It
-does not edit a document in place, does not run macros, and does not draw
-charts, SmartArt, equations or shapes other than pictures. The
+does not edit a document in place and does not run macros. The
 [limitations](reference/limitations.md) page lists what is missing, and the
 [conformance ledger](reference/conformance.md) records the status of every
 clause of the standards it reads.

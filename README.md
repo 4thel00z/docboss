@@ -31,7 +31,7 @@ Reading a Word document should not require LibreOffice, a JVM or a C library. do
 - **Markdown and HTML**: headings from styles, nested lists with the document's own labels, GFM tables with merged cells, footnotes, links and images, in one pass.
 - **Layout and rendering**: Word-like line breaking, the Unicode bidirectional algorithm for right-to-left paragraphs, runs and tables, OpenType shaping (GSUB and GPOS, Arabic joining) for Arabic and Hebrew, tab stops, list labels, keep and widow rules, tables split across pages with repeated header rows, sections and columns, headers and footers with page numbers, footnotes, inline and floating images; an anti-aliased rasterizer over its own TrueType and CFF parsers, with metric-compatible font substitution (Carlito for Calibri, Liberation for Arial and Times New Roman). PNG, PPM, BMP and JPEG output, pages rendered on all cores.
 - **DOCX writing**: model to DOCX, a builder API, Markdown to DOCX, and DOC to DOCX conversion, with deterministic output: the same input gives identical bytes.
-- **Encrypted files**: password-protected DOCX (Agile and Standard encryption, [MS-OFFCRYPTO]) and DOC (RC4, RC4 CryptoAPI and XOR obfuscation).
+- **Encrypted files**: password-protected DOCX (Agile and Standard encryption, [MS-OFFCRYPTO]) and DOC (RC4, RC4 CryptoAPI and, for Word 97 and later files, XOR obfuscation).
 - **Range-fetching I/O**: documents open over files or `http(s)://` URLs and fetch only the byte ranges they need: the ZIP central directory and the XML parts of a DOCX, the sectors of the Word streams of a DOC.
 - **Conformance ledger checked by Lean**: every clause of the specifications docboss reads has a row with a status, and a Lean 4 gate fails the build when a row claims more than the code and tests cite ([conformance](docs/src/reference/conformance.md)).
 - **Terminal explorer** (`docboss tui`): element tree, resolved-style inspector, ZIP or compound-file container view with hex and XML, Markdown and page previews.
@@ -110,7 +110,7 @@ asyncio.run(main())
 <details>
 <summary><strong>Rust</strong></summary>
 
-The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`, `docboss-metafile`).
+The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`, `docboss-metafile`, `docboss-mtef`).
 
 ```rust,no_run
 use docboss_output::{to_markdown, to_text, MarkdownOptions, TextOptions};
@@ -229,9 +229,10 @@ The low tail is fonts LibreOffice substitutes differently, tables and shapes Lib
 
 The reader is lenient and it says so: `docboss diagnostics` (the `diagnostics` property in Python, the `diagnostics` field of `Document` in Rust) lists every item that was approximated or dropped. The largest gaps:
 
-- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left and vertical sections lay out left to right; no column balancing; header and footer floats do not push body text aside; picture and pattern fills and shape effects are not drawn; 3-D, radar, stock and surface charts and SmartArt without a saved drawing show an empty frame; conditional formatting from table styles is not applied. CFF2 fonts are refused and TIFF images draw a placeholder.
+- **Layout**: shaping covers Arabic, Hebrew and combining marks, not Indic, Thai or other scripts that reorder glyphs; right-to-left and vertical sections lay out left to right; no column balancing; text in table cells and text frames does not wrap around the floats anchored there, header and footer floats do not push body text aside, tables beside a float are not narrowed, and turned drawings wrap as if unturned (each reported by `diagnostics --layout`); picture and pattern fills and shape effects are not drawn; 3-D, radar, stock, surface, bubble and bar-of-pie charts and SmartArt without a saved drawing show an empty frame; conditional formatting from table styles is not applied. CFF2 fonts are refused and TIFF images draw a placeholder.
 - **DOCX reading**: `w:altChunk` content is skipped and reported; ActiveX controls are not read as content; ruby text is ignored.
-- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their comments and drawing objects, and Word 2 files are read as text only; MathType (MTEF 5) equations keep their picture but not their text; freeforms and WordArt are reported as dropped.
+- **DOC reading**: password-protected Word 6 and 95 files are refused with an error; Word 6 and 95 files lose their comments, endnotes, drawing objects and equations, and Word 2 files are read as text only; freeforms and WordArt are reported as dropped.
+- **Equations** (DOCX and DOC): MathType (MTEF 4 and 5) objects keep their picture but not their text, and are reported.
 - **Writing**: embedded fonts are not written (the font table lists names only), no theme part is written, and raw HTML in Markdown is dropped except `<br>`.
 
 The [conformance ledger](docs/src/reference/conformance.md) lists every clause with its status and a note saying what is missing.
