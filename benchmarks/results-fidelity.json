@@ -1,15 +1,57 @@
 {
+  "machine": {
+    "platform": "macOS-26.4-arm64-arm-64bit",
+    "python": "3.12.10",
+    "cpu": "Apple M3 Pro",
+    "cores": "12"
+  },
+  "versions": {
+    "docboss": "0.1.0",
+    "python-docx": "1.2.0",
+    "docx2python": "3.7.1",
+    "mammoth": "1.13.0",
+    "docx2txt": "0.9",
+    "pypandoc_binary": "1.17",
+    "psutil": "7.2.2",
+    "pandoc": "3.9",
+    "libreoffice": "26.8.0.3"
+  },
+  "date": "2026-10-01",
+  "settings": {
+    "files": "benchmarks/fidelity-sample.txt",
+    "sample": null,
+    "scale": 1.5,
+    "max_pages": 5
+  },
   "summary": {
     "files": 90,
     "scored": 88,
-    "mean_ssim": 0.9338679995823191,
-    "page_count_matches": 83
+    "mean_ssim": 0.9339789897033398,
+    "median_ssim": 0.9816311190999066,
+    "p10_ssim": 0.7625028665948936,
+    "page_count_matches": 83,
+    "docx": {
+      "files": 60,
+      "scored": 59,
+      "mean_ssim": 0.951701262538227,
+      "median_ssim": 0.9846700541142719,
+      "p10_ssim": 0.8785525071495988,
+      "page_count_matches": 56
+    },
+    "doc": {
+      "files": 30,
+      "scored": 29,
+      "mean_ssim": 0.8979233311771897,
+      "median_ssim": 0.9660062122819775,
+      "p10_ssim": 0.6343850281130796,
+      "page_count_matches": 27
+    }
   },
   "results": [
     {
       "file": "000-090716_Studentische_Arbeit_VWS.docx",
       "reference_pages": 6,
-      "docboss_pages": 5,
+      "docboss_pages": 6,
       "pages_scored": 5,
       "ssim": 0.9763208021855476,
       "mad": 1.048456787930042,
@@ -139,7 +181,7 @@
     {
       "file": "007-calendar5.docx",
       "reference_pages": 1,
-      "docboss_pages": 1,
+      "docboss_pages": 2,
       "pages_scored": 1,
       "ssim": 0.8566533846127096,
       "mad": 3.4154174674354048,
@@ -152,7 +194,7 @@
     },
     {
       "file": "008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx",
-      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpahcehpsv', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/008-clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx']' returned non-zero exit status 1."
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '.', 'poi/test-data/document/clusterfuzz-testcase-minimized-POIXWPFFuzzer-5569740188549120.docx']' returned non-zero exit status 1."
     },
     {
       "file": "009-default-sect-break-cols.docx",
@@ -437,7 +479,7 @@
     {
       "file": "029-tdf104061_tableSectionColumns.docx",
       "reference_pages": 2,
-      "docboss_pages": 2,
+      "docboss_pages": 3,
       "pages_scored": 2,
       "ssim": 0.32784517400729984,
       "mad": 33.60378038987158,
@@ -683,7 +725,7 @@
     {
       "file": "046-tdf152506.docx",
       "reference_pages": 6,
-      "docboss_pages": 5,
+      "docboss_pages": 6,
       "pages_scored": 5,
       "ssim": 0.9953678892513832,
       "mad": 0.12810330246672305,
@@ -799,12 +841,12 @@
       "reference_pages": 3,
       "docboss_pages": 3,
       "pages_scored": 3,
-      "ssim": 0.99554679423187,
-      "mad": 0.1785904642783538,
+      "ssim": 0.9957758745393388,
+      "mad": 0.17293237535503705,
       "per_page": [
         {
-          "ssim": 0.9881835870423421,
-          "mad": 0.45762651638441365
+          "ssim": 0.9888708279647486,
+          "mad": 0.4406522496144635
         },
         {
           "ssim": 0.9984567956532677,
@@ -835,16 +877,16 @@
       "reference_pages": 2,
       "docboss_pages": 2,
       "pages_scored": 2,
-      "ssim": 0.9994207265696085,
-      "mad": 0.016970713437990805,
+      "ssim": 0.9976254759047024,
+      "mad": 0.16151492754756136,
       "per_page": [
         {
           "ssim": 0.9988665910981994,
           "mad": 0.027730202610988325
         },
         {
-          "ssim": 0.9999748620410175,
-          "mad": 0.006211224264993284
+          "ssim": 0.9963843607112054,
+          "mad": 0.29529965248413437
         }
       ]
     },
@@ -941,12 +983,12 @@
       "reference_pages": 1,
       "docboss_pages": 1,
       "pages_scored": 1,
-      "ssim": 0.6928297732211269,
-      "mad": 15.25475258149567,
+      "ssim": 0.7079858968109466,
+      "mad": 14.13460376795321,
       "per_page": [
         {
-          "ssim": 0.6928297732211269,
-          "mad": 15.25475258149567
+          "ssim": 0.7079858968109466,
+          "mad": 14.13460376795321
         }
       ]
     },
@@ -1025,7 +1067,7 @@
     {
       "file": "067-Bug48075.doc",
       "reference_pages": 6,
-      "docboss_pages": 5,
+      "docboss_pages": 10,
       "pages_scored": 5,
       "ssim": 0.6343850281130796,
       "mad": 12.376988906497623,
@@ -1055,7 +1097,7 @@
     {
       "file": "068-Bug50936_1.doc",
       "reference_pages": 15,
-      "docboss_pages": 5,
+      "docboss_pages": 15,
       "pages_scored": 5,
       "ssim": 0.9353577730953001,
       "mad": 6.378382958121521,
@@ -1169,16 +1211,16 @@
       "reference_pages": 2,
       "docboss_pages": 2,
       "pages_scored": 2,
-      "ssim": 0.9394819114833479,
-      "mad": 2.2409406336421585,
+      "ssim": 0.9368756208642562,
+      "mad": 2.283750724382533,
       "per_page": [
         {
           "ssim": 0.9391545118738991,
           "mad": 2.362264621523881
         },
         {
-          "ssim": 0.9398093110927966,
-          "mad": 2.1196166457604364
+          "ssim": 0.9345967298546134,
+          "mad": 2.2052368272411846
         }
       ]
     },
@@ -1287,36 +1329,36 @@
     {
       "file": "082-o_kurs.doc",
       "reference_pages": 6,
-      "docboss_pages": 5,
+      "docboss_pages": 6,
       "pages_scored": 5,
-      "ssim": 0.7062862163415061,
-      "mad": 13.62768116662995,
+      "ssim": 0.7050696843780389,
+      "mad": 13.651721589334318,
       "per_page": [
         {
           "ssim": 0.8552288011485696,
           "mad": 7.397571652938961
         },
         {
-          "ssim": 0.8914733008108351,
-          "mad": 3.357973321583649
+          "ssim": 0.889952635856501,
+          "mad": 3.3880238499641115
         },
         {
-          "ssim": 0.4739604255747664,
-          "mad": 25.197657643572377
+          "ssim": 0.47243976062043225,
+          "mad": 25.22770817195284
         },
         {
-          "ssim": 0.4805604587143004,
-          "mad": 24.11488277557866
+          "ssim": 0.4790397937599663,
+          "mad": 24.14493330395912
         },
         {
-          "ssim": 0.8302080954590593,
-          "mad": 8.070320439476097
+          "ssim": 0.8286874305047252,
+          "mad": 8.10037096785656
         }
       ]
     },
     {
       "file": "083-password_password_cryptoapi.doc",
-      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/var/folders/gn/q0ysnhcj4n12952c7r7d941w0000gp/T/tmpahcehpsv', '/private/tmp/claude-502/-Users-mohamed-tahrioui-private-docboss-src/77567b90-c772-4684-86f6-1a5cbf525827/scratchpad/perf/fid-sample/083-password_password_cryptoapi.doc']' returned non-zero exit status 1."
+      "error": "Command '['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '.', 'poi/test-data/document/password_password_cryptoapi.doc']' returned non-zero exit status 1."
     },
     {
       "file": "084-sections.doc",

@@ -45,7 +45,7 @@ output is wrong:
 | catdoc | | ✓ | | | ✓ | ✓ | ✓ | C, DOC, built from source |
 | LibreOffice | | ✓ | | | | | | reference for recall and rendering; timed separately |
 
-Versions: docboss 0.1.0 (release build of master cbaa449), python-docx 1.2.0,
+Versions: docboss 0.1.0 (release build of master), python-docx 1.2.0,
 docx2python 3.7.1, mammoth 1.13.0, docx2txt 0.9, pypandoc_binary 1.17 (pandoc
 3.9), antiword 0.37, catdoc 0.95, LibreOffice 26.8.0.3. Machine: Apple M3 Pro,
 12 cores, macOS 26.4, Python 3.12.10. All tables below come from one session
@@ -222,26 +222,32 @@ Each pair is decoded to grayscale, center-cropped to the common size and
 Lanczos-downsampled to half resolution, then scored with windowed SSIM (8×8
 uniform window) and mean absolute pixel difference; up to 5 pages per file.
 Page counts are compared too, since a layout that paginates differently
-scores every later page against the wrong reference. The sample is 60 DOCX
-and 30 DOC files spread evenly over the corpus; 88 were scored (LibreOffice
-could not convert a fuzzer file and a password-protected one):
+scores every later page against the wrong reference: docboss's full count
+(`docboss info`) against LibreOffice's, a file that could not be scored
+counting as a mismatch. The sample, listed in `fidelity-sample.txt`, is 60
+DOCX and 30 DOC files spread over the corpus and two of docboss's own DOC
+test fixtures; 88 were scored (LibreOffice could not convert a fuzzer file
+and a password-protected one). The p10 is the order statistic (numpy's
+`lower` method), as in every refresh:
 
 | Format | Files | SSIM mean | SSIM median | SSIM p10 | MAD median | Page counts equal |
 |---|--:|--:|--:|--:|--:|--:|
-| DOCX | 59 | 0.952 | 0.985 | 0.880 | 0.55 | 56 |
-| DOC | 29 | 0.898 | 0.966 | 0.681 | 1.83 | 25 |
+| DOCX | 59 | 0.952 | 0.985 | 0.879 | 0.55 | 56 of 60 |
+| DOC | 29 | 0.898 | 0.966 | 0.634 | 1.83 | 27 of 30 |
 
 SSIM scores the whole page, and mostly white pages score high whatever their
 content, so read the p10 column as the honest one: a tenth of the DOC files
-score under 0.69. Since the refresh before last (0.940 and 0.876 means),
+score under 0.64. Since the refresh before last (0.940 and 0.876 means),
 shapes, groups, gradients, SmartArt, charts, Office Math, WMF and EMF
 pictures, page borders and right-to-left text are drawn, table rows count
 their borders, and text wraps around floating pictures, frames and floating
 tables. The low scores now come from fonts LibreOffice substitutes
 differently (a bold sans header drawn in a serif), underlined empty tab runs,
-and tracked changes that LibreOffice shows with revision marks and docboss as
-final text.
-`failure-modes/` records the fixes made so far, with before and after renders.
+text in table cells that LibreOffice wraps around the pictures anchored
+there and docboss does not, and tracked changes that LibreOffice shows with
+revision marks and docboss as final text.
+`failure-modes/` holds before and after renders of the first layout fixes,
+from the earliest refresh; later fixes are described in their commits.
 
 ## Reproducing
 
@@ -258,7 +264,7 @@ uv run python benchmarks/bench_memory.py doc corpus/ --sample 100
 uv run python benchmarks/bench_robustness.py mutate docx damaged/docx corpus/ --count 150
 uv run python benchmarks/bench_robustness.py run docx damaged/docx
 uv run python benchmarks/bench_render.py corpus/
-uv run python benchmarks/bench_fidelity.py corpus/ --sample 90 --max-pages 5
+uv run python benchmarks/bench_fidelity.py corpus/ --files benchmarks/fidelity-sample.txt --max-pages 5
 ```
 
 Every script writes its `results-*.json` next to itself, with the machine,

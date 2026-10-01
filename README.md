@@ -187,14 +187,14 @@ Measured on an Apple M3 Pro, one session, best of 3 after a warm-up. Method, ver
 
 ### Rendering
 
-Pages rendered by docboss against LibreOffice's rendering of the same documents (LibreOffice to PDF, rasterized by pdfboss), 60 DOCX and 30 DOC files from the same corpora, up to 5 pages each, windowed SSIM at scale 1.5:
+Pages rendered by docboss against LibreOffice's rendering of the same documents (LibreOffice to PDF, rasterized by pdfboss), 60 DOCX and 30 DOC files from the same corpora (two of the DOC files are docboss test fixtures), up to 5 pages each, windowed SSIM at scale 1.5:
 
 | Format | SSIM median | SSIM p10 | Page counts equal |
 |---|--:|--:|--:|
-| DOCX | 0.985 | 0.880 | 56 of 59 |
-| DOC | 0.966 | 0.681 | 25 of 29 |
+| DOCX | 0.985 | 0.879 | 56 of 60 |
+| DOC | 0.966 | 0.634 | 27 of 30 |
 
-The low tail is fonts LibreOffice substitutes differently, tables and shapes LibreOffice places differently, and tracked changes that LibreOffice shows with revision marks. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
+The p10 is the order statistic (the score a tenth of the files fall to or below); page counts compare docboss's full page count with LibreOffice's, and a file LibreOffice could not convert counts as a mismatch. The low tail is fonts LibreOffice substitutes differently, tables and shapes LibreOffice places differently, text in table cells that LibreOffice wraps around pictures and docboss does not, and tracked changes that LibreOffice shows with revision marks. Method: [`benchmarks/README.md`](benchmarks/README.md#rendering-fidelity-bench_fidelitypy).
 
 ## What's inside
 
