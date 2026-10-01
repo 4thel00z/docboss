@@ -596,7 +596,7 @@ mod tests {
         let mut anld = vec![0u8; 52];
         anld[0] = 2;
         anld[1] = 1;
-        anld[2] = 2;
+        anld[2] = 1;
         anld[10] = 3;
         anld[20] = b'(';
         anld[21] = b')';

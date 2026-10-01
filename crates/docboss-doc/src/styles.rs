@@ -22,6 +22,9 @@ pub struct RawStyle {
     pub chpx: Vec<u8>,
 }
 
+/// How many base styles a style property is looked up through.
+const MAX_BASE_DEPTH: usize = 16;
+
 pub struct Stylesheet {
     pub raw: Vec<Option<RawStyle>>,
     /// Model style id by istd.
@@ -182,6 +185,27 @@ fn parse_std(
 impl Stylesheet {
     pub fn id(&self, istd: u16) -> Option<String> {
         self.ids.get(usize::from(istd)).cloned().flatten()
+    }
+
+    /// The ANLD and sprmPNLvlAnm level a Word 6 paragraph style numbers its
+    /// paragraphs with, its own or the nearest base style's.
+    pub fn anld(&self, istd: u16) -> (Option<crate::props::Anld>, Option<u8>) {
+        let mut found = (None, None);
+        let mut at = Some(usize::from(istd));
+        for _ in 0..MAX_BASE_DEPTH {
+            let Some(raw) = at.and_then(|i| self.raw.get(i)).and_then(Option::as_ref) else {
+                break;
+            };
+            let mut extra = ParaExtra::default();
+            apply_pap(&raw.papx, &mut ParagraphProperties::default(), &mut extra);
+            found.0 = found.0.or(extra.anld);
+            found.1 = found.1.or(extra.anld_level);
+            if found.0.is_some() && found.1.is_some() {
+                break;
+            }
+            at = raw.base;
+        }
+        found
     }
 
     /// The model stylesheet. Heading styles (sti 1 to 9) get their outline

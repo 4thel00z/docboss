@@ -648,3 +648,113 @@ fn equation_editor_objects() {
         .expect("the equation reads");
     assert_eq!(docboss_model::linear_text(&math.nodes), "a=b/c");
 }
+
+fn fixture_bytes(name: &str) -> Vec<u8> {
+    let path = format!("{}/tests/fixtures/{name}.doc", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read(path).unwrap()
+}
+
+/// An `Equation Native` stream in a newer MTEF version is reported, not
+/// dropped silently: the equation-editor fixture with its MTEF version
+/// byte set to 4 and to 5.
+#[test]
+fn unreadable_equations_are_reported() {
+    let original = fixture_bytes("equation-editor");
+    let header = [0x1C, 0x00, 0x00, 0x00, 0x02, 0x00];
+    let at = original
+        .windows(header.len())
+        .position(|w| w == header)
+        .expect("the EQNOLEFILEHDR is in the file")
+        + 28;
+    assert_eq!(original[at], 3);
+    for version in [4, 5] {
+        let mut bytes = original.clone();
+        bytes[at] = version;
+        let document = docboss_doc::read(&bytes).unwrap();
+        assert!(!plain_text(&document).contains("a=b/c"));
+        assert!(
+            document
+                .diagnostics
+                .iter()
+                .any(|d| d.location.ends_with("Equation Native")
+                    && d.message.contains("does not read")),
+            "{:?}",
+            document.diagnostics
+        );
+    }
+}
+
+/// A Word 6 file whose FIB counts endnote text (ccpEdn at 0x48) reports
+/// that its endnotes are not read.
+#[test]
+fn word6_endnotes_are_reported() {
+    let mut bytes = fixture_bytes("word6-sections");
+    let fib = (512..bytes.len())
+        .step_by(512)
+        .find(|&at| bytes[at..at + 2] == [0xDC, 0xA5])
+        .expect("the Word 6 FIB");
+    bytes[fib + 0x48] = 1;
+    let document = docboss_doc::read(&bytes).unwrap();
+    assert!(document
+        .diagnostics
+        .iter()
+        .any(|d| d.message == "Word 6/95 endnotes are not read"));
+}
+
+fn numbered_lines(document: &Document) -> Vec<String> {
+    docboss_output::to_text(document, &Default::default())
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Word 6 ANLD numbering as LibreOffice shows it: a numbered run that an
+/// unnumbered paragraph ends starts again (1., 1., 1.), and a Word 6.0
+/// bullet (nfc 255) draws its Wingdings character.
+#[test]
+fn word6_anld_runs_restart_and_bullet() {
+    let lines = numbered_lines(&fixture("word6-anld"));
+    let labelled = |start: &str| lines.iter().find(|l| l.contains(start)).cloned().unwrap();
+    assert!(labelled("Monsieur,").starts_with("1. "));
+    assert!(labelled("Suite à notre").starts_with("1. "));
+    assert!(labelled("Je vous présenterai").starts_with("1. "));
+    assert!(labelled("Dans cette attente").starts_with("■ "));
+}
+
+/// A paragraph style's ANLD numbers the paragraphs of that style.
+#[test]
+fn word6_style_anld_numbers_its_paragraphs() {
+    let lines = numbered_lines(&fixture("word6-style-anld"));
+    let labelled = |start: &str| lines.iter().find(|l| l.contains(start)).cloned().unwrap();
+    assert!(labelled("Suite à notre").starts_with("■ "));
+    assert!(labelled("Je vous présenterai").starts_with("■ "));
+    assert!(labelled("Monsieur,").starts_with("Monsieur"));
+}
+
+/// [MS-ODRAW] §2.3.4.7, §2.3.4.8: the tight picture of wrap.doc carries its
+/// pWrapPolygonVertices, five points as in wrap.docx.
+#[test]
+fn wrap_polygons_are_read() {
+    let document = fixture("wrap");
+    let polygons: Vec<usize> = document
+        .blocks()
+        .filter_map(|block| match block {
+            Block::Paragraph(p) => Some(p),
+            Block::Table(_) => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .filter_map(|inline| match inline {
+            Inline::Run(run) => Some(run),
+            _ => None,
+        })
+        .flat_map(|run| &run.content)
+        .filter_map(|content| match content {
+            RunContent::Drawing(d) if d.wrap.kind == docboss_model::WrapKind::Tight => {
+                Some(d.wrap.polygon.len())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(polygons, vec![5]);
+}

@@ -19,3 +19,11 @@
 - `wrap.doc` and `equation-editor.doc`: `soffice --headless --convert-to doc`
   of the DOCX reader's `wrap.docx` and `equation-editor.docx` fixtures.
 - `drop-cap.doc`: Apache POI test data (`test.doc`), Apache License 2.0.
+- `word6-anld.doc` and `word6-style-anld.doc`: Apache POI test data
+  (`Bug60942.doc`, Apache License 2.0) with paragraphs numbered by ANLDs,
+  patched by `crates/docboss-doc/tools/word6_anld.py` and
+  `word6_style_anld.py`; no corpus Word 6/95 file numbers a paragraph and
+  nothing on hand writes Word 6.
+- `framed-footer.doc`: Apache POI test data (`PageSpecificHeadFoot.doc`,
+  Apache License 2.0): an even footer whose page number sits in a floating
+  table whose cell paragraphs carry frame properties.

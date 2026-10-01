@@ -446,33 +446,116 @@ fn line_dashing(value: u32) -> Option<DashPattern> {
     DashPattern::from_bits(bits)
 }
 
-/// A shape's distances from the text above, below, left and right in EMU:
-/// the dyWrapDistTop, dyWrapDistBottom, dxWrapDistLeft and dxWrapDistRight
-/// properties of its OfficeArtFOPT or OfficeArtTertiaryFOPT, with their
-/// defaults of 0 above and below and 0.125 inch beside.
-/// [MS-ODRAW] §2.3.4.9, §2.3.4.10, §2.3.4.11, §2.3.4.12.
-pub fn shape_wrap_distance(bytes: &[u8], container: &Record) -> [i64; 4] {
-    let mut distance = [0i64, 0, 114_300, 114_300];
+/// How text wraps around a shape and whether it is shown.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ShapeWrap {
+    /// Above, below, left and right, in EMU.
+    pub distance: [i64; 4],
+    /// The wrap polygon in a 21600 by 21600 space over the shape.
+    pub polygon: Vec<(i32, i32)>,
+    pub hidden: bool,
+}
+
+/// The most wrap polygon points read.
+const MAX_POLYGON: usize = 1024;
+
+/// A shape's wrap: the dyWrapDistTop, dyWrapDistBottom, dxWrapDistLeft and
+/// dxWrapDistRight properties of its OfficeArtFOPT or
+/// OfficeArtTertiaryFOPT, with their defaults of 0 above and below and
+/// 0.125 inch beside; its pWrapPolygonVertices, an IMsoArray of POINTs in
+/// the space geoLeft, geoTop, geoRight and geoBottom give (0 to 21600 by
+/// default); and fHidden of its Group Shape Boolean Properties.
+/// [MS-ODRAW] §2.3.4.9, §2.3.4.10, §2.3.4.11, §2.3.4.12, §2.3.4.7, §2.3.4.8, §2.2.51, §2.2.55, §2.3.6.1, §2.3.6.2, §2.3.6.3, §2.3.6.4, §2.3.4.44.
+pub fn shape_wrap(bytes: &[u8], container: &Record) -> ShapeWrap {
+    let mut wrap = ShapeWrap {
+        distance: [0i64, 0, 114_300, 114_300],
+        ..ShapeWrap::default()
+    };
+    let mut geo = [0i64, 0, 21_600, 21_600];
+    let mut vertices: Option<&[u8]> = None;
     let tables = children(bytes, container.body, container.body + container.length)
         .into_iter()
         .filter(|r| r.kind == 0xF00B || r.kind == 0xF122);
     for options in tables {
-        for i in 0..usize::from(options.instance) {
+        let count = usize::from(options.instance);
+        let mut complex = options.body + count * 6;
+        for i in 0..count {
             let at = options.body + i * 6;
             let (Some(id), Some(value)) = (u16_at(bytes, at), u32_at(bytes, at + 2)) else {
                 break;
+            };
+            let data = match id & 0x8000 != 0 {
+                true => {
+                    let start = complex;
+                    complex = complex.saturating_add(value as usize);
+                    bytes.get(start..complex)
+                }
+                false => None,
             };
             let slot = match id & 0x3FFF {
                 0x0384 => 2,
                 0x0385 => 0,
                 0x0386 => 3,
                 0x0387 => 1,
+                0x0140..=0x0143 => {
+                    geo[usize::from((id & 0x3FFF) - 0x0140)] = i64::from(value as i32);
+                    continue;
+                }
+                0x0383 => {
+                    vertices = data.or(vertices);
+                    continue;
+                }
+                0x03BF => {
+                    wrap.hidden = value & 0x0002_0000 != 0 && value & 0x0002 != 0;
+                    continue;
+                }
                 _ => continue,
             };
-            distance[slot] = i64::from(value as i32).clamp(0, 51_206_400);
+            wrap.distance[slot] = i64::from(value as i32).clamp(0, 51_206_400);
         }
     }
-    distance
+    wrap.polygon = vertices.map_or_else(Vec::new, |array| polygon(array, geo));
+    wrap
+}
+
+/// The points of an IMsoArray of POINTs scaled from `geo` (left, top,
+/// right, bottom) to 0 to 21600; empty with fewer than three.
+fn polygon(array: &[u8], geo: [i64; 4]) -> Vec<(i32, i32)> {
+    let (Some(count), Some(size)) = (u16_at(array, 0), u16_at(array, 4)) else {
+        return Vec::new();
+    };
+    let size = match size {
+        0xFFF0 => 4,
+        size => usize::from(size),
+    };
+    if size != 4 && size != 8 {
+        return Vec::new();
+    }
+    let width = (geo[2] - geo[0]).max(1);
+    let height = (geo[3] - geo[1]).max(1);
+    let scale = |value: i64, origin: i64, extent: i64| {
+        ((value - origin) * 21_600 / extent).clamp(-2_160_000, 2_160_000) as i32
+    };
+    let points: Vec<(i32, i32)> = (0..usize::from(count).min(MAX_POLYGON))
+        .map_while(|i| {
+            let at = 6 + i * size;
+            let (x, y) = match size {
+                4 => (
+                    i64::from(u16_at(array, at)? as i16),
+                    i64::from(u16_at(array, at + 2)? as i16),
+                ),
+                _ => (
+                    i64::from(u32_at(array, at)? as i32),
+                    i64::from(u32_at(array, at + 4)? as i32),
+                ),
+            };
+            Some((scale(x, geo[0], width), scale(y, geo[1], height)))
+        })
+        .collect();
+    match points.len() >= 3 {
+        true => points,
+        false => Vec::new(),
+    }
 }
 
 /// A shape's alignment on each axis, horizontal then vertical: the posh
@@ -668,6 +751,18 @@ mod tests {
         out.extend(fsp);
         out.extend(fopt);
         out
+    }
+
+    /// [MS-ODRAW] §2.3.4.44: fHidden counts only where fUsefHidden is set.
+    #[test]
+    fn hidden_shapes_need_their_use_bit() {
+        let wrap = |value| {
+            let bytes = container(&[(0x03BF, value)]);
+            shape_wrap(&bytes, &record(&bytes, 0).unwrap()).hidden
+        };
+        assert!(wrap(0x0002_0002));
+        assert!(!wrap(0x0000_0002));
+        assert!(!wrap(0x0002_0000));
     }
 
     /// [MS-ODRAW] §2.3.7.2, §2.3.7.43, §2.3.8.38, §2.3.21.2, §2.3.21.8,

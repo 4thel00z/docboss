@@ -15,7 +15,7 @@ use crate::bytes::{plc, slice, u16_at, u32_at, utf16};
 use crate::fib::{slot, Fib};
 use crate::picture::{
     blip, children, record, shape_alignment, shape_blip_index, shape_containers, shape_format,
-    shape_geometry, shape_groups, shape_id, shape_wrap_distance,
+    shape_geometry, shape_groups, shape_id, shape_wrap,
 };
 use crate::props::{apply_sep, default_section, dttm};
 use crate::story::{Anchor, Context, Marker, Reference, StoryKind};
@@ -88,6 +88,12 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         ));
     }
     if !fib.is_word97() {
+        if !equation_streams(&file).is_empty() {
+            diagnostics.push(Diagnostic::dropped(
+                "ObjectPool",
+                "Word 6/95 Equation Editor objects keep their picture; their equations are not read",
+            ));
+        }
         let mut document = word6_document(&word_stream, &fib, &mut diagnostics);
         document.metadata = metadata;
         document.diagnostics = file.diagnostics().into_iter().chain(diagnostics).collect();
@@ -112,7 +118,7 @@ pub fn read(bytes: &[u8], password: Option<&str>) -> Result<Document> {
         false => fib,
         true => Fib::parse(&word)?,
     };
-    let equations = equations(&file);
+    let equations = equations(&file, &mut diagnostics);
     let mut document = assemble(&word, &table, &data, &fib, equations, &mut diagnostics);
     document.metadata = metadata;
     document.diagnostics = file.diagnostics().into_iter().chain(diagnostics).collect();
@@ -171,11 +177,32 @@ fn deobfuscate<'a>(
 
 /// The equations of the Equation Editor objects of the ObjectPool storage,
 /// by the object id their storage name `_<id>` gives: the MTEF data of each
-/// object's `Equation Native` stream.
+/// object's `Equation Native` stream. One that does not read is reported.
 /// [MS-DOC] §2.1.4.
-fn equations(file: &CompoundFile<'_>) -> HashMap<u32, docboss_model::Math> {
+fn equations(
+    file: &CompoundFile<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> HashMap<u32, docboss_model::Math> {
+    equation_streams(file)
+        .into_iter()
+        .filter_map(|(id, stream)| {
+            let math = docboss_mtef::read(&file.stream(stream));
+            if math.is_none() {
+                diagnostics.push(Diagnostic::dropped(
+                    format!("ObjectPool/_{id}/Equation Native"),
+                    "an Equation Editor object's equation does not read; its picture stays",
+                ));
+            }
+            Some((id, math?))
+        })
+        .collect()
+}
+
+/// The `Equation Native` streams of the ObjectPool storage by object id.
+/// [MS-DOC] §2.1.4.
+fn equation_streams(file: &CompoundFile<'_>) -> Vec<(u32, usize)> {
     let Some(pool) = file.find("ObjectPool") else {
-        return HashMap::new();
+        return Vec::new();
     };
     file.children(pool)
         .into_iter()
@@ -185,9 +212,7 @@ fn equations(file: &CompoundFile<'_>) -> HashMap<u32, docboss_model::Math> {
                 .strip_prefix('_')?
                 .parse::<u32>()
                 .ok()?;
-            let stream = file.child(storage, "Equation Native")?;
-            let math = docboss_mtef::read(&file.stream(stream))?;
-            Some((id, math))
+            Some((id, file.child(storage, "Equation Native")?))
         })
         .collect()
 }
@@ -576,8 +601,8 @@ fn shapes(context: &mut Context<'_>, word: &[u8], table: &[u8], fib: &Fib, parts
                 .shape_alignments
                 .insert(id, shape_alignment(table, &container));
             context
-                .shape_wrap_distances
-                .insert(id, shape_wrap_distance(table, &container));
+                .shape_wraps
+                .insert(id, shape_wrap(table, &container));
             if let Some(geometry) = shape_geometry(table, &container) {
                 context.shape_geometries.insert(id, geometry);
             }
@@ -838,6 +863,12 @@ fn word6_document(word: &[u8], fib: &Fib, diagnostics: &mut Vec<Diagnostic>) -> 
         diagnostics.push(Diagnostic::dropped(
             "WordDocument",
             "Word 6/95 comments are not read",
+        ));
+    }
+    if fib.counts.endnotes > 0 {
+        diagnostics.push(Diagnostic::dropped(
+            "WordDocument",
+            "Word 6/95 endnotes are not read",
         ));
     }
     if u32_at(word, 0x196).is_some_and(|lcb| lcb > 0) {

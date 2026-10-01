@@ -652,6 +652,7 @@ dependencies = [
  "docboss-crypt",
  "docboss-model",
  "docboss-mtef",
+ "docboss-output",
  "flate2",
  "thiserror",
 ]
@@ -681,6 +682,7 @@ dependencies = [
 name = "docboss-layout"
 version = "0.1.0"
 dependencies = [
+ "docboss-doc",
  "docboss-docx",
  "docboss-font",
  "docboss-metafile",
@@ -777,6 +779,8 @@ dependencies = [
 name = "docboss-write"
 version = "0.1.0"
 dependencies = [
+ "docboss-doc",
+ "docboss-docx",
  "docboss-model",
  "docboss-zip",
  "flate2",

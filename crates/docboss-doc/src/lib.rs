@@ -10,9 +10,9 @@
 //! everything approximated or dropped is listed in
 //! [`docboss_model::Document::diagnostics`]. Word 6 and Word 95 files are
 //! read with their character, paragraph, style, section, header, footer
-//! and table formatting; their numbered paragraphs (ANLD), comments and
-//! drawing objects are left out and reported. Word 2 files are read as
-//! plain text.
+//! and table formatting and their numbered paragraphs (ANLD); their
+//! comments, endnotes, drawing objects and equations are left out and
+//! reported. Word 2 files are read as plain text.
 //!
 //! Password-protected files, encrypted with RC4 or RC4 CryptoAPI or
 //! XOR-obfuscated, open with [`read_with_password`].

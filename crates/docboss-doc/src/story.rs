@@ -137,6 +137,9 @@ pub enum StoryKind {
 const ANLD_LISTS: i64 = 0x10_0000;
 const MAX_ANLDS: usize = 4096;
 
+/// A paragraph style's ANLD and sprmPNLvlAnm level.
+type StyleAnld = (Option<crate::props::Anld>, Option<u8>);
+
 type RunKey = ((usize, usize), u16, u16);
 type BaseKey = (u16, Option<u16>);
 
@@ -161,7 +164,7 @@ pub struct Context<'a> {
     /// Fill, line and text frame of each floating shape by shape id.
     pub shape_formats: HashMap<u32, docboss_model::ShapeFormat>,
     /// Each shape's distances from the text, in EMU.
-    pub shape_wrap_distances: HashMap<u32, [i64; 4]>,
+    pub shape_wraps: HashMap<u32, crate::picture::ShapeWrap>,
     /// The equations of the Equation Editor objects in the ObjectPool, by
     /// object id.
     pub equations: HashMap<u32, docboss_model::Math>,
@@ -169,6 +172,10 @@ pub struct Context<'a> {
     pub word6: bool,
     /// The distinct ANLDs of the paragraphs read so far; each is one list.
     pub anlds: std::cell::RefCell<Vec<crate::props::Anld>>,
+    /// The ANLD list the paragraph before numbered, if it was numbered.
+    open_anld: std::cell::Cell<Option<usize>>,
+    /// The ANLD and level of each paragraph style, by istd.
+    style_anlds: RefCell<HashMap<u16, StyleAnld>>,
     /// The preset geometry of each floating shape by shape id.
     pub shape_geometries: HashMap<u32, docboss_model::Geometry>,
     /// Horizontal and vertical alignment of each floating shape by shape id.
@@ -407,10 +414,12 @@ impl<'a> Context<'a> {
             authors: Vec::new(),
             shape_blips: HashMap::new(),
             shape_formats: HashMap::new(),
-            shape_wrap_distances: HashMap::new(),
+            shape_wraps: HashMap::new(),
             equations: HashMap::new(),
             word6: false,
             anlds: Default::default(),
+            open_anld: Default::default(),
+            style_anlds: RefCell::new(HashMap::new()),
             shape_groups: HashMap::new(),
             shape_geometries: HashMap::new(),
             shape_alignments: HashMap::new(),
@@ -471,9 +480,10 @@ impl<'a> Context<'a> {
             ..ParaExtra::default()
         };
         apply_pap(&grpprl, &mut properties, &mut extra);
-        properties.numbering = numbering_ref(&extra)
-            .or(properties.numbering)
-            .or_else(|| self.anld_list(&extra));
+        let anld = self.anld_list(&extra);
+        self.open_anld
+            .set(anld.map(|n| (n.num_id - ANLD_LISTS) as usize));
+        properties.numbering = numbering_ref(&extra).or(properties.numbering).or(anld);
         let style_id = self.sheet.id(extra.istd).or_else(|| self.sheet.id(0));
         let mark = self.text.get(mark_cp as usize).copied().unwrap_or(0x0D);
         ParagraphInfo {
@@ -489,22 +499,43 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// The list of a Word 6 paragraph numbered by an ANLD at a sprmPNLvlAnm
-    /// level from 1 to 11: one list per distinct ANLD, numbered past the
-    /// ids of the file's own lists.
+    /// The list of a Word 6 paragraph numbered by an ANLD, its own or its
+    /// style's, at a sprmPNLvlAnm level from 1 to 11, numbered past the ids
+    /// of the file's own lists. Paragraphs numbered alike in a row share a
+    /// list; a paragraph that is not numbered ends it, so the next one
+    /// starts again unless its ANLD sets fNumberAcross.
     fn anld_list(&self, extra: &ParaExtra) -> Option<docboss_model::NumberingRef> {
+        if !self.word6 {
+            return None;
+        }
+        let (style_anld, style_level) = match extra.anld.is_some() && extra.anld_level.is_some() {
+            true => (None, None),
+            false => self
+                .style_anlds
+                .borrow_mut()
+                .entry(extra.istd)
+                .or_insert_with(|| self.sheet.anld(extra.istd))
+                .clone(),
+        };
         let level = extra
             .anld_level
-            .filter(|l| (1..=11).contains(l) && self.word6)?;
-        let anld = extra.anld.as_ref()?;
+            .or(style_level)
+            .filter(|l| (1..=11).contains(l))?;
+        let anld = extra.anld.as_ref().or(style_anld.as_ref())?;
         let mut anlds = self.anlds.borrow_mut();
-        let index = match anlds.iter().position(|a| a == anld) {
+        let open = self.open_anld.get().filter(|&i| anlds.get(i) == Some(anld));
+        let across = || {
+            anld.number_across
+                .then(|| anlds.iter().position(|a| a == anld))
+                .flatten()
+        };
+        let index = match open.or_else(across) {
             Some(index) => index,
             None if anlds.len() < MAX_ANLDS => {
                 anlds.push(anld.clone());
                 anlds.len() - 1
             }
-            None => return None,
+            None => anlds.iter().position(|a| a == anld)?,
         };
         Some(docboss_model::NumberingRef {
             num_id: ANLD_LISTS + index as i64,
@@ -538,7 +569,7 @@ impl<'a> Context<'a> {
                     4 => NumberFormat::LowerLetter,
                     5 => NumberFormat::Ordinal,
                     22 => NumberFormat::DecimalZero,
-                    23 => NumberFormat::Bullet,
+                    crate::props::BULLET | crate::props::WORD6_BULLET => NumberFormat::Bullet,
                     _ => NumberFormat::None,
                 };
                 let run = RunProperties {
@@ -753,6 +784,14 @@ impl<'a> Context<'a> {
     /// a group of them.
     fn floating(&self, cp: u32) -> Option<RunContent> {
         let anchor = self.anchors.get(&cp)?;
+        let wrap = self.shape_wraps.get(&anchor.shape_id);
+        if wrap.is_some_and(|w| w.hidden) {
+            self.report(Diagnostic::dropped(
+                "WordDocument",
+                format!("hidden shape {} at CP {cp} is left out", anchor.shape_id),
+            ));
+            return None;
+        }
         let alignment = self
             .shape_alignments
             .get(&anchor.shape_id)
@@ -817,12 +856,8 @@ impl<'a> Context<'a> {
         drawing.wrap = docboss_model::TextWrap {
             kind: anchor.wrap,
             side: anchor.wrap_side,
-            distance: self
-                .shape_wrap_distances
-                .get(&anchor.shape_id)
-                .copied()
-                .unwrap_or([0, 0, 114_300, 114_300]),
-            polygon: Vec::new(),
+            distance: wrap.map_or([0, 0, 114_300, 114_300], |w| w.distance),
+            polygon: wrap.map(|w| w.polygon.clone()).unwrap_or_default(),
         };
         Some(RunContent::Drawing(Box::new(drawing)))
     }

@@ -383,16 +383,23 @@ pub struct Anld {
     /// The label size in half-points, when stated.
     pub size: Option<u16>,
     pub start: u16,
+    /// fNumberAcross: numbering goes on across paragraphs that are not
+    /// numbered.
+    pub number_across: bool,
 }
 
+/// The nfc of a bulleted ANLD; Word 6.0 writes 255.
+pub const BULLET: u8 = 23;
+pub const WORD6_BULLET: u8 = 255;
+
 impl Anld {
-    /// Reads a Word 97 form ANLD: nfc, cxchTextBefore, cxchTextAfter, the
-    /// jc and formatting flags, ftc, hps, iStartAt, then 32 UTF-16 label
-    /// characters.
+    /// Reads a Word 97 form ANLD: nfc, the lengths of the label text before
+    /// and after the number, the jc and formatting flags, ftc, hps,
+    /// iStartAt, fNumberAcross at byte 17, then 32 UTF-16 label characters.
     pub fn parse(bytes: &[u8]) -> Option<Anld> {
         let nfc = u8_at(bytes, 0)?;
         let before = usize::from(u8_at(bytes, 1)?).min(32);
-        let after = usize::from(u8_at(bytes, 2)?).clamp(before, 32);
+        let after = (before + usize::from(u8_at(bytes, 2)?)).min(32);
         let flags = u8_at(bytes, 3)?;
         let styled = u8_at(bytes, 4)?;
         let chars: Vec<u16> = (0..32)
@@ -407,9 +414,10 @@ impl Anld {
             jc: flags & 3,
             bold: flags & 0x10 != 0 && styled & 0x08 != 0,
             italic: flags & 0x20 != 0 && styled & 0x10 != 0,
-            font: font.filter(|_| nfc == 23),
+            font: font.filter(|_| nfc == BULLET || nfc == WORD6_BULLET),
             size: u16_at(bytes, 8).filter(|s| *s > 0),
             start: u16_at(bytes, 10).unwrap_or(1),
+            number_across: u8_at(bytes, 17).is_some_and(|b| b != 0),
         })
     }
 }
