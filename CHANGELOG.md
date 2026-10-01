@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/4thel00z/docboss/compare/v0.2.0...v0.2.1) (2026-10-01)
+
+
+### Documentation
+
+* publish the book to docboss.dev/docs through GitHub Pages ([9b83b94](https://github.com/4thel00z/docboss/commit/9b83b943578522ed80efee609acbb1835e5de7cf))
+
 ## [0.2.0](https://github.com/4thel00z/docboss/compare/v0.1.0...v0.2.0) (2026-10-01)
 
 
