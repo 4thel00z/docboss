@@ -6,10 +6,13 @@ language = "en"
 src = "src"
 
 [output.html]
+site-url = "/docs/"
 default-theme = "light"
 preferred-dark-theme = "light"
+additional-css = ["theme/docboss.css"]
+additional-js = ["theme/docboss.js"]
 git-repository-url = "https://github.com/4thel00z/docboss"
-edit-url-template = "https://github.com/4thel00z/docboss/edit/main/docs/{path}"
+edit-url-template = "https://github.com/4thel00z/docboss/edit/master/docs/{path}"
 
 [output.html.playground]
 runnable = false
