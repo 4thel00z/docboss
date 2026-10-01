@@ -6,8 +6,8 @@
 //! The stream starts with a 28-byte EQNOLEFILEHDR; MTEF follows: a
 //! 5-byte header (version, platform, product and its version), then
 //! records. In versions 1 to 3 a record's tag byte holds its type in the
-//! low nibble and its option flags in the high one. MathType's MTEF 5 is
-//! not read.
+//! low nibble and its option flags in the high one. MathType's MTEF 4 and
+//! 5, whose records and template numbers differ, are not read.
 
 use docboss_model::{FractionKind, Math, MathNode, MathStyle};
 
@@ -323,10 +323,12 @@ fn embellishment(kind: u8) -> Option<Result<char, &'static str>> {
     Some(found)
 }
 
-/// The math nodes of a line's objects. Subscripts and superscripts attach
-/// to the object before them.
+/// The math nodes of a line's objects. A subscript or superscript template
+/// attaches to the one object before it, a leading script template to the
+/// one after it; adjacent characters of one style are then joined.
 fn line_nodes(items: &[Item]) -> Vec<MathNode> {
     let mut nodes: Vec<MathNode> = Vec::new();
+    let mut leading: Option<Scripts> = None;
     for item in items {
         let mut produced = match item {
             Item::Line(Some(inner)) => line_nodes(inner),
@@ -335,10 +337,9 @@ fn line_nodes(items: &[Item]) -> Vec<MathNode> {
                 value,
                 face,
                 embellishments,
-            } => {
-                char_node(&mut nodes, *value, *face, embellishments);
-                continue;
-            }
+            } => char_node(*value, *face, embellishments)
+                .into_iter()
+                .collect(),
             Item::Pile(lines) => pile(lines),
             Item::Matrix { columns, items } => vec![matrix(*columns, items)],
             Item::Template {
@@ -356,26 +357,76 @@ fn line_nodes(items: &[Item]) -> Vec<MathNode> {
                 }]
             }
             Item::Template {
+                selector: LEADING_SCRIPT,
+                items,
+                ..
+            } => {
+                leading = Some(scripts(items));
+                continue;
+            }
+            Item::Template {
                 selector,
                 variation,
                 items,
             } => template(*selector, *variation, items),
         };
+        if !produced.is_empty() {
+            if let Some((sub, sup)) = leading.take() {
+                let base = produced.remove(0);
+                produced.insert(
+                    0,
+                    MathNode::Script {
+                        base: vec![base],
+                        sub,
+                        sup,
+                        pre: true,
+                    },
+                );
+            }
+        }
         nodes.append(&mut produced);
     }
-    nodes
+    if let Some((sub, sup)) = leading {
+        nodes.push(MathNode::Script {
+            base: Vec::new(),
+            sub,
+            sup,
+            pre: true,
+        });
+    }
+    join_runs(nodes)
 }
 
-/// Adds a character to the line: appended to the run before it when both
-/// share a style and neither carries an accent.
-fn char_node(nodes: &mut Vec<MathNode>, value: u16, face: u8, embellishments: &[u8]) {
-    if face == FN_SPACE {
-        return;
+/// Joins adjacent runs of one style into one run.
+fn join_runs(nodes: Vec<MathNode>) -> Vec<MathNode> {
+    let mut out: Vec<MathNode> = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let MathNode::Run { text, style } = node else {
+            out.push(node);
+            continue;
+        };
+        if let Some(MathNode::Run {
+            text: last,
+            style: previous,
+        }) = out.last_mut()
+        {
+            if *previous == style {
+                last.push_str(&text);
+                continue;
+            }
+        }
+        out.push(MathNode::Run { text, style });
     }
-    let Some(c) = decode(value, face) else {
-        return;
-    };
-    let style = style(face);
+    out
+}
+
+/// The node of one character with its embellishments: accents over it,
+/// primes after it.
+fn char_node(value: u16, face: u8, embellishments: &[u8]) -> Option<MathNode> {
+    if face == FN_SPACE {
+        return None;
+    }
+    let c = decode(value, face)?;
     let mut text = c.to_string();
     let mut accents = Vec::new();
     for kind in embellishments {
@@ -385,28 +436,18 @@ fn char_node(nodes: &mut Vec<MathNode>, value: u16, face: u8, embellishments: &[
             None => {}
         }
     }
-    if accents.is_empty() {
-        if let Some(MathNode::Run {
-            text: last,
-            style: s,
-        }) = nodes.last_mut()
-        {
-            if *s == style {
-                last.push_str(&text);
-                return;
-            }
-        }
-        nodes.push(MathNode::Run { text, style });
-        return;
-    }
-    let mut node = MathNode::Run { text, style };
-    for accent in accents {
-        node = MathNode::Accent {
-            accent,
-            body: vec![node],
-        };
-    }
-    nodes.push(node);
+    let run = MathNode::Run {
+        text,
+        style: style(face),
+    };
+    Some(
+        accents
+            .into_iter()
+            .fold(run, |node, accent| MathNode::Accent {
+                accent,
+                body: vec![node],
+            }),
+    )
 }
 
 /// A template's slots, each a line or pile, and the characters after them
@@ -426,7 +467,10 @@ fn slots(items: &[Item]) -> (Vec<Vec<MathNode>>, Vec<char>) {
     (slots, chars)
 }
 
-fn scripts(items: &[Item]) -> (Option<Vec<MathNode>>, Option<Vec<MathNode>>) {
+/// The subscript and superscript of a script template.
+type Scripts = (Option<Vec<MathNode>>, Option<Vec<MathNode>>);
+
+fn scripts(items: &[Item]) -> Scripts {
     let (mut slots, _) = slots(items);
     slots.resize(2, Vec::new());
     let sup = slots.pop().filter(|s| !s.is_empty());
@@ -476,9 +520,11 @@ fn optional(slots: &mut [Vec<MathNode>], index: usize) -> Option<Vec<MathNode>> 
 
 /// The template of subscripts and superscripts.
 const SCRIPT: u8 = 15;
+/// The template of leading subscripts and superscripts.
+const LEADING_SCRIPT: u8 = 44;
 
-/// The default fences of the fence templates 0 to 7, left and right.
-const FENCES: [(char, char); 8] = [
+/// The fences of the fence templates 0 to 12, left and right.
+const FENCES: [(char, char); 13] = [
     ('\u{27E8}', '\u{27E9}'),
     ('(', ')'),
     ('{', '}'),
@@ -487,26 +533,78 @@ const FENCES: [(char, char); 8] = [
     ('\u{2016}', '\u{2016}'),
     ('\u{230A}', '\u{230B}'),
     ('\u{2308}', '\u{2309}'),
+    ('[', '['),
+    (']', ']'),
+    (']', '['),
+    ('[', ')'),
+    ('(', ']'),
 ];
 
-/// The nodes of an MTEF 3 template by its selector: fences (0 to 12, the
-/// last five mixing brackets), radicals (13), fractions (14), under and
-/// over bars (16, 17), arrows with text (18 to 20), integrals (21 to 28)
-/// and the other n-ary operators (29 and up), each with its main slot,
-/// lower and upper limits and operator character. Any other template gives
-/// its slots in order.
+/// The n-ary operator of the integral and big operator templates 21 to 43
+/// and whether its limits go under and over it rather than beside it.
+fn operator(selector: u8) -> (char, bool) {
+    match selector {
+        21 => ('\u{222B}', false),
+        22 => ('\u{222C}', false),
+        23 => ('\u{222D}', false),
+        24 => ('\u{222B}', true),
+        25 => ('\u{222C}', true),
+        26 => ('\u{222D}', true),
+        29 => ('\u{2211}', true),
+        30 => ('\u{2211}', false),
+        31 => ('\u{220F}', true),
+        32 => ('\u{220F}', false),
+        33 => ('\u{2210}', true),
+        34 => ('\u{2210}', false),
+        35 => ('\u{22C3}', true),
+        36 => ('\u{22C3}', false),
+        37 => ('\u{22C2}', true),
+        38 => ('\u{22C2}', false),
+        42 => ('\u{222B}', false),
+        _ => ('\u{2211}', true),
+    }
+}
+
+fn run(text: &str) -> MathNode {
+    MathNode::Run {
+        text: text.into(),
+        style: MathStyle::Plain,
+    }
+}
+
+/// A body with a limit over or under it, or the body alone when the limit
+/// is empty.
+fn limited(base: Vec<MathNode>, limit: Vec<MathNode>, lower: bool) -> Vec<MathNode> {
+    if limit.is_empty() {
+        return base;
+    }
+    vec![MathNode::Limit { base, limit, lower }]
+}
+
+/// The nodes of an MTEF 3 template by its selector and variation: fences
+/// (0 to 12; variation 1 draws only the left fence, 2 only the right),
+/// radicals (13), fractions (14), under and over bars (16, 17; variation 1
+/// doubles them), arrows with text over or under them (18 to 20), integrals
+/// and big operators (21 to 26, 29 to 38, 42, 43), horizontal braces (27,
+/// 28), limits (39), long division (40), slash fractions (41), bra-kets
+/// (45), arrows under and over (46, 47) and arcs (48). An unknown template
+/// gives its slots in order.
 fn template(selector: u8, variation: u8, items: &[Item]) -> Vec<MathNode> {
     let (mut slots, chars) = slots(items);
     let node = match selector {
         0..=12 => {
-            let (left, right) = FENCES.get(usize::from(selector)).copied().unzip();
+            let (left, right) = FENCES[usize::from(selector)];
+            let (open, close) = match variation & 0x03 {
+                1 => (chars.first().copied().or(Some(left)), None),
+                2 => (None, chars.last().copied().or(Some(right))),
+                _ => (
+                    chars.first().copied().or(Some(left)),
+                    chars.get(1).copied().or(Some(right)),
+                ),
+            };
             MathNode::Delimiter {
-                open: chars.first().copied().or(left),
-                close: chars
-                    .get(1)
-                    .or(chars.first().filter(|_| chars.len() == 1))
-                    .copied()
-                    .or(right),
+                open,
+                close,
                 separator: '|',
                 items: vec![slot(&mut slots, 0)],
             }
@@ -520,43 +618,100 @@ fn template(selector: u8, variation: u8, items: &[Item]) -> Vec<MathNode> {
             numerator: slot(&mut slots, 0),
             denominator: slot(&mut slots, 1),
         },
-        16 | 17 => MathNode::Bar {
-            top: selector == 17,
-            body: slot(&mut slots, 0),
-        },
-        18..=20 => MathNode::Limit {
-            base: vec![MathNode::Run {
-                text: match selector {
-                    18 => "\u{2190}",
-                    19 => "\u{2192}",
-                    _ => "\u{2194}",
-                }
-                .into(),
-                style: MathStyle::Plain,
-            }],
-            limit: slots.into_iter().flatten().collect(),
-            lower: false,
-        },
-        21..=48 => {
+        16 | 17 => {
+            let top = selector == 17;
+            let bar = MathNode::Bar {
+                top,
+                body: slot(&mut slots, 0),
+            };
+            match variation {
+                1 => MathNode::Bar {
+                    top,
+                    body: vec![bar],
+                },
+                _ => bar,
+            }
+        }
+        18..=20 => {
+            let arrow = match selector {
+                18 => "\u{2190}",
+                19 => "\u{2192}",
+                _ => "\u{2194}",
+            };
+            let limit = slots.into_iter().flatten().collect();
+            return limited(vec![run(arrow)], limit, variation == 1);
+        }
+        27 | 28 => {
+            let top = selector == 27;
+            let brace = MathNode::GroupCharacter {
+                character: if top { '\u{23DE}' } else { '\u{23DF}' },
+                top,
+                body: slot(&mut slots, 0),
+            };
+            return limited(vec![brace], slot(&mut slots, 1), !top);
+        }
+        21..=26 | 29..=38 | 42 | 43 => {
+            let (fallback, limits_under) = operator(selector);
             let written = slots.get(3).and_then(|operator| match operator.as_slice() {
                 [MathNode::Run { text, .. }] => text.chars().next(),
                 _ => None,
             });
-            let operator = chars.last().copied().or(written).unwrap_or(match selector {
-                21 | 25 => '\u{222B}',
-                22 | 26 => '\u{222C}',
-                23 | 27 => '\u{222D}',
-                24 | 28 => '\u{222E}',
-                _ => '\u{2211}',
-            });
             MathNode::Nary {
-                operator,
+                operator: chars.last().copied().or(written).unwrap_or(fallback),
                 sub: optional(&mut slots, 1),
                 sup: optional(&mut slots, 2),
-                limits_under: selector > 28,
+                limits_under,
                 body: slot(&mut slots, 0),
             }
         }
+        39 => {
+            let base = slot(&mut slots, 0);
+            let (lower, upper) = match variation {
+                0 => (Vec::new(), slot(&mut slots, 1)),
+                1 => (slot(&mut slots, 1), Vec::new()),
+                _ => (slot(&mut slots, 1), slot(&mut slots, 2)),
+            };
+            let under = limited(base, lower, true);
+            return limited(under, upper, false);
+        }
+        40 => {
+            let dividend = vec![
+                run(")"),
+                MathNode::Bar {
+                    top: true,
+                    body: slot(&mut slots, 0),
+                },
+            ];
+            return limited(dividend, slot(&mut slots, 1), false);
+        }
+        41 => MathNode::Fraction {
+            kind: FractionKind::Linear,
+            numerator: slot(&mut slots, 0),
+            denominator: slot(&mut slots, 1),
+        },
+        45 => {
+            let items = slots.into_iter().take(2).collect();
+            MathNode::Delimiter {
+                open: Some(if variation == 2 { '|' } else { '\u{27E8}' }),
+                close: Some(if variation == 1 { '|' } else { '\u{27E9}' }),
+                separator: '|',
+                items,
+            }
+        }
+        46 | 47 => MathNode::GroupCharacter {
+            character: match variation {
+                0 => '\u{2190}',
+                1 => '\u{2192}',
+                _ => '\u{2194}',
+            },
+            top: selector == 47,
+            body: slot(&mut slots, 0),
+        },
+        48 => MathNode::GroupCharacter {
+            character: '\u{2322}',
+            top: true,
+            body: slot(&mut slots, 0),
+        },
         _ => return slots.into_iter().flatten().collect(),
     };
     vec![node]
@@ -637,6 +792,74 @@ mod tests {
             text.starts_with('(') && text.contains('∑') && text.ends_with('α'),
             "{text}"
         );
+    }
+
+    fn template(selector: u8, variation: u8, slots: &[Vec<u8>], chars: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = vec![TMPL, selector, variation, 0];
+        slots.iter().for_each(|s| out.extend_from_slice(s));
+        chars.iter().for_each(|c| out.extend_from_slice(c));
+        out.push(END);
+        out
+    }
+
+    fn text(objects: &[Vec<u8>]) -> String {
+        let mut mtef = vec![3, 1, 1, 3, 0];
+        mtef.extend(line(objects));
+        mtef.push(END);
+        let math = read(&stream(&mtef)).expect("the equation reads");
+        docboss_model::linear_text(&math.nodes)
+    }
+
+    fn word(face: u8, text: &str) -> Vec<Vec<u8>> {
+        text.chars().map(|c| char3(face, c)).collect()
+    }
+
+    /// E = mc²: the superscript takes the c alone.
+    #[test]
+    fn a_script_takes_one_object() {
+        let sup = template(
+            SCRIPT,
+            0,
+            &[vec![LINE | XF_NULL], line(&[char3(8, '2')])],
+            &[],
+        );
+        let mut objects = word(3, "E=mc");
+        objects.push(sup);
+        assert_eq!(text(&objects), "E=mc^2");
+    }
+
+    /// lim over x → 0 of sin x, a slash fraction, leading scripts and a
+    /// brace with its left fence only.
+    #[test]
+    fn templates_dispatch_by_selector_and_variation() {
+        let lim = template(
+            39,
+            1,
+            &[line(&word(2, "lim")), line(&word(3, "x\u{2192}0"))],
+            &[],
+        );
+        let mut objects = vec![lim];
+        objects.extend(word(2, "sin"));
+        objects.extend(word(3, "x"));
+        assert_eq!(text(&objects), "(lim)┬(x→0)sinx");
+
+        let slash = template(41, 0, &[line(&word(3, "a")), line(&word(3, "b"))], &[]);
+        assert_eq!(text(&[slash]), "a∕b");
+
+        let leading = template(44, 2, &[line(&word(8, "1")), line(&word(8, "2"))], &[]);
+        assert_eq!(text(&[leading, char3(3, 'X')]), "_1^2 X");
+
+        let pile = |rows: &[&str]| {
+            let mut out = vec![PILE, 0, 0];
+            rows.iter().for_each(|r| out.extend(line(&word(8, r))));
+            out.push(END);
+            out
+        };
+        let brace = template(2, 1, &[line(&[pile(&["1", "0"])])], &[char3(6, '{')]);
+        let mut objects = word(3, "f=");
+        objects.push(brace);
+        let found = text(&objects);
+        assert!(found.starts_with("f={") && !found.ends_with('{'), "{found}");
     }
 
     #[test]
