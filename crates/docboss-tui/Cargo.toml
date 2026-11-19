@@ -26,3 +26,6 @@ base64 = "0.23"
 
 [dev-dependencies]
 docboss-core = { workspace = true }
+
+[lints]
+workspace = true

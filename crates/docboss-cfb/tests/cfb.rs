@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_cfb::{property, CompoundFile, EntryKind, Error};
 
 const TEXT_DOC: &[u8] = include_bytes!("fixtures/text.doc");

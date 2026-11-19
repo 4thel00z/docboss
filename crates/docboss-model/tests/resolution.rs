@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_model::{
     AbstractNumbering, Level, NumberFormat, Numbering, NumberingInstance, NumberingRef, Paragraph,
     ParagraphProperties, RunProperties, Style, StyleKind, Styles,

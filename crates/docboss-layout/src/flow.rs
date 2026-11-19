@@ -832,6 +832,7 @@ fn merge_refs(base: &HeaderFooterRefs, over: &HeaderFooterRefs) -> HeaderFooterR
     }
 }
 
+#[derive(Default)]
 struct PageState {
     width: f32,
     height: f32,
@@ -918,6 +919,8 @@ struct Paginator<'c, 'd> {
     /// Floats whose page was laid out again around them but whose anchor
     /// then moved on: they go with their anchor instead.
     refused: Vec<u32>,
+    /// Takes content when no page can be started: no section is active.
+    spare: PageState,
 }
 
 fn frames_of(props: &SectionProperties, text_left: f32, text_width: f32) -> Vec<(f32, f32)> {
@@ -943,15 +946,9 @@ fn frames_of(props: &SectionProperties, text_left: f32, text_width: f32) -> Vec<
 }
 
 impl Paginator<'_, '_> {
-    fn geometry(&self) -> &Geometry {
-        self.geometry
-            .as_ref()
-            .expect("a section is active while paginating")
-    }
-
     fn choose(&self, refs: &HeaderFooterRefs, number: u32) -> Option<String> {
-        let g = self.geometry();
-        if self.section_first_page && g.props.title_page {
+        let title_page = self.geometry.as_ref().is_some_and(|g| g.props.title_page);
+        if self.section_first_page && title_page {
             return refs.first.clone();
         }
         if self.ctx.doc.settings.even_and_odd_headers && number.is_multiple_of(2) {
@@ -971,7 +968,9 @@ impl Paginator<'_, '_> {
         if self.pages.len() >= MAX_PAGES {
             return;
         }
-        let g = self.geometry();
+        let Some(g) = self.geometry.as_ref() else {
+            return;
+        };
         let props = g.props.clone();
         let (headers, footers) = (g.headers.clone(), g.footers.clone());
         if self.section_first_page {
@@ -1150,7 +1149,10 @@ impl Paginator<'_, '_> {
         if self.pages.is_empty() {
             self.new_page();
         }
-        self.pages.last_mut().expect("a page exists after new_page")
+        match self.pages.last_mut() {
+            Some(page) => page,
+            None => &mut self.spare,
+        }
     }
 
     fn next_frame(&mut self) {
@@ -1499,7 +1501,9 @@ impl Paginator<'_, '_> {
         }
         self.pending = None;
         let frame = self.float_frame(y, height);
-        let page = self.pages.last_mut().expect("commit runs with a page");
+        let Some(page) = self.pages.last_mut() else {
+            return;
+        };
         page.body.extend(items.into_iter().map(|mut item| {
             item.offset(x, y);
             item
@@ -1664,6 +1668,7 @@ pub(crate) fn run(
         restarts: 0,
         placed: Vec::new(),
         refused: Vec::new(),
+        spare: PageState::default(),
     };
     let default_section = docboss_model::Section::default();
     let sections: Vec<&docboss_model::Section> = if document.sections.is_empty() {

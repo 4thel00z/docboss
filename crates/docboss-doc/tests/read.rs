@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_model::{
     plain_text, Block, Document, DrawingPlacement, DrawingPosition, Inline, Justification,
     NoteKind, Paragraph, PositionBase, RunContent, SourceFormat, Table, VerticalMerge,

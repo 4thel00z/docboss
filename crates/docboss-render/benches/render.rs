@@ -1,6 +1,13 @@
 //! Layout and rendering throughput on a synthetic report of about 100
 //! pages: headings, justified text, lists, tables, images and footnotes.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 mod sample;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};

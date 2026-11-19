@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::PathBuf;
 
 use docboss_crypt::{decrypt, is_encrypted_package, scheme, Error, Scheme};

@@ -1,6 +1,13 @@
 //! Equation Native streams taken from corpus documents (Apache POI's
 //! Bug61268.doc and Bug50936_1.doc).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 fn equation(name: &str) -> String {
     let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     let bytes = std::fs::read(path).expect("fixture");

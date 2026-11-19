@@ -6,6 +6,13 @@
 //! `--mutate N` also reads N copies of each file with bytes flipped at
 //! pseudo-random offsets, counting only panics.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 

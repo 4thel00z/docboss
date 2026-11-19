@@ -59,6 +59,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
+# Library code returns errors or reports diagnostics instead of panicking;
+# clippy.toml lets tests unwrap.
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+
 # Release builds trade compile time for cross-crate inlining and tighter
 # codegen on the CPU-bound parse/layout/raster paths. `panic` stays "unwind":
 # the Python extension turns Rust panics into Python exceptions.

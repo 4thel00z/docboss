@@ -18,3 +18,6 @@ docboss-metafile = { workspace = true }
 [dev-dependencies]
 docboss-doc = { workspace = true }
 docboss-docx = { workspace = true }
+
+[lints]
+workspace = true

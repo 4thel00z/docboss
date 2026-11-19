@@ -24,3 +24,6 @@ docboss-aio = { workspace = true, features = ["http"] }
 pyo3 = { version = "0.25", features = ["abi3-py312"] }
 pyo3-async-runtimes = { version = "0.25", features = ["tokio-runtime"] }
 tokio = { version = "1", features = ["sync", "rt"] }
+
+[lints]
+workspace = true

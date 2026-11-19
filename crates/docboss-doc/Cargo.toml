@@ -25,3 +25,6 @@ docboss-output = { workspace = true }
 [[bench]]
 name = "doc"
 harness = false
+
+[lints]
+workspace = true

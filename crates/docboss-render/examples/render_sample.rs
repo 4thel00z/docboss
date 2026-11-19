@@ -1,6 +1,13 @@
 //! Lays out and renders a document built in code, one PNG per page:
 //! `cargo run --release -p docboss-render --example render_sample -- out/ 2.0`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 #[path = "../benches/sample/mod.rs"]
 mod sample;
 

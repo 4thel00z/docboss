@@ -1,6 +1,13 @@
 //! Holds `number_label` to the list label vectors the ledger's Lean
 //! reference writes for ECMA-376 Part 1 §17.18.59 (`ST_NumberFormat`).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_model::{number_label, NumberFormat};
 
 const VECTORS: &str = include_str!("vectors/ledger/number_format.tsv");

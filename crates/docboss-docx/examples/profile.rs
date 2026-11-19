@@ -2,6 +2,13 @@
 //!
 //! `cargo run --release -p docboss-docx --example profile -- <file> [iterations]`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let path = args.next().expect("a file");

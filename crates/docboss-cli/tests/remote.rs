@@ -1,6 +1,13 @@
 //! Every read command accepts an http(s) URL; these run the binary against
 //! a local server that honours `Range`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
