@@ -5,10 +5,11 @@ use std::fmt::{self, Write};
 
 use docboss_model::{Block, Document, NoteKind, Paragraph, Section};
 
+use crate::parts::{Part, PartWriter};
 use crate::walk::{self, Lists, Notes, Piece, Resolver};
 
 /// What plain text output includes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextOptions {
     /// Prefix list paragraphs with their labels, such as `1.` or `•`.
     pub list_labels: bool,
@@ -33,14 +34,7 @@ impl Default for TextOptions {
 
 /// Writes the document's text to `out`.
 pub fn write_text<W: Write>(doc: &Document, options: &TextOptions, out: &mut W) -> fmt::Result {
-    let mut writer = TextWriter {
-        resolver: Resolver::new(doc),
-        lists: Lists::new(doc),
-        notes: Notes::default(),
-        options,
-        pieces: Vec::new(),
-        line: String::new(),
-    };
+    let mut writer = TextWriter::new(doc, options);
     for section in &doc.sections {
         writer.section(section, out)?;
     }
@@ -52,6 +46,33 @@ pub fn to_text(doc: &Document, options: &TextOptions) -> String {
     let mut out = String::with_capacity(estimate(doc));
     let _ = write_text(doc, options, &mut out);
     out
+}
+
+/// The text of each part, in the order given. Each part ends with the
+/// notes and comments first referenced in it.
+pub fn to_text_parts(doc: &Document, options: &TextOptions, parts: &[Part]) -> Vec<String> {
+    let mut writer = TextWriter::new(doc, options);
+    crate::parts::write_parts(doc, parts, &mut writer)
+}
+
+impl<'a> PartWriter<'a> for TextWriter<'a, '_> {
+    fn begin(&mut self, part: &Part, out: &mut String) -> fmt::Result {
+        self.story(part.header.as_deref(), out)
+    }
+
+    fn block(&mut self, block: &'a Block, out: &mut String) -> fmt::Result {
+        self.blocks(std::slice::from_ref(block), out)
+    }
+
+    fn end(&mut self, part: Option<&Part>, out: &mut String) -> fmt::Result {
+        let Some(part) = part else {
+            self.written = (self.notes.order.len(), self.notes.comments.len());
+            return Ok(());
+        };
+        self.story(part.footer.as_deref(), out)?;
+        let doc = self.resolver.doc;
+        self.appendix(doc, out)
+    }
 }
 
 pub(crate) fn estimate(doc: &Document) -> usize {
@@ -69,9 +90,36 @@ struct TextWriter<'a, 'o> {
     options: &'o TextOptions,
     pieces: Vec<Piece<'a>>,
     line: String,
+    /// How many notes and comments have been appended.
+    written: (usize, usize),
 }
 
-impl<'a> TextWriter<'a, '_> {
+impl<'a, 'o> TextWriter<'a, 'o> {
+    fn new(doc: &'a Document, options: &'o TextOptions) -> Self {
+        Self {
+            resolver: Resolver::new(doc),
+            lists: Lists::new(doc),
+            notes: Notes::default(),
+            options,
+            pieces: Vec::new(),
+            line: String::new(),
+            written: (0, 0),
+        }
+    }
+
+    /// Writes a header or footer part when headers and footers are asked
+    /// for.
+    fn story<W: Write>(&mut self, id: Option<&str>, out: &mut W) -> fmt::Result {
+        if !self.options.headers_footers {
+            return Ok(());
+        }
+        let doc = self.resolver.doc;
+        let Some(part) = id.and_then(|id| doc.header_footer(id)) else {
+            return Ok(());
+        };
+        self.blocks(&part.blocks, out)
+    }
+
     fn section<W: Write>(&mut self, section: &'a Section, out: &mut W) -> fmt::Result {
         let doc = self.resolver.doc;
         let parts = crate::section_parts(section);
@@ -218,33 +266,33 @@ impl<'a> TextWriter<'a, '_> {
     }
 
     fn appendix<W: Write>(&mut self, doc: &'a Document, out: &mut W) -> fmt::Result {
-        let mut index = 0;
-        while index < self.notes.order.len() {
-            let (kind, id) = self.notes.order[index];
+        let (first, first_comment) = self.written;
+        let mut index = first;
+        while let Some(&(kind, id)) = self.notes.order.get(index) {
             index += 1;
             let note = match kind {
                 NoteKind::Footnote => doc.footnote(id),
                 NoteKind::Endnote => doc.endnote(id),
             };
             let Some(note) = note else { continue };
-            if index == 1 {
+            if index == first + 1 {
                 out.write_char('\n')?;
             }
             let label = walk::note_label(kind, self.notes.number(kind, id));
             let body = self.body(&note.blocks);
             writeln!(out, "[{label}] {body}")?;
         }
+        self.written.0 = index;
         if !self.options.comments {
             return Ok(());
         }
-        let mut index = 0;
-        while index < self.notes.comments.len() {
-            let id = self.notes.comments[index];
+        let mut index = first_comment;
+        while let Some(&id) = self.notes.comments.get(index) {
             index += 1;
             let Some(comment) = doc.comment(id) else {
                 continue;
             };
-            if index == 1 {
+            if index == first_comment + 1 {
                 out.write_char('\n')?;
             }
             let body = self.body(&comment.blocks);
@@ -253,6 +301,7 @@ impl<'a> TextWriter<'a, '_> {
                 None => writeln!(out, "[c{index}] {body}")?,
             }
         }
+        self.written.1 = index;
         Ok(())
     }
 }

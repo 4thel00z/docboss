@@ -10,16 +10,18 @@ mod html;
 mod json;
 mod latex;
 mod markdown;
+mod parts;
 mod symbol;
 mod text;
 mod walk;
 
 pub use blocks::{blocks_view, BlockKind, BlockView};
-pub use html::{to_html, write_html, HtmlOptions};
+pub use html::{to_html, to_html_parts, write_html, HtmlOptions};
 #[cfg(feature = "serde")]
 pub use json::{blocks_json, to_json};
-pub use markdown::{to_markdown, write_markdown, MarkdownOptions};
-pub use text::{to_text, write_text, TextOptions};
+pub use markdown::{to_markdown, to_markdown_parts, write_markdown, MarkdownOptions};
+pub use parts::Part;
+pub use text::{to_text, to_text_parts, write_text, TextOptions};
 pub use walk::media_file_name;
 
 use docboss_model::Section;
