@@ -2,6 +2,13 @@
 //! .doc file under the given directories: `cargo run --release -p
 //! docboss-aio --example parity -- <dir>...`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::{Path, PathBuf};
 
 use docboss_aio::{AsyncDocument, ReadOptions};

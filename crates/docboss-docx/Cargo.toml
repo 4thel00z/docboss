@@ -25,3 +25,6 @@ criterion = { workspace = true }
 [[bench]]
 name = "read"
 harness = false
+
+[lints]
+workspace = true

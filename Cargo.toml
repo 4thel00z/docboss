@@ -21,6 +21,7 @@ members = [
     "crates/docboss-tui",
     "crates/docboss-crypt",
     "crates/docboss-aio",
+    "crates/docboss-pages",
 ]
 
 [workspace.package]
@@ -51,6 +52,7 @@ docboss-write = { path = "crates/docboss-write", version = "0.2.1" } # x-release
 docboss-tui = { path = "crates/docboss-tui", version = "0.2.1" } # x-release-please-version
 docboss-crypt = { path = "crates/docboss-crypt", version = "0.2.1" } # x-release-please-version
 docboss-aio = { path = "crates/docboss-aio", version = "0.2.1" } # x-release-please-version
+docboss-pages = { path = "crates/docboss-pages", version = "0.2.1" } # x-release-please-version
 docboss-testkit = { path = "crates/docboss-testkit" }
 thiserror = "2"
 memchr = "2"
@@ -58,6 +60,16 @@ flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+# Library code returns errors or reports diagnostics instead of panicking;
+# clippy.toml lets tests unwrap.
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 # Release builds trade compile time for cross-crate inlining and tighter
 # codegen on the CPU-bound parse/layout/raster paths. `panic` stays "unwind":

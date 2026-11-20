@@ -1,5 +1,12 @@
 //! Prints a compact structural summary of a Word binary document.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_model::{Block, Document, Inline, RunContent};
 
 fn inline(i: &Inline, out: &mut String) {

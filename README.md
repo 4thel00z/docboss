@@ -75,13 +75,15 @@ import docboss
 
 doc = docboss.Document("report.docx")          # or Document(data=raw_bytes), password="..."
 print(doc.format, doc.metadata.title)          # "docx" or "doc"
-text = doc.extract_text(headers_footers=True)
-md   = doc.extract_markdown()                  # images="reference" | "embed" | "omit"
-html = doc.extract_html(standalone=True)
+text = doc.to(format="text", headers_footers=True)
+md   = doc.to({"format": "markdown", "images": "omit"})   # images="reference" | "embed" | "omit"
+html = doc.to(format="html", standalone=True)
 for block in doc.blocks():                     # kind, style, heading_level, list_label, text
     print(block.kind, block.text)
-png  = doc.render(0, scale=2.0)                # PNG bytes; format="ppm" | "bmp" | "jpeg"
-pngs = doc.render_pages()                      # every page, rendered on all cores
+pages = doc.pages().to(format="markdown")      # list[str], the blocks that start on each page
+some  = doc.pages()[2:6].to(format="html")     # slices and negative indexes work like lists
+png   = doc.page(0).to(format="png", scale=2)  # bytes; "ppm" | "bmp" | "jpeg" (quality=)
+pngs  = doc.pages().to(format="png")           # every page, rendered on all cores
 imgs = doc.images()                            # .name, .content_type, .data
 data = doc.to_docx()                           # a fresh DOCX, also for .doc input
 
@@ -100,7 +102,8 @@ import docboss
 
 async def main() -> None:
     doc = await docboss.AsyncDocument.open_url("https://example.com/report.docx")
-    text = await doc.extract_text()
+    text = await doc.to(format="text")
+    pages = await doc.pages().to(format="markdown", images="omit")
     print(doc.format, doc.bytes_fetched, "bytes fetched in", len(doc.requests), "requests")
     full = await doc.document()                # the synchronous Document, for rendering and the rest
 
@@ -110,7 +113,7 @@ asyncio.run(main())
 <details>
 <summary><strong>Rust</strong></summary>
 
-The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`, `docboss-metafile`, `docboss-mtef`).
+The library crates: `docboss-core` (open and detect), `docboss-model` (the document model), `docboss-output` (text, Markdown, HTML, JSON), `docboss-layout` and `docboss-render` (pages), `docboss-pages` (`to()` over the document, its pages or one page), `docboss-write` (DOCX), `docboss-aio` (async and remote reads), plus the readers underneath (`docboss-docx`, `docboss-doc`, `docboss-zip`, `docboss-xml`, `docboss-cfb`, `docboss-crypt`, `docboss-font`, `docboss-metafile`, `docboss-mtef`).
 
 ```rust,no_run
 use docboss_output::{to_markdown, to_text, MarkdownOptions, TextOptions};
@@ -123,6 +126,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let layout = docboss_layout::layout_document(&doc);
     println!("{} pages", layout.pages.len());
     docboss_render::render_page(&layout, 0, 2.0)?.save("page.png")?;
+
+    let pages = docboss_pages::Document::new(doc.clone());  // per-page output over the cached layout
+    let markdown = docboss_pages::Format::Markdown(MarkdownOptions::default());
+    println!("{} pages", pages.pages().to(&markdown)?.len());
 
     docboss_write::save(&doc, "copy.docx")?;               // deterministic DOCX
     Ok(())

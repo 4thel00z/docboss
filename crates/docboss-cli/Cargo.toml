@@ -37,3 +37,6 @@ docboss-testkit = { workspace = true }
 [[bin]]
 name = "docboss"
 path = "src/main.rs"
+
+[lints]
+workspace = true

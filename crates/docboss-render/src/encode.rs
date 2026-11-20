@@ -665,7 +665,7 @@ fn hash_table() -> Box<HashTable> {
     vec![0u32; 1 << HASH_BITS]
         .into_boxed_slice()
         .try_into()
-        .expect("length matches by construction")
+        .unwrap_or_else(|_| Box::new([0u32; 1 << HASH_BITS]))
 }
 
 #[inline]
@@ -685,11 +685,17 @@ enum Token<'a> {
     },
 }
 
+/// The eight bytes at `at` as a little-endian word, when they are all there.
+#[inline]
+fn word_at(data: &[u8], at: usize) -> Option<u64> {
+    let bytes = data.get(at..)?.first_chunk::<8>()?;
+    Some(u64::from_le_bytes(*bytes))
+}
+
 /// Word-wise scan to the end of the zero run starting at `i`.
 #[inline]
 fn zero_run_end(data: &[u8], mut i: usize) -> usize {
-    while i + 8 <= data.len() {
-        let word = u64::from_le_bytes(data[i..i + 8].try_into().unwrap());
+    while let Some(word) = word_at(data, i) {
         if word != 0 {
             return i + (word.trailing_zeros() / 8) as usize;
         }
@@ -752,12 +758,11 @@ fn tokenize(data: &[u8], table: &mut HashTable, mut emit: impl FnMut(Token<'_>))
             let mut len = MIN_MATCH;
             let max = (data.len() - i).min(258);
             while len + 8 <= max {
-                let held = u64::from_le_bytes(
-                    data[candidate + len..candidate + len + 8]
-                        .try_into()
-                        .unwrap(),
-                );
-                let here = u64::from_le_bytes(data[i + len..i + len + 8].try_into().unwrap());
+                let (Some(held), Some(here)) =
+                    (word_at(data, candidate + len), word_at(data, i + len))
+                else {
+                    break;
+                };
                 let diff = held ^ here;
                 if diff != 0 {
                     len += (diff.trailing_zeros() / 8) as usize;
@@ -1037,9 +1042,7 @@ fn huffman_lengths_unlimited(freq: &[u32]) -> Vec<u8> {
      -> usize {
         let from_leaf = match (nodes.get(*li), merged.get(*mi)) {
             (Some(l), Some(m)) => l.weight <= m.weight,
-            (Some(_), None) => true,
-            (None, Some(_)) => false,
-            (None, None) => unreachable!("both queues empty mid-merge"),
+            (leaf, _) => leaf.is_some(),
         };
         if from_leaf {
             all.push(nodes[*li].clone());
@@ -1063,7 +1066,9 @@ fn huffman_lengths_unlimited(freq: &[u32]) -> Vec<u8> {
         remaining -= 1;
     }
     // Depth-first depth assignment from the final root.
-    let root = merged.last().unwrap().clone();
+    let Some(root) = merged.last().cloned() else {
+        return lens;
+    };
     let mut stack = vec![(root, 0u8)];
     while let Some((node, depth)) = stack.pop() {
         match node.kids {
@@ -1307,8 +1312,9 @@ impl Crc32 {
         let mut crc = self.state;
         let (chunks, tail) = data.as_chunks::<8>();
         for chunk in chunks {
-            let lo = u32::from_le_bytes(chunk[..4].try_into().unwrap()) ^ crc;
-            let hi = u32::from_le_bytes(chunk[4..].try_into().unwrap());
+            let [a, b, c, d, e, f, g, h] = *chunk;
+            let lo = u32::from_le_bytes([a, b, c, d]) ^ crc;
+            let hi = u32::from_le_bytes([e, f, g, h]);
             crc = CRC_TABLES[7][(lo & 0xff) as usize]
                 ^ CRC_TABLES[6][((lo >> 8) & 0xff) as usize]
                 ^ CRC_TABLES[5][((lo >> 16) & 0xff) as usize]

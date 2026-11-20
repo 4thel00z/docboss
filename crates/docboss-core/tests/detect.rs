@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::PathBuf;
 
 use docboss_core::{detect, open, read, Error, Format, SourceFormat};

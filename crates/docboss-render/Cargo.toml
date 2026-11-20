@@ -27,3 +27,6 @@ harness = false
 
 [[example]]
 name = "render_sample"
+
+[lints]
+workspace = true

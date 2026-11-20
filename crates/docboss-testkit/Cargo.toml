@@ -9,3 +9,6 @@ repository.workspace = true
 
 [dependencies]
 docboss-zip = { workspace = true }
+
+[lints]
+workspace = true

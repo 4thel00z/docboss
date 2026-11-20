@@ -78,6 +78,11 @@ imgs = doc.images()                            # .name, .file_name, .content_typ
 doc.save_docx("fresh.docx")                    # or to_docx() bytes; converts .doc too
 doc.diagnostics                                # .severity, .location, .message
 
+doc.to(format="markdown", images="omit")       # whole document; or doc.to({"format": "markdown", ...})
+doc.pages().to(format="text")                  # list[str]: the blocks that start on each page, notes on the page of their reference
+doc.pages()[2:6].to(format="html")             # Pages slice like lists; doc.page(-1) is the last Page (.index, .number)
+doc.page(0).to(format="jpeg", scale=2, quality=85)   # bytes; "png" | "ppm" | "bmp" | "jpeg"
+
 docboss.extract_texts(paths, threads=8, strict=False)   # batch on Rust threads; failed files give None
 docboss.md.to_docx(markdown, images_dir="assets")        # Markdown -> DOCX bytes
 docboss.detect(data)                                      # "docx", "doc", "encrypted_docx", "rtf", "unknown"
@@ -88,6 +93,7 @@ Async, over files, bytes or URLs, fetching only the byte ranges needed:
 ```python
 doc = await docboss.AsyncDocument.open_url("https://example.com/report.docx")
 text = await doc.extract_text()
+pages = await doc.pages()[1:].to(format="markdown")   # lazy selection, laid out off the event loop
 doc.bytes_fetched, doc.requests, doc.part_names()
 full = await doc.document()                    # the synchronous Document
 ```

@@ -12,3 +12,6 @@ keywords.workspace = true
 
 [dependencies]
 docboss-model = { workspace = true }
+
+[lints]
+workspace = true

@@ -5,11 +5,12 @@ use std::fmt::{self, Write};
 
 use docboss_model::{Block, Document, Drawing, NoteKind, Paragraph, Section, Table, VerticalMerge};
 
+use crate::parts::{Part, PartWriter};
 use crate::walk::{self, Fmt, ListItem, Lists, Notes, Piece, Resolver};
 use crate::ImageMode;
 
 /// What Markdown output includes and how.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkdownOptions {
     /// Start with the metadata title as a level-one heading.
     pub title: bool,
@@ -46,19 +47,7 @@ pub fn write_markdown<W: Write>(
     out: &mut W,
 ) -> fmt::Result {
     let mut writer = MarkdownWriter::new(doc, options);
-    if options.title {
-        if let Some(title) = doc
-            .metadata
-            .title
-            .as_deref()
-            .filter(|t| !t.trim().is_empty())
-        {
-            writer.begin(Last::Block, out)?;
-            let mut escaped = String::new();
-            escape(title.trim(), false, &mut escaped);
-            write!(out, "# {escaped}")?;
-        }
-    }
+    writer.title(out)?;
     for section in &doc.sections {
         writer.section(section, out)?;
     }
@@ -75,6 +64,67 @@ pub fn to_markdown(doc: &Document, options: &MarkdownOptions) -> String {
     let mut out = String::with_capacity(crate::text::estimate(doc));
     let _ = write_markdown(doc, options, &mut out);
     out
+}
+
+/// The Markdown of each part, in the order given. Each part ends with the
+/// definitions of the notes first referenced in it; the title goes into
+/// the part that opens the document. `page_breaks` does not apply.
+pub fn to_markdown_parts(doc: &Document, options: &MarkdownOptions, parts: &[Part]) -> Vec<String> {
+    let options = MarkdownOptions {
+        page_breaks: false,
+        ..options.clone()
+    };
+    let mut writer = MarkdownWriter::new(doc, &options);
+    crate::parts::write_parts(doc, parts, &mut writer)
+}
+
+impl<'a> PartWriter<'a> for MarkdownWriter<'a, '_> {
+    fn opening(&mut self, out: &mut String) -> fmt::Result {
+        self.title(out)
+    }
+
+    fn reset(&mut self) {
+        self.last = Last::None;
+        self.list_stack.clear();
+    }
+
+    fn begin(&mut self, part: &Part, out: &mut String) -> fmt::Result {
+        if !self.options.headers_footers {
+            return Ok(());
+        }
+        let doc = self.resolver.doc;
+        let Some(header) = part.header.as_deref().and_then(|id| doc.header_footer(id)) else {
+            return Ok(());
+        };
+        self.blocks(&header.blocks, out)
+    }
+
+    fn block(&mut self, block: &'a Block, out: &mut String) -> fmt::Result {
+        self.blocks(std::slice::from_ref(block), out)
+    }
+
+    fn end(&mut self, part: Option<&Part>, out: &mut String) -> fmt::Result {
+        self.close_code(out)?;
+        let Some(part) = part else {
+            self.written = (self.notes.order.len(), self.notes.comments.len());
+            return Ok(());
+        };
+        let doc = self.resolver.doc;
+        let footer = part
+            .footer
+            .as_deref()
+            .filter(|_| self.options.headers_footers)
+            .and_then(|id| doc.header_footer(id));
+        if let Some(footer) = footer {
+            self.blocks(&footer.blocks, out)?;
+            self.close_code(out)?;
+        }
+        self.definitions(doc, out)?;
+        if self.last != Last::None {
+            out.write_char('\n')?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +151,8 @@ struct MarkdownWriter<'a, 'o> {
     page_break: bool,
     buf: String,
     pieces: Vec<Piece<'a>>,
+    /// How many notes and comments have their definitions written.
+    written: (usize, usize),
 }
 
 impl<'a, 'o> MarkdownWriter<'a, 'o> {
@@ -116,7 +168,27 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
             page_break: false,
             buf: String::new(),
             pieces: Vec::new(),
+            written: (0, 0),
         }
+    }
+
+    fn title<W: Write>(&mut self, out: &mut W) -> fmt::Result {
+        if !self.options.title {
+            return Ok(());
+        }
+        let doc = self.resolver.doc;
+        let Some(title) = doc
+            .metadata
+            .title
+            .as_deref()
+            .filter(|t| !t.trim().is_empty())
+        else {
+            return Ok(());
+        };
+        self.begin(Last::Block, out)?;
+        let mut escaped = String::new();
+        escape(title.trim(), false, &mut escaped);
+        write!(out, "# {escaped}")
     }
 
     fn begin<W: Write>(&mut self, kind: Last, out: &mut W) -> fmt::Result {
@@ -488,9 +560,8 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
     }
 
     fn definitions<W: Write>(&mut self, doc: &'a Document, out: &mut W) -> fmt::Result {
-        let mut index = 0;
-        while index < self.notes.order.len() {
-            let (kind, id) = self.notes.order[index];
+        let mut index = self.written.0;
+        while let Some(&(kind, id)) = self.notes.order.get(index) {
             index += 1;
             let note = match kind {
                 NoteKind::Footnote => doc.footnote(id),
@@ -502,12 +573,12 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
             self.begin(Last::Block, out)?;
             write!(out, "[^{label}]: {body}")?;
         }
+        self.written.0 = index;
         if !self.options.comments {
             return Ok(());
         }
-        let mut index = 0;
-        while index < self.notes.comments.len() {
-            let id = self.notes.comments[index];
+        let mut index = self.written.1;
+        while let Some(&id) = self.notes.comments.get(index) {
             index += 1;
             let Some(comment) = doc.comment(id) else {
                 continue;
@@ -523,6 +594,7 @@ impl<'a, 'o> MarkdownWriter<'a, 'o> {
                 None => write!(out, "[^c{index}]: {body}")?,
             }
         }
+        self.written.1 = index;
         Ok(())
     }
 

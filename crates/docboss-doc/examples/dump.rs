@@ -1,6 +1,13 @@
 //! Prints a Word binary document's text, one line per paragraph, and its
 //! diagnostics on stderr.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
         .nth(1)

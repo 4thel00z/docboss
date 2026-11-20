@@ -1,5 +1,12 @@
 //! Writes one stream of a compound file to stdout.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

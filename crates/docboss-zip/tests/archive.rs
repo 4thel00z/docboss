@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_testkit::{ZipOptions, ZipWriter};
 use docboss_zip::{Archive, Error, Limits};
 

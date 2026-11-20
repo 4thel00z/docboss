@@ -1,6 +1,13 @@
 //! Reads every `.doc` file under a directory, catching panics, and prints
 //! the open rate, errors, panics and throughput.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 

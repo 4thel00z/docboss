@@ -1,5 +1,12 @@
 //! Lists the streams of a compound file with their sizes and first bytes.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).ok_or("usage: ls <file>")?;
     let bytes = std::fs::read(path)?;

@@ -1,48 +1,27 @@
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
 
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict};
 
-use docboss_font::FontDatabase;
-use docboss_layout::Layout;
 use docboss_model::SourceFormat;
 use docboss_output::{HtmlOptions, ImageMode, MarkdownOptions, TextOptions};
-use docboss_render::{Format, Renderer};
+use docboss_pages::{Format, Output};
 
+use crate::pages::{format_arg, output_object, position, Page, Pages};
 use crate::types::{Block, Diagnostic, FontInfo, Image, Metadata, StyleInfo};
-use crate::{byte_arg, doc_err, parallel_map};
+use crate::{byte_arg, doc_err};
 
-/// The system font database, scanned once and shared by every document
-/// that embeds no fonts of its own, so parsed faces are reused across
-/// documents.
-fn system_fonts() -> Arc<FontDatabase> {
-    static SYSTEM: OnceLock<Arc<FontDatabase>> = OnceLock::new();
-    SYSTEM
-        .get_or_init(|| Arc::new(FontDatabase::system()))
-        .clone()
-}
-
-fn fonts_for(document: &docboss_model::Document) -> Arc<FontDatabase> {
-    let embeds = document.fonts.iter().any(|f| {
-        f.embedded_regular.is_some()
-            || f.embedded_bold.is_some()
-            || f.embedded_italic.is_some()
-            || f.embedded_bold_italic.is_some()
-    });
-    if !embeds {
-        return system_fonts();
+fn image_format(format: &str, scale: f32, jpeg_quality: u8) -> PyResult<Format> {
+    if !(scale.is_finite() && scale > 0.0) {
+        return Err(PyValueError::new_err("scale must be a positive number"));
     }
-    docboss_layout::fonts_for(document)
-}
-
-fn image_format(format: &str, jpeg_quality: u8) -> PyResult<Format> {
     match format.to_ascii_lowercase().as_str() {
-        "png" => Ok(Format::Png),
-        "ppm" => Ok(Format::Ppm),
-        "bmp" => Ok(Format::Bmp),
+        "png" => Ok(Format::Png { scale }),
+        "ppm" => Ok(Format::Ppm { scale }),
+        "bmp" => Ok(Format::Bmp { scale }),
         "jpeg" | "jpg" => Ok(Format::Jpeg {
+            scale,
             quality: jpeg_quality.clamp(1, 100),
         }),
         other => Err(PyValueError::new_err(format!(
@@ -64,63 +43,40 @@ pub(crate) fn image_mode(images: &str, prefix: &str) -> PyResult<ImageMode> {
     }
 }
 
-fn check_scale(scale: f32) -> PyResult<()> {
-    if scale.is_finite() && scale > 0.0 {
-        return Ok(());
+/// The text of a whole-document conversion.
+fn convert(py: Python<'_>, document: &docboss_pages::Document, format: Format) -> PyResult<String> {
+    let document = document.clone();
+    let output = py
+        .allow_threads(move || document.to(&format))
+        .map_err(doc_err)?;
+    match output {
+        Output::Text(text) => Ok(text),
+        Output::Bytes(_) => Ok(String::new()),
     }
-    Err(PyValueError::new_err("scale must be a positive number"))
-}
-
-fn encode_page(
-    renderer: &mut Renderer,
-    layout: &Layout,
-    index: usize,
-    scale: f32,
-    format: Format,
-) -> Result<Vec<u8>, String> {
-    let pixmap = renderer
-        .render(layout, index, scale)
-        .map_err(|e| e.to_string())?;
-    pixmap.encode(format).map_err(|e| e.to_string())
 }
 
 /// A DOCX or DOC document, opened from a path or from bytes. The format is
 /// detected from the bytes.
 #[pyclass(frozen, module = "docboss._docboss")]
 pub struct Document {
-    document: Arc<docboss_model::Document>,
-    layout: OnceLock<Arc<Layout>>,
+    inner: docboss_pages::Document,
 }
 
 impl Document {
     /// A document over a model another reader already parsed.
-    pub(crate) fn from_model(document: Arc<docboss_model::Document>) -> Self {
-        Self {
-            document,
-            layout: OnceLock::new(),
-        }
+    pub(crate) fn from_pages(inner: docboss_pages::Document) -> Self {
+        Self { inner }
     }
 
-    fn layout(&self, py: Python<'_>) -> Arc<Layout> {
-        if let Some(layout) = self.layout.get() {
-            return layout.clone();
-        }
-        let document = self.document.clone();
-        let layout =
-            py.allow_threads(|| Arc::new(docboss_layout::layout(&document, &fonts_for(&document))));
-        self.layout.get_or_init(|| layout).clone()
+    fn model(&self) -> &docboss_model::Document {
+        self.inner.model()
     }
 
-    fn page_index(&self, py: Python<'_>, page: isize) -> PyResult<(Arc<Layout>, usize)> {
-        let layout = self.layout(py);
-        let count = layout.pages.len() as isize;
-        let index = if page < 0 { page + count } else { page };
-        if !(0..count).contains(&index) {
-            return Err(PyIndexError::new_err(format!(
-                "page {page} out of range for {count} pages"
-            )));
-        }
-        Ok((layout, index as usize))
+    /// Every laid-out page, computing the layout without the GIL on first
+    /// use.
+    fn all_pages(&self, py: Python<'_>) -> docboss_pages::Pages {
+        let inner = self.inner.clone();
+        py.allow_threads(move || inner.pages())
     }
 }
 
@@ -144,15 +100,14 @@ impl Document {
             .allow_threads(|| docboss_core::read_with(&bytes, &options))
             .map_err(doc_err)?;
         Ok(Self {
-            document: Arc::new(document),
-            layout: OnceLock::new(),
+            inner: docboss_pages::Document::new(document),
         })
     }
 
     /// `docx` or `doc`: the format the document was read from.
     #[getter]
     fn format(&self) -> &'static str {
-        match self.document.format {
+        match self.model().format {
             SourceFormat::Docx => "docx",
             SourceFormat::Doc => "doc",
         }
@@ -160,13 +115,13 @@ impl Document {
 
     #[getter]
     fn metadata(&self) -> Metadata {
-        Metadata::from(&self.document.metadata)
+        Metadata::from(&self.model().metadata)
     }
 
     /// What the reader approximated or dropped.
     #[getter]
     fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.document
+        self.model()
             .diagnostics
             .iter()
             .map(Diagnostic::from)
@@ -175,12 +130,12 @@ impl Document {
 
     #[getter]
     fn fonts(&self) -> Vec<FontInfo> {
-        self.document.fonts.iter().map(FontInfo::from).collect()
+        self.model().fonts.iter().map(FontInfo::from).collect()
     }
 
     #[getter]
     fn styles(&self) -> Vec<StyleInfo> {
-        self.document
+        self.model()
             .styles
             .styles
             .iter()
@@ -188,7 +143,42 @@ impl Document {
             .collect()
     }
 
-    /// The main text, one line per paragraph, list labels included.
+    /// The whole document as text, Markdown, HTML or JSON. Pass one dict
+    /// such as `{"format": "markdown", "images": "omit"}` or the same keys
+    /// as keyword arguments. Image formats render pages: use `page()` or
+    /// `pages()` for them.
+    #[pyo3(signature = (spec=None, /, **options))]
+    fn to(
+        &self,
+        py: Python<'_>,
+        spec: Option<&Bound<'_, PyAny>>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<String> {
+        let format = format_arg(spec, options)?;
+        convert(py, &self.inner, format)
+    }
+
+    /// Every laid-out page. The layout is computed on first use and cached.
+    fn pages(&self, py: Python<'_>) -> Pages {
+        Pages {
+            inner: self.all_pages(py),
+        }
+    }
+
+    /// One laid-out page; negative indexes count from the end.
+    fn page(&self, py: Python<'_>, index: isize) -> PyResult<Page> {
+        let pages = self.all_pages(py);
+        let at = position(index, pages.len())?;
+        let Some(inner) = pages.get(at) else {
+            return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                "page {index} out of range"
+            )));
+        };
+        Ok(Page { inner })
+    }
+
+    /// The main text, one line per paragraph, list labels included. Same
+    /// as `to(format="text", ...)`.
     #[pyo3(signature = (*, list_labels=true, headers_footers=false, notes=true, comments=false))]
     fn extract_text(
         &self,
@@ -197,20 +187,20 @@ impl Document {
         headers_footers: bool,
         notes: bool,
         comments: bool,
-    ) -> String {
+    ) -> PyResult<String> {
         let options = TextOptions {
             list_labels,
             headers_footers,
             notes,
             comments,
         };
-        let document = self.document.clone();
-        py.allow_threads(|| docboss_output::to_text(&document, &options))
+        convert(py, &self.inner, Format::Text(options))
     }
 
     /// GitHub-flavored Markdown: headings from styles, lists from
     /// numbering, tables, links, footnotes. `images` is `reference` (names
-    /// under `image_prefix`), `embed` (data URIs) or `omit`.
+    /// under `image_prefix`), `embed` (data URIs) or `omit`. Same as
+    /// `to(format="markdown", ...)`.
     #[pyo3(signature = (*, title=false, page_breaks=false, images="reference", image_prefix="", headers_footers=false, notes=true, comments=false))]
     #[allow(clippy::too_many_arguments)]
     fn extract_markdown(
@@ -232,12 +222,11 @@ impl Document {
             notes,
             comments,
         };
-        let document = self.document.clone();
-        Ok(py.allow_threads(|| docboss_output::to_markdown(&document, &options)))
+        convert(py, &self.inner, Format::Markdown(options))
     }
 
     /// Semantic HTML5: a body fragment, or a whole document with
-    /// `standalone=True`.
+    /// `standalone=True`. Same as `to(format="html", ...)`.
     #[pyo3(signature = (*, standalone=false, images="embed", image_prefix="", headers_footers=false, notes=true, comments=false))]
     #[allow(clippy::too_many_arguments)]
     fn extract_html(
@@ -257,22 +246,19 @@ impl Document {
             notes,
             comments,
         };
-        let document = self.document.clone();
-        Ok(py.allow_threads(|| docboss_output::to_html(&document, &options)))
+        convert(py, &self.inner, Format::Html(options))
     }
 
-    /// The whole document model as JSON.
+    /// The whole document model as JSON. Same as `to(format="json", ...)`.
     #[pyo3(signature = (*, pretty=false))]
     fn to_json(&self, py: Python<'_>, pretty: bool) -> PyResult<String> {
-        let document = self.document.clone();
-        py.allow_threads(|| docboss_output::to_json(&document, pretty))
-            .map_err(doc_err)
+        convert(py, &self.inner, Format::Json { pretty })
     }
 
     /// The blocks of the main text with their role and plain text.
     fn blocks(&self, py: Python<'_>) -> Vec<Block> {
-        let document = self.document.clone();
-        py.allow_threads(|| docboss_output::blocks_view(&document))
+        let inner = self.inner.clone();
+        py.allow_threads(move || docboss_output::blocks_view(inner.model()))
             .into_iter()
             .map(Block::from)
             .collect()
@@ -280,37 +266,38 @@ impl Document {
 
     /// Every image and binary part the text refers to.
     fn images(&self) -> Vec<Image> {
-        self.document.media.iter().map(Image::from).collect()
+        self.model().media.iter().map(Image::from).collect()
     }
 
-    /// The number of pages the document lays out to. The layout is computed
-    /// on first use and cached.
+    /// The number of pages the document lays out to. Same as
+    /// `len(pages())`.
     fn page_count(&self, py: Python<'_>) -> usize {
-        self.layout(py).pages.len()
+        self.all_pages(py).len()
     }
 
     /// Renders one page (negative indexes count from the end) at `scale`
-    /// pixels per point, encoded as `png`, `ppm`, `bmp` or `jpeg`.
+    /// pixels per point, encoded as `png`, `ppm`, `bmp` or `jpeg`. Same as
+    /// `page(page).to(format=..., scale=...)`.
     #[pyo3(signature = (page=0, *, scale=1.0, format="png", jpeg_quality=90))]
-    fn render<'py>(
+    fn render(
         &self,
-        py: Python<'py>,
+        py: Python<'_>,
         page: isize,
         scale: f32,
         format: &str,
         jpeg_quality: u8,
-    ) -> PyResult<Bound<'py, PyBytes>> {
-        check_scale(scale)?;
-        let format = image_format(format, jpeg_quality)?;
-        let (layout, index) = self.page_index(py, page)?;
-        let bytes = py
-            .allow_threads(|| encode_page(&mut Renderer::new(), &layout, index, scale, format))
-            .map_err(crate::DocbossError::new_err)?;
-        Ok(PyBytes::new(py, &bytes))
+    ) -> PyResult<PyObject> {
+        let format = image_format(format, scale, jpeg_quality)?;
+        let page = self.page(py, page)?.inner;
+        let output = py
+            .allow_threads(move || page.to(&format))
+            .map_err(doc_err)?;
+        output_object(py, output)
     }
 
     /// Renders several pages (all by default) across the machine's cores,
-    /// returned in the order asked for.
+    /// returned in the order asked for. Same as `pages().to(...)` over the
+    /// pages picked.
     #[pyo3(signature = (pages=None, *, scale=1.0, format="png", jpeg_quality=90))]
     fn render_pages<'py>(
         &self,
@@ -320,53 +307,50 @@ impl Document {
         format: &str,
         jpeg_quality: u8,
     ) -> PyResult<Vec<Bound<'py, PyBytes>>> {
-        check_scale(scale)?;
-        let format = image_format(format, jpeg_quality)?;
-        let layout = self.layout(py);
-        let indexes: Vec<usize> = match pages {
-            None => (0..layout.pages.len()).collect(),
-            Some(pages) => pages
-                .into_iter()
-                .map(|page| self.page_index(py, page).map(|(_, index)| index))
-                .collect::<PyResult<_>>()?,
+        let format = image_format(format, scale, jpeg_quality)?;
+        let all = self.all_pages(py);
+        let picked = match pages {
+            None => all,
+            Some(pages) => {
+                let positions: PyResult<Vec<usize>> = pages
+                    .into_iter()
+                    .map(|page| position(page, all.len()))
+                    .collect();
+                all.pick(positions?)
+            }
         };
-        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-        let results = py.allow_threads(|| {
-            parallel_map(&indexes, cores, |&index| {
-                encode_page(&mut Renderer::new(), &layout, index, scale, format)
-            })
-        });
-        results
-            .into_iter()
-            .map(|slot| match slot {
-                Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
-                Err(why) => Err(crate::DocbossError::new_err(why)),
-            })
-            .collect()
+        let outputs = py
+            .allow_threads(move || picked.to(&format))
+            .map_err(doc_err)?;
+        Ok(outputs
+            .iter()
+            .filter_map(Output::as_bytes)
+            .map(|bytes| PyBytes::new(py, bytes))
+            .collect())
     }
 
     /// The document written as DOCX bytes: a DOC converts to DOCX this way.
     fn to_docx<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let document = self.document.clone();
+        let inner = self.inner.clone();
         let bytes = py
-            .allow_threads(|| docboss_write::to_bytes(&document))
+            .allow_threads(move || docboss_write::to_bytes(inner.model()))
             .map_err(doc_err)?;
         Ok(PyBytes::new(py, &bytes))
     }
 
     /// Writes the document as a DOCX file.
     fn save_docx(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
-        let document = self.document.clone();
-        py.allow_threads(|| docboss_write::save(&document, &path))
+        let inner = self.inner.clone();
+        py.allow_threads(move || docboss_write::save(inner.model(), &path))
             .map_err(doc_err)
     }
 
     fn __repr__(&self) -> String {
-        let title = self.document.metadata.title.as_deref().unwrap_or("");
+        let title = self.model().metadata.title.as_deref().unwrap_or("");
         format!(
             "<docboss.Document format={} title={title:?} sections={}>",
             self.format(),
-            self.document.sections.len()
+            self.model().sections.len()
         )
     }
 }

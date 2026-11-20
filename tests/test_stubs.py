@@ -4,13 +4,18 @@ import inspect
 from pathlib import Path
 
 import docboss
+import docboss.formats
 
 STUB = Path(__file__).parent.parent / "python" / "docboss" / "_docboss.pyi"
 
 
+def extension_names() -> list[str]:
+    return [name for name in docboss.__all__ if name not in vars(docboss.formats)]
+
+
 def test_stub_declares_every_exported_class() -> None:
     stub = STUB.read_text()
-    for name in docboss.__all__:
+    for name in extension_names():
         value = getattr(docboss, name)
         if inspect.isclass(value):
             assert f"class {name}" in stub, f"missing stub for class {name}"
@@ -20,7 +25,7 @@ def test_stub_declares_every_exported_class() -> None:
 
 def test_stub_declares_every_public_method() -> None:
     stub = STUB.read_text()
-    for name in docboss.__all__:
+    for name in extension_names():
         value = getattr(docboss, name)
         if not inspect.isclass(value) or issubclass(value, BaseException):
             continue

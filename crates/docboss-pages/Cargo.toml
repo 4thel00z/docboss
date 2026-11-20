@@ -1,0 +1,28 @@
+[package]
+name = "docboss-pages"
+description = "Laid-out pages of a docboss document and the text, Markdown, HTML, JSON and image formats they convert to"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+
+[dependencies]
+docboss-model = { workspace = true, features = ["serde"] }
+docboss-output = { workspace = true, features = ["serde"] }
+docboss-font = { workspace = true }
+docboss-layout = { workspace = true }
+docboss-render = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+docboss-core = { workspace = true }
+docboss-write = { workspace = true }
+
+[lints]
+workspace = true

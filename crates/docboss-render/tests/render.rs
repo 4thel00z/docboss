@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -597,6 +604,9 @@ fn transforms_turn_rectangles_and_text() {
                 },
                 docboss_layout::Item::TransformEnd,
             ],
+            blocks: 0..0,
+            header: None,
+            footer: None,
         }],
         fonts: fonts(),
         media: Vec::new(),

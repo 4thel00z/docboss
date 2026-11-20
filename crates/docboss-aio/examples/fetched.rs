@@ -2,6 +2,13 @@
 //! and requests it took: `cargo run -p docboss-aio --features http
 //! --example fetched -- <url-or-path>...`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_aio::{AsyncDocument, ReadOptions};
 
 #[tokio::main(flavor = "current_thread")]

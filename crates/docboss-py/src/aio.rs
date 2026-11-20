@@ -6,15 +6,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PySlice};
 use tokio::sync::OnceCell;
 
 use docboss_aio::{AsyncDocument as Inner, ReadOptions};
-use docboss_core::Format;
 use docboss_model::Document as Model;
-use docboss_output::{HtmlOptions, MarkdownOptions, TextOptions};
+use docboss_output::{HtmlOptions, ImageMode, MarkdownOptions, TextOptions};
+use docboss_pages::{Format, Output};
 
 use crate::document::image_mode;
+use crate::pages::{format_arg, output_list, output_object, position, Slice};
 use crate::types::{Block, Image};
 use crate::{byte_arg, doc_err, Document};
 
@@ -25,6 +26,7 @@ struct Shared {
     password: Option<String>,
     text: OnceCell<Arc<Model>>,
     full: OnceCell<Arc<Model>>,
+    pages: OnceCell<docboss_pages::Document>,
 }
 
 impl Shared {
@@ -60,6 +62,41 @@ impl Shared {
             .await?;
         Ok(model.clone())
     }
+
+    /// The fully fetched model with its layout, computed on first use.
+    async fn pages(&self) -> PyResult<docboss_pages::Document> {
+        let document = self
+            .pages
+            .get_or_try_init(|| async {
+                Ok::<_, PyErr>(docboss_pages::Document::new(self.full().await?))
+            })
+            .await?;
+        Ok(document.clone())
+    }
+
+    /// Converts the whole document, fetching media only when the format
+    /// embeds images.
+    async fn convert(&self, format: Format) -> PyResult<String> {
+        let model = match embeds_images(&format) {
+            true => self.full().await?,
+            false => self.text().await?,
+        };
+        let output = blocking(move || docboss_pages::Document::new(model).to(&format))
+            .await?
+            .map_err(doc_err)?;
+        match output {
+            Output::Text(text) => Ok(text),
+            Output::Bytes(_) => Ok(String::new()),
+        }
+    }
+}
+
+fn embeds_images(format: &Format) -> bool {
+    match format {
+        Format::Markdown(options) => options.images == ImageMode::Embed,
+        Format::Html(options) => options.images == ImageMode::Embed,
+        _ => false,
+    }
 }
 
 /// Runs CPU-bound work on the runtime's blocking pool.
@@ -74,6 +111,7 @@ fn opened(inner: Inner, password: Option<String>) -> AsyncDocument {
             password,
             text: OnceCell::new(),
             full: OnceCell::new(),
+            pages: OnceCell::new(),
         }),
     }
 }
@@ -135,9 +173,9 @@ impl AsyncDocument {
     #[getter]
     fn format(&self) -> &'static str {
         match self.shared.inner.format() {
-            Format::Docx | Format::EncryptedDocx => "docx",
-            Format::Doc => "doc",
-            Format::Rtf | Format::Unknown => "unknown",
+            docboss_core::Format::Docx | docboss_core::Format::EncryptedDocx => "docx",
+            docboss_core::Format::Doc => "doc",
+            docboss_core::Format::Rtf | docboss_core::Format::Unknown => "unknown",
         }
     }
 
@@ -168,6 +206,39 @@ impl AsyncDocument {
         })
     }
 
+    /// The whole document as text, Markdown, HTML or JSON, like
+    /// `Document.to`. Media is fetched only for `images="embed"`.
+    /// Coroutine.
+    #[pyo3(signature = (spec=None, /, **options))]
+    fn to<'py>(
+        &self,
+        py: Python<'py>,
+        spec: Option<&Bound<'py, PyAny>>,
+        options: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let format = format_arg(spec, options)?;
+        let shared = self.shared.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { shared.convert(format).await })
+    }
+
+    /// Every laid-out page. The document is fetched in full and laid out
+    /// when a conversion first needs it.
+    fn pages(&self) -> AsyncPages {
+        AsyncPages {
+            shared: self.shared.clone(),
+            slices: Vec::new(),
+        }
+    }
+
+    /// One laid-out page; negative indexes count from the end.
+    fn page(&self, index: isize) -> AsyncPage {
+        AsyncPage {
+            shared: self.shared.clone(),
+            slices: Vec::new(),
+            index,
+        }
+    }
+
     /// The main text, like `Document.extract_text`. Coroutine.
     #[pyo3(signature = (*, list_labels=true, headers_footers=false, notes=true, comments=false))]
     fn extract_text<'py>(
@@ -178,17 +249,14 @@ impl AsyncDocument {
         notes: bool,
         comments: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let options = TextOptions {
+        let format = Format::Text(TextOptions {
             list_labels,
             headers_footers,
             notes,
             comments,
-        };
+        });
         let shared = self.shared.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let document = shared.text().await?;
-            blocking(move || docboss_output::to_text(&document, &options)).await
-        })
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { shared.convert(format).await })
     }
 
     /// Markdown, like `Document.extract_markdown`. Media is fetched only
@@ -206,23 +274,16 @@ impl AsyncDocument {
         notes: bool,
         comments: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let embed = images == "embed";
-        let options = MarkdownOptions {
+        let format = Format::Markdown(MarkdownOptions {
             title,
             page_breaks,
             images: image_mode(images, image_prefix)?,
             headers_footers,
             notes,
             comments,
-        };
+        });
         let shared = self.shared.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let document = match embed {
-                true => shared.full().await?,
-                false => shared.text().await?,
-            };
-            blocking(move || docboss_output::to_markdown(&document, &options)).await
-        })
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { shared.convert(format).await })
     }
 
     /// HTML, like `Document.extract_html`. Media is fetched only for
@@ -239,34 +300,23 @@ impl AsyncDocument {
         notes: bool,
         comments: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let embed = images == "embed";
-        let options = HtmlOptions {
+        let format = Format::Html(HtmlOptions {
             standalone,
             images: image_mode(images, image_prefix)?,
             headers_footers,
             notes,
             comments,
-        };
+        });
         let shared = self.shared.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let document = match embed {
-                true => shared.full().await?,
-                false => shared.text().await?,
-            };
-            blocking(move || docboss_output::to_html(&document, &options)).await
-        })
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { shared.convert(format).await })
     }
 
     /// The document model as JSON, like `Document.to_json`. Coroutine.
     #[pyo3(signature = (*, pretty=false))]
     fn to_json<'py>(&self, py: Python<'py>, pretty: bool) -> PyResult<Bound<'py, PyAny>> {
+        let format = Format::Json { pretty };
         let shared = self.shared.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let document = shared.text().await?;
-            blocking(move || docboss_output::to_json(&document, pretty))
-                .await?
-                .map_err(doc_err)
-        })
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { shared.convert(format).await })
     }
 
     /// The blocks of the main text, like `Document.blocks`. Coroutine.
@@ -293,7 +343,7 @@ impl AsyncDocument {
     fn document<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let shared = self.shared.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            Ok(Document::from_model(shared.full().await?))
+            Ok(Document::from_pages(shared.pages().await?))
         })
     }
 
@@ -303,5 +353,132 @@ impl AsyncDocument {
             self.format(),
             self.bytes_fetched()
         )
+    }
+}
+
+/// The positions a chain of slices selects from `len` pages.
+fn select(slices: &[Slice], len: usize) -> Vec<usize> {
+    slices
+        .iter()
+        .fold((0..len).collect(), |positions: Vec<usize>, slice| {
+            slice
+                .positions(positions.len())
+                .into_iter()
+                .filter_map(|at| positions.get(at).copied())
+                .collect()
+        })
+}
+
+/// The pages a chain of slices selects, laid out on the blocking pool.
+async fn resolve(shared: &Shared, slices: Vec<Slice>) -> PyResult<docboss_pages::Pages> {
+    let document = shared.pages().await?;
+    blocking(move || {
+        let pages = document.pages();
+        let positions = select(&slices, pages.len());
+        pages.pick(positions)
+    })
+    .await
+}
+
+/// A selection of an `AsyncDocument`'s pages. Slicing is lazy; the
+/// document is fetched and laid out when `to()` or `count()` first runs.
+#[pyclass(frozen, module = "docboss._docboss")]
+pub struct AsyncPages {
+    shared: Arc<Shared>,
+    slices: Vec<Slice>,
+}
+
+#[pymethods]
+impl AsyncPages {
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+        if let Ok(slice) = key.downcast::<PySlice>() {
+            let mut slices = self.slices.clone();
+            slices.push(Slice::from_py(slice)?);
+            let pages = AsyncPages {
+                shared: self.shared.clone(),
+                slices,
+            };
+            return Ok(Bound::new(py, pages)?.into_any().unbind());
+        }
+        let page = AsyncPage {
+            shared: self.shared.clone(),
+            slices: self.slices.clone(),
+            index: key.extract()?,
+        };
+        Ok(Bound::new(py, page)?.into_any().unbind())
+    }
+
+    /// The number of pages selected. Coroutine.
+    fn count<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let shared = self.shared.clone();
+        let slices = self.slices.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            Ok(resolve(&shared, slices).await?.len())
+        })
+    }
+
+    /// Converts every selected page, like `Pages.to`. Coroutine.
+    #[pyo3(signature = (spec=None, /, **options))]
+    fn to<'py>(
+        &self,
+        py: Python<'py>,
+        spec: Option<&Bound<'py, PyAny>>,
+        options: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let format = format_arg(spec, options)?;
+        let shared = self.shared.clone();
+        let slices = self.slices.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let pages = resolve(&shared, slices).await?;
+            let outputs = blocking(move || pages.to(&format))
+                .await?
+                .map_err(doc_err)?;
+            Python::with_gil(|py| output_list(py, outputs))
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<docboss.AsyncPages slices={}>", self.slices.len())
+    }
+}
+
+/// One page of an `AsyncDocument`, resolved when `to()` runs.
+#[pyclass(frozen, module = "docboss._docboss")]
+pub struct AsyncPage {
+    shared: Arc<Shared>,
+    slices: Vec<Slice>,
+    index: isize,
+}
+
+#[pymethods]
+impl AsyncPage {
+    /// Converts the page, like `Page.to`. Raises `IndexError` when the
+    /// selection has no such page. Coroutine.
+    #[pyo3(signature = (spec=None, /, **options))]
+    fn to<'py>(
+        &self,
+        py: Python<'py>,
+        spec: Option<&Bound<'py, PyAny>>,
+        options: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let format = format_arg(spec, options)?;
+        let shared = self.shared.clone();
+        let slices = self.slices.clone();
+        let index = self.index;
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let pages = resolve(&shared, slices).await?;
+            let at = position(index, pages.len())?;
+            let page = pages.pick([at]);
+            let outputs = blocking(move || page.to(&format)).await?.map_err(doc_err)?;
+            let output = outputs
+                .into_iter()
+                .next()
+                .unwrap_or(Output::Text(String::new()));
+            Python::with_gil(|py| output_object(py, output))
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<docboss.AsyncPage index={}>", self.index)
     }
 }

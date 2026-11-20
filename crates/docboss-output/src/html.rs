@@ -8,11 +8,12 @@ use docboss_model::{
     VerticalMerge,
 };
 
+use crate::parts::{Part, PartWriter};
 use crate::walk::{self, Fmt, ListItem, Lists, Notes, Piece, Resolver};
 use crate::ImageMode;
 
 /// What HTML output includes and how.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HtmlOptions {
     /// Write a whole document with `<head>` and the metadata title instead
     /// of a body fragment.
@@ -40,24 +41,8 @@ impl Default for HtmlOptions {
 
 /// Writes the document as HTML to `out`.
 pub fn write_html<W: Write>(doc: &Document, options: &HtmlOptions, out: &mut W) -> fmt::Result {
-    if options.standalone {
-        out.write_str("<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n")?;
-        if let Some(title) = doc.metadata.title.as_deref() {
-            out.write_str("<title>")?;
-            escape(title, out)?;
-            out.write_str("</title>\n")?;
-        }
-        out.write_str("</head>\n<body>\n")?;
-    }
-    let mut writer = HtmlWriter {
-        resolver: Resolver::new(doc),
-        lists: Lists::new(doc),
-        notes: Notes::default(),
-        options,
-        stack: Vec::new(),
-        in_code: false,
-        buf: String::new(),
-    };
+    head(doc, options, out)?;
+    let mut writer = HtmlWriter::new(doc, options);
     for section in &doc.sections {
         writer.section(section, out)?;
     }
@@ -76,6 +61,55 @@ pub fn to_html(doc: &Document, options: &HtmlOptions) -> String {
     out
 }
 
+/// The HTML of each part, in the order given. Each part ends with the
+/// notes and comments first referenced in it; with `standalone`, each part
+/// is a whole document.
+pub fn to_html_parts(doc: &Document, options: &HtmlOptions, parts: &[Part]) -> Vec<String> {
+    let mut writer = HtmlWriter::new(doc, options);
+    crate::parts::write_parts(doc, parts, &mut writer)
+}
+
+/// Opens a standalone document: its `<head>` with the metadata title.
+fn head<W: Write>(doc: &Document, options: &HtmlOptions, out: &mut W) -> fmt::Result {
+    if !options.standalone {
+        return Ok(());
+    }
+    out.write_str("<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n")?;
+    if let Some(title) = doc.metadata.title.as_deref() {
+        out.write_str("<title>")?;
+        escape(title, out)?;
+        out.write_str("</title>\n")?;
+    }
+    out.write_str("</head>\n<body>\n")
+}
+
+impl<'a> PartWriter<'a> for HtmlWriter<'a, '_> {
+    fn begin(&mut self, part: &Part, out: &mut String) -> fmt::Result {
+        let doc = self.resolver.doc;
+        head(doc, self.options, out)?;
+        self.story(part.header.as_deref(), "header", out)
+    }
+
+    fn block(&mut self, block: &'a Block, out: &mut String) -> fmt::Result {
+        self.blocks(std::slice::from_ref(block), out)
+    }
+
+    fn end(&mut self, part: Option<&Part>, out: &mut String) -> fmt::Result {
+        self.close_blocks(out)?;
+        let Some(part) = part else {
+            self.written = (self.notes.order.len(), self.notes.comments.len());
+            return Ok(());
+        };
+        self.story(part.footer.as_deref(), "footer", out)?;
+        let doc = self.resolver.doc;
+        self.notes_sections(doc, out)?;
+        if self.options.standalone {
+            out.write_str("</body>\n</html>\n")?;
+        }
+        Ok(())
+    }
+}
+
 struct OpenList {
     level: u8,
     tag: &'static str,
@@ -89,37 +123,49 @@ struct HtmlWriter<'a, 'o> {
     stack: Vec<OpenList>,
     in_code: bool,
     buf: String,
+    /// How many notes and comments have been written.
+    written: (usize, usize),
 }
 
-impl<'a> HtmlWriter<'a, '_> {
-    fn section<W: Write>(&mut self, section: &'a Section, out: &mut W) -> fmt::Result {
-        let doc = self.resolver.doc;
-        let parts = crate::section_parts(section);
-        if self.options.headers_footers {
-            for id in parts.headers {
-                let Some(part) = doc.header_footer(id) else {
-                    continue;
-                };
-                self.close_blocks(out)?;
-                out.write_str("<header>\n")?;
-                self.blocks(&part.blocks, out)?;
-                self.close_blocks(out)?;
-                out.write_str("</header>\n")?;
-            }
+impl<'a, 'o> HtmlWriter<'a, 'o> {
+    fn new(doc: &'a Document, options: &'o HtmlOptions) -> Self {
+        Self {
+            resolver: Resolver::new(doc),
+            lists: Lists::new(doc),
+            notes: Notes::default(),
+            options,
+            stack: Vec::new(),
+            in_code: false,
+            buf: String::new(),
+            written: (0, 0),
         }
-        self.blocks(&section.blocks, out)?;
+    }
+
+    /// Writes a header or footer part in an element named `tag` when
+    /// headers and footers are asked for.
+    fn story<W: Write>(&mut self, id: Option<&str>, tag: &str, out: &mut W) -> fmt::Result {
         if !self.options.headers_footers {
             return Ok(());
         }
+        let doc = self.resolver.doc;
+        let Some(part) = id.and_then(|id| doc.header_footer(id)) else {
+            return Ok(());
+        };
+        self.close_blocks(out)?;
+        writeln!(out, "<{tag}>")?;
+        self.blocks(&part.blocks, out)?;
+        self.close_blocks(out)?;
+        writeln!(out, "</{tag}>")
+    }
+
+    fn section<W: Write>(&mut self, section: &'a Section, out: &mut W) -> fmt::Result {
+        let parts = crate::section_parts(section);
+        for id in parts.headers {
+            self.story(Some(id), "header", out)?;
+        }
+        self.blocks(&section.blocks, out)?;
         for id in parts.footers {
-            let Some(part) = doc.header_footer(id) else {
-                continue;
-            };
-            self.close_blocks(out)?;
-            out.write_str("<footer>\n")?;
-            self.blocks(&part.blocks, out)?;
-            self.close_blocks(out)?;
-            out.write_str("</footer>\n")?;
+            self.story(Some(id), "footer", out)?;
         }
         Ok(())
     }
@@ -466,10 +512,9 @@ impl<'a> HtmlWriter<'a, '_> {
     }
 
     fn notes_sections<W: Write>(&mut self, doc: &'a Document, out: &mut W) -> fmt::Result {
-        let mut index = 0;
+        let mut index = self.written.0;
         let mut open: Option<NoteKind> = None;
-        while index < self.notes.order.len() {
-            let (kind, id) = self.notes.order[index];
+        while let Some(&(kind, id)) = self.notes.order.get(index) {
             index += 1;
             let note = match kind {
                 NoteKind::Footnote => doc.footnote(id),
@@ -481,10 +526,14 @@ impl<'a> HtmlWriter<'a, '_> {
                     out.write_str("</ol>\n</section>\n")?;
                 }
                 let (class, list) = match kind {
-                    NoteKind::Footnote => ("footnotes", "<ol>"),
-                    NoteKind::Endnote => ("endnotes", "<ol type=\"i\">"),
+                    NoteKind::Footnote => ("footnotes", "<ol"),
+                    NoteKind::Endnote => ("endnotes", "<ol type=\"i\""),
                 };
-                write!(out, "<section class=\"{class}\">\n{list}\n")?;
+                write!(out, "<section class=\"{class}\">\n{list}")?;
+                if self.written.0 > 0 {
+                    start_attribute(self.notes.number(kind, id), out)?;
+                }
+                out.write_str(">\n")?;
                 open = Some(kind);
             }
             let label = walk::note_label(kind, self.notes.number(kind, id));
@@ -497,13 +546,16 @@ impl<'a> HtmlWriter<'a, '_> {
         if open.is_some() {
             out.write_str("</ol>\n</section>\n")?;
         }
-        if !self.options.comments || self.notes.comments.is_empty() {
+        self.written.0 = index;
+        let first = self.written.1;
+        if !self.options.comments || self.notes.comments.len() <= first {
             return Ok(());
         }
-        out.write_str("<section class=\"comments\">\n<ol>\n")?;
-        let mut index = 0;
-        while index < self.notes.comments.len() {
-            let id = self.notes.comments[index];
+        out.write_str("<section class=\"comments\">\n<ol")?;
+        start_attribute(first as u32 + 1, out)?;
+        out.write_str(">\n")?;
+        let mut index = first;
+        while let Some(&id) = self.notes.comments.get(index) {
             index += 1;
             let Some(comment) = doc.comment(id) else {
                 continue;
@@ -518,8 +570,18 @@ impl<'a> HtmlWriter<'a, '_> {
             self.close_blocks(out)?;
             out.write_str("</li>\n")?;
         }
+        self.written.1 = index;
         out.write_str("</ol>\n</section>\n")
     }
+}
+
+/// A list's `start` attribute when it does not start at one, as in a part
+/// that carries on the notes of the parts before it.
+fn start_attribute<W: Write>(number: u32, out: &mut W) -> fmt::Result {
+    if number <= 1 {
+        return Ok(());
+    }
+    write!(out, " start=\"{number}\"")
 }
 
 fn note_prefix(kind: NoteKind) -> &'static str {

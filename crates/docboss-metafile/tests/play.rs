@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable
+)]
+
 use docboss_metafile::{bitmap, play, text, Error, Kind, Op, Picture};
 use docboss_model::Color;
 
