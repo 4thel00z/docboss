@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0](https://github.com/4thel00z/docboss/compare/v0.2.1...v0.3.0) (2026-11-20)
+
+
+### Features
+
+* **layout:** record the body blocks that start on each page ([6b6d0ae](https://github.com/4thel00z/docboss/commit/6b6d0ae7478c6accf095ad196815ba2038d3ad02))
+* **output:** write text, Markdown and HTML in parts ([6c1c4a7](https://github.com/4thel00z/docboss/commit/6c1c4a74dd6fbfcceabc7462491a9330d3132bd5))
+* **pages:** to() over a document, its pages or one page ([53351fa](https://github.com/4thel00z/docboss/commit/53351fa0b20dedd48caeed42ab777b9637d410b6))
+* **pages:** to() over a document, its pages or one page ([a2db9d9](https://github.com/4thel00z/docboss/commit/a2db9d9cb0a982ddb36207a86f83da1ef792af3b))
+
 ## [0.2.1](https://github.com/4thel00z/docboss/compare/v0.2.0...v0.2.1) (2026-10-01)
 
 
