@@ -12,6 +12,7 @@
 - [Extracting text](guide/text.md)
 - [Markdown, HTML and JSON](guide/markdown.md)
 - [Rendering pages](guide/rendering.md)
+- [Pages and formats](guide/pages.md)
 - [Extracting images](guide/images.md)
 - [Writing DOCX](guide/writing.md)
 - [Encrypted documents](guide/encryption.md)

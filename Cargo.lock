@@ -722,10 +722,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "docboss-py"
+name = "docboss-pages"
 version = "0.2.1"
 dependencies = [
- "docboss-aio",
  "docboss-core",
  "docboss-font",
  "docboss-layout",
@@ -733,8 +732,24 @@ dependencies = [
  "docboss-output",
  "docboss-render",
  "docboss-write",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "docboss-py"
+version = "0.2.1"
+dependencies = [
+ "docboss-aio",
+ "docboss-core",
+ "docboss-model",
+ "docboss-output",
+ "docboss-pages",
+ "docboss-write",
  "pyo3",
  "pyo3-async-runtimes",
+ "serde_json",
  "tokio",
 ]
 

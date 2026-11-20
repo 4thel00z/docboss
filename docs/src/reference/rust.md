@@ -7,9 +7,10 @@ open a document and one of the consumers after it.
 |---|---|
 | `docboss-core` | `open(path)`, `read(bytes)`, `open_with`/`read_with(&Options { password })`, `detect(bytes) -> Format`; re-exports the whole model |
 | `docboss-model` | `Document` and its parts; `Styles::resolve_paragraph` and `resolve_run` for effective formatting; `Numbering::counter()` for list labels; `plain_text` |
-| `docboss-output` | `to_text`/`write_text` with `TextOptions`, `to_markdown`/`write_markdown` with `MarkdownOptions`, `to_html`/`write_html` with `HtmlOptions`, `blocks_view`, and with the `serde` feature `to_json` and `blocks_json` |
+| `docboss-output` | `to_text`/`write_text` with `TextOptions`, `to_markdown`/`write_markdown` with `MarkdownOptions`, `to_html`/`write_html` with `HtmlOptions`, `to_text_parts`/`to_markdown_parts`/`to_html_parts` over runs of body blocks (`Part`), `blocks_view`, and with the `serde` feature `to_json` and `blocks_json` |
 | `docboss-layout` | `layout_document(&Document) -> Layout`, `layout(&Document, &Arc<FontDatabase>)`, `layout_with_options`, `fonts_for`; `Layout { pages, fonts, media, diagnostics }` with positioned items in points |
 | `docboss-render` | `render_page(&Layout, index, scale) -> Pixmap`, `render_pages` (all cores), `Renderer`; `Pixmap::encode(Format)` and `save`; `Format::{Png, Ppm, Bmp, Jpeg { quality }}` |
+| `docboss-pages` | `Document::new(model)` with a cached layout; `to(&Format)` for the whole document, `pages() -> Pages`, `page(i) -> Option<Page>`; `Pages::{len, get, iter, pick, to}`, `Page::{index, number, blocks, to}`; `Format` (serde-tagged by `format`) and `Output::{Text, Bytes}` |
 | `docboss-write` | `to_bytes(&Document)`, `save`, `DocumentBuilder`, `Para`, `TableBuilder`, `markdown::to_docx` |
 | `docboss-aio` | `AsyncDocument::{open, from_bytes, open_url, open_url_with, from_backend}`, `read(&ReadOptions)`, `load_media`, `part`, `part_names`, `bytes_fetched`, `requests`; the `http` feature adds `HttpBackend` |
 | `docboss-docx` | `read(bytes)`, `read_with(bytes, Options)`: the WordprocessingML reader |

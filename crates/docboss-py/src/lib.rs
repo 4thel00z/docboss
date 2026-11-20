@@ -18,11 +18,13 @@ use pyo3::types::PyBytes;
 
 mod aio;
 mod document;
+mod pages;
 mod types;
 
-pub use aio::AsyncDocument;
+pub use aio::{AsyncDocument, AsyncPage, AsyncPages};
 
 pub use document::Document;
+pub use pages::{Page, Pages};
 pub use types::{Block, Diagnostic, FontInfo, Image, Metadata, StyleInfo};
 
 create_exception!(
@@ -147,6 +149,10 @@ fn _docboss(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<Document>()?;
     m.add_class::<AsyncDocument>()?;
+    m.add_class::<Pages>()?;
+    m.add_class::<Page>()?;
+    m.add_class::<AsyncPages>()?;
+    m.add_class::<AsyncPage>()?;
     m.add_class::<Metadata>()?;
     m.add_class::<Diagnostic>()?;
     m.add_class::<FontInfo>()?;

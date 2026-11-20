@@ -21,6 +21,7 @@ members = [
     "crates/docboss-tui",
     "crates/docboss-crypt",
     "crates/docboss-aio",
+    "crates/docboss-pages",
 ]
 
 [workspace.package]
@@ -51,6 +52,7 @@ docboss-write = { path = "crates/docboss-write", version = "0.2.1" } # x-release
 docboss-tui = { path = "crates/docboss-tui", version = "0.2.1" } # x-release-please-version
 docboss-crypt = { path = "crates/docboss-crypt", version = "0.2.1" } # x-release-please-version
 docboss-aio = { path = "crates/docboss-aio", version = "0.2.1" } # x-release-please-version
+docboss-pages = { path = "crates/docboss-pages", version = "0.2.1" } # x-release-please-version
 docboss-testkit = { path = "crates/docboss-testkit" }
 thiserror = "2"
 memchr = "2"
