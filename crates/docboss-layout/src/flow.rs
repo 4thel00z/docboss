@@ -3,6 +3,7 @@
 //! and endnotes.
 
 use std::collections::{HashMap, VecDeque};
+use std::ops::Range;
 use std::sync::Arc;
 
 use docboss_font::FontDatabase;
@@ -271,6 +272,9 @@ pub(crate) struct Slab {
     /// For a line of a body paragraph in a document with floats that text
     /// wraps around, where to break the paragraph again from.
     pub resume: Option<Box<Resume>>,
+    /// On the first slab of a top-level body block, the block's index
+    /// among the body blocks of every section.
+    pub block: Option<usize>,
 }
 
 impl Slab {
@@ -289,6 +293,7 @@ impl Slab {
             table_row: false,
             repeat: None,
             resume: None,
+            block: None,
         }
     }
 }
@@ -326,6 +331,9 @@ pub(crate) struct Ctx<'a> {
     pub in_frame: bool,
     /// The blocks being laid out are a table cell's.
     pub in_table: bool,
+    /// The index of the current section's first block among the body
+    /// blocks of every section.
+    pub block_base: usize,
     depth: usize,
     note_labels: HashMap<(bool, i64), String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -462,6 +470,8 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
     let joins = |a: usize, b: usize| {
         borders[a].is_some() && borders[a] == borders[b] && frames[a] == frames[b]
     };
+    let base = (ctx.flowing && ctx.depth == 1).then_some(ctx.block_base);
+    let marker = |index: usize| base.map(|base| base + index);
     let mut pending: Vec<Floating> = Vec::new();
     let mut index = 0;
     while index < blocks.len() {
@@ -497,6 +507,7 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
                 if let Some(first) = laid.slabs.first_mut() {
                     first.gap_before = before + after_prev;
                     first.floats.splice(0..0, pending.drain(..));
+                    first.block = marker(index);
                 }
                 prev_after = laid.after;
                 prev_contextual = laid.contextual;
@@ -513,10 +524,15 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
                     index += 1;
                     continue;
                 }
-                anchor_pending(&mut out, &mut pending);
+                anchor_pending(
+                    &mut out,
+                    &mut pending,
+                    index.checked_sub(1).and_then(marker),
+                );
                 let (mut slabs, ..) = layout_table(ctx, t, width);
                 if let Some(first) = slabs.first_mut() {
                     first.gap_before = prev_after;
+                    first.block = marker(index);
                 }
                 prev_after = 0.0;
                 prev_contextual = false;
@@ -526,18 +542,24 @@ fn layout_blocks_at_depth(ctx: &mut Ctx<'_>, blocks: &[Block], width: f32) -> (V
         }
         index += 1;
     }
-    anchor_pending(&mut out, &mut pending);
+    anchor_pending(
+        &mut out,
+        &mut pending,
+        index.checked_sub(1).and_then(marker),
+    );
     (out, prev_after)
 }
 
-/// Places floats that no paragraph follows on an empty slab of their own.
-fn anchor_pending(out: &mut Vec<Slab>, pending: &mut Vec<Floating>) {
+/// Places floats that no paragraph follows on an empty slab of their own,
+/// marked as the start of `block`, the last block among them.
+fn anchor_pending(out: &mut Vec<Slab>, pending: &mut Vec<Floating>, block: Option<usize>) {
     if pending.is_empty() {
         return;
     }
     let mut slab = Slab::new(0.0, Vec::new());
     slab.floats = std::mem::take(pending);
     slab.keep_with_next = true;
+    slab.block = block;
     out.push(slab);
 }
 
@@ -853,6 +875,8 @@ struct PageState {
     front: Vec<Item>,
     notes: Vec<i64>,
     note_height: f32,
+    /// The highest top-level body block that starts on the page.
+    last_block: Option<usize>,
 }
 
 impl PageState {
@@ -913,6 +937,8 @@ struct Paginator<'c, 'd> {
     /// How the page looked where laying it out again starts: the number of
     /// items behind and in front, the column and its top.
     restart: (usize, usize, usize, f32),
+    /// The page's highest starting block where laying it out again starts.
+    restart_block: Option<usize>,
     restarts: u32,
     /// The sticky floats painted on the current page.
     placed: Vec<u32>,
@@ -1055,6 +1081,7 @@ impl Paginator<'_, '_> {
             front,
             notes: Vec::new(),
             note_height: 0.0,
+            last_block: None,
         });
         self.section_first_page = false;
         self.cursor = Cursor {
@@ -1081,6 +1108,7 @@ impl Paginator<'_, '_> {
             return;
         };
         self.restart = (page.back.len(), page.front.len(), column, top);
+        self.restart_block = page.last_block;
         self.page_slabs.clear();
     }
 
@@ -1109,6 +1137,7 @@ impl Paginator<'_, '_> {
         page.front.truncate(front);
         page.notes.clear();
         page.note_height = 0.0;
+        page.last_block = self.restart_block;
         self.cursor.column = column;
         self.cursor.y = top;
         self.cursor.empty = true;
@@ -1292,6 +1321,7 @@ impl Paginator<'_, '_> {
         first.gap_before = slab.gap_before;
         first.floats = slab.floats;
         first.break_before = slab.break_before;
+        first.block = slab.block;
         while let Some(line) = fresh.pop_back() {
             queue.push_front(line);
         }
@@ -1428,6 +1458,7 @@ impl Paginator<'_, '_> {
                 first.gap_before = slab.gap_before;
                 first.notes = slab.notes.clone();
                 first.floats = head.floats();
+                first.block = slab.block;
                 let tail_height = tail_height(&tail);
                 let mut rest = Slab::new(tail_height, tail.paint(tail_height));
                 rest.floats = tail.floats();
@@ -1447,7 +1478,10 @@ impl Paginator<'_, '_> {
         };
         self.next_frame();
         if let Some(header) = slab.repeat.clone() {
-            header.iter().cloned().for_each(|row| self.commit(row));
+            header.iter().cloned().for_each(|mut row| {
+                row.block = None;
+                self.commit(row);
+            });
         }
         let mut slab = slab;
         if slab.row.is_some() {
@@ -1467,6 +1501,7 @@ impl Paginator<'_, '_> {
             floats,
             notes,
             table_row,
+            block,
             ..
         } = slab;
         let (x, column_width) = self
@@ -1504,6 +1539,7 @@ impl Paginator<'_, '_> {
         let Some(page) = self.pages.last_mut() else {
             return;
         };
+        page.last_block = page.last_block.max(block);
         page.body.extend(items.into_iter().map(|mut item| {
             item.offset(x, y);
             item
@@ -1643,6 +1679,7 @@ pub(crate) fn run(
         floats: 0,
         in_frame: false,
         in_table: false,
+        block_base: 0,
         diagnostics: Vec::new(),
     };
     let mut paginator = Paginator {
@@ -1665,6 +1702,7 @@ pub(crate) fn run(
         page_slabs: Vec::new(),
         sticky: Vec::new(),
         restart: (0, 0, 0, 0.0),
+        restart_block: None,
         restarts: 0,
         placed: Vec::new(),
         refused: Vec::new(),
@@ -1686,8 +1724,10 @@ pub(crate) fn run(
         paginator.ctx.flowing = true;
         let (slabs, _) = layout_blocks(paginator.ctx, &section.blocks, width);
         paginator.ctx.flowing = false;
+        paginator.ctx.block_base += section.blocks.len();
         paginator.run(slabs);
     }
+    let body_blocks = paginator.ctx.block_base;
     let endnote_refs: Vec<i64> = refs
         .iter()
         .filter(|(k, _)| *k == NoteKind::Endnote)
@@ -1712,12 +1752,36 @@ pub(crate) fn run(
     drop(paginator);
     let total = states.len() as u32;
     ctx.total_pages = Some(total);
+    let ranges = block_ranges(&states, body_blocks);
     let mut pages: Vec<Page> = states
         .into_iter()
-        .map(|state| finish_page(&mut ctx, state, &notes))
+        .zip(ranges)
+        .map(|(state, blocks)| finish_page(&mut ctx, state, blocks, &notes))
         .collect();
     let media = crate::metafile::expand(&mut ctx, &mut pages);
     (pages, ctx.diagnostics, media)
+}
+
+/// The blocks that start on each page: from where the page before ended
+/// to just past the highest block that starts on the page, the last page
+/// running to the end of the body.
+fn block_ranges(states: &[PageState], body_blocks: usize) -> Vec<Range<usize>> {
+    let mut end = 0;
+    let last = states.len().saturating_sub(1);
+    states
+        .iter()
+        .enumerate()
+        .map(|(index, state)| {
+            let start = end;
+            end = end
+                .max(state.last_block.map_or(0, |b| b + 1))
+                .min(body_blocks);
+            if index == last {
+                end = body_blocks;
+            }
+            start..end
+        })
+        .collect()
 }
 
 fn shows_on(display: PageBorderDisplay, first: bool) -> bool {
@@ -1829,6 +1893,7 @@ fn separator_line(width: f32) -> Item {
 fn finish_page(
     ctx: &mut Ctx<'_>,
     mut state: PageState,
+    blocks: Range<usize>,
     notes: &HashMap<i64, (Vec<Item>, f32)>,
 ) -> Page {
     ctx.page_number = state.number;
@@ -1869,5 +1934,8 @@ fn finish_page(
         height: state.height,
         number: state.number,
         items,
+        blocks,
+        header: state.header,
+        footer: state.footer,
     }
 }

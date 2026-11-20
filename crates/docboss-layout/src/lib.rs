@@ -240,6 +240,15 @@ pub struct Page {
     pub number: u32,
     /// Items in painting order.
     pub items: Vec<Item>,
+    /// The top-level body blocks that start on this page, as indices into
+    /// the blocks of every section in order. A block that runs on past the
+    /// page belongs to the page it starts on; the ranges of all pages are
+    /// contiguous and together cover the body.
+    pub blocks: std::ops::Range<usize>,
+    /// The id of the header part painted on the page.
+    pub header: Option<String>,
+    /// The id of the footer part painted on the page.
+    pub footer: Option<String>,
 }
 
 impl Page {

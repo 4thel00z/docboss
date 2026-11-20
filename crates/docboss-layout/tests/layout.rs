@@ -2606,3 +2606,101 @@ fn a_float_goes_with_an_anchor_that_moves_on() {
     let tall = laid(&docx_fixture("anchor-moves-on-tall.docx"));
     assert_eq!(tall.pages.len(), 2);
 }
+
+fn assert_ranges_cover(layout: &Layout, blocks: usize) {
+    let mut end = 0;
+    for page in &layout.pages {
+        assert_eq!(page.blocks.start, end, "ranges are contiguous");
+        assert!(page.blocks.end >= page.blocks.start);
+        end = page.blocks.end;
+    }
+    assert_eq!(end, blocks, "ranges cover the body");
+}
+
+/// Each paragraph belongs to the page its first line is on.
+#[test]
+fn pages_record_the_blocks_that_start_on_them() {
+    let blocks = (0..200).map(|i| para(&format!("line {i}"))).collect();
+    let layout = laid(&doc(blocks));
+    assert!(layout.pages.len() >= 3);
+    assert_ranges_cover(&layout, 200);
+    for page in &layout.pages {
+        let text: String = page.text().split_whitespace().collect();
+        let first = format!("line{}", page.blocks.start);
+        let rest = text
+            .strip_prefix(&first)
+            .unwrap_or_else(|| panic!("{text:.40}"));
+        assert!(rest.is_empty() || rest.starts_with("line"), "{text:.40}");
+    }
+}
+
+/// A table that runs on past a page stays whole on the page it starts on;
+/// the pages it continues on start no block.
+#[test]
+fn a_block_crossing_pages_stays_on_its_first_page() {
+    let lines: Vec<Block> = (0..120).map(|i| para(&format!("row line {i}"))).collect();
+    let table = Table {
+        grid: vec![9360],
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                blocks: lines,
+                ..TableCell::default()
+            }],
+            ..TableRow::default()
+        }],
+        ..Table::default()
+    };
+    let layout = laid(&doc(vec![
+        para("before"),
+        Block::Table(table),
+        para("after"),
+    ]));
+    assert!(layout.pages.len() >= 2);
+    assert_ranges_cover(&layout, 3);
+    assert_eq!(layout.pages[0].blocks, 0..2);
+    let last = layout.pages.len() - 1;
+    assert_eq!(layout.pages[last].blocks, 2..3);
+    for page in &layout.pages[1..last] {
+        assert!(page.blocks.is_empty());
+    }
+}
+
+/// A page break inside a paragraph leaves the paragraph on its first page.
+#[test]
+fn a_page_break_inside_a_paragraph_keeps_it_on_its_first_page() {
+    let broken = Inline::Run(Run {
+        properties: RunProperties::default(),
+        content: vec![
+            RunContent::Text("before".into()),
+            RunContent::Break(Break::Page),
+            RunContent::Text("after".into()),
+        ],
+    });
+    let layout = laid(&doc(vec![
+        para_with(ParagraphProperties::default(), vec![broken]),
+        para("next"),
+    ]));
+    assert_eq!(layout.pages.len(), 2);
+    assert_eq!(layout.pages[0].blocks, 0..1);
+    assert_eq!(layout.pages[1].blocks, 1..2);
+}
+
+/// Block indices run on across sections, and each page names the header
+/// it paints.
+#[test]
+fn block_indices_run_across_sections() {
+    let mut document = doc(vec![para("one"), para("two")]);
+    let next = SectionProperties {
+        start: docboss_model::SectionBreak::NextPage,
+        ..SectionProperties::default()
+    };
+    document.sections.push(Section {
+        properties: next,
+        blocks: vec![para("three")],
+    });
+    let layout = laid(&document);
+    assert_eq!(layout.pages.len(), 2);
+    assert_eq!(layout.pages[0].blocks, 0..2);
+    assert_eq!(layout.pages[1].blocks, 2..3);
+    assert!(layout.pages.iter().all(|p| p.header.is_none()));
+}
